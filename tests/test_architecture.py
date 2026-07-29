@@ -25,21 +25,44 @@ _ALLOWED: dict[str, set[str]] = {
 }
 
 
-def _sibling_imports(module: str) -> set[str]:
-    """The matrixlang submodules `module` imports, by reading its source."""
-    tree = ast.parse((_SRC / f"{module}.py").read_text(encoding="utf-8"))
+_MODULES = {path.stem for path in _SRC.glob("*.py")} - {"__init__", "__main__"}
+
+
+def _imports_in_source(source: str) -> set[str]:
+    """The matrixlang submodules `source` imports, by any spelling.
+
+    Five ways to reach a sibling, all handled:
+        import matrixlang.lexer
+        from matrixlang.lexer import lex
+        from matrixlang import lexer
+        from .lexer import lex
+        from . import lexer
+    """
     found: set[str] = set()
-    for node in ast.walk(tree):
-        names: list[str] = []
-        if isinstance(node, ast.ImportFrom) and node.module:
-            names = [node.module]
-        elif isinstance(node, ast.Import):
-            names = [alias.name for alias in node.names]
-        for name in names:
-            parts = name.split(".")
-            if parts[0] == "matrixlang" and len(parts) > 1:
-                found.add(parts[1])
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "matrixlang" and len(parts) > 1:
+                    found.add(parts[1])
+        elif isinstance(node, ast.ImportFrom):
+            head = (node.module or "").split(".")[0]
+            if node.level and not node.module:
+                found.update(a.name for a in node.names if a.name in _MODULES)
+            elif node.level:
+                if head in _MODULES:
+                    found.add(head)
+            elif head == "matrixlang":
+                parts = node.module.split(".")
+                if len(parts) > 1:
+                    found.add(parts[1])
+                else:
+                    found.update(a.name for a in node.names if a.name in _MODULES)
     return found
+
+
+def _sibling_imports(module: str) -> set[str]:
+    return _imports_in_source((_SRC / f"{module}.py").read_text(encoding="utf-8"))
 
 
 def test_the_parser_never_imports_the_lexer():
@@ -52,3 +75,19 @@ def test_the_parser_never_imports_the_lexer():
 @pytest.mark.parametrize("module", sorted(_ALLOWED))
 def test_module_imports_stay_inside_the_planned_graph(module):
     assert _sibling_imports(module) <= _ALLOWED[module]
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "import matrixlang.lexer",
+        "from matrixlang.lexer import lex",
+        "from matrixlang import lexer",
+        "from .lexer import lex",
+        "from . import lexer",
+    ],
+)
+def test_the_guard_detects_every_import_spelling(statement):
+    # A guard is worth exactly what it catches. An earlier version of this
+    # helper caught two of these five and looked green on the other three.
+    assert "lexer" in _imports_in_source(statement)
