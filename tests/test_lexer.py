@@ -249,3 +249,37 @@ def test_unknown_escape_is_an_error():
 def test_empty_string_is_valid():
     tokens = lex('""')
     assert tokens[0].value == ""
+
+
+def test_comment_is_emitted_not_discarded():
+    # Acceptance case 6.
+    tokens = lex("trace x  # wake up")
+    assert [t.type for t in tokens] == [
+        TokenType.TRACE,
+        TokenType.IDENT,
+        TokenType.COMMENT,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+    assert tokens[2].lexeme == "# wake up"
+
+
+def test_comment_stops_at_the_newline():
+    assert kinds("# one\n# two\n") == [
+        TokenType.COMMENT,
+        TokenType.NEWLINE,
+        TokenType.COMMENT,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+
+
+def test_hash_inside_a_string_is_not_a_comment():
+    tokens = lex('"# not a comment"')
+    assert tokens[0].type is TokenType.STRING
+    assert tokens[0].value == "# not a comment"
+
+
+def test_comment_column_points_at_the_hash():
+    tokens = lex("x # here")
+    assert tokens[1].column == 3

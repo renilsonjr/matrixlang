@@ -56,6 +56,17 @@ def lex(source: str) -> list[Token]:
             column += 1
             continue
 
+        if char == "#":
+            start = index
+            start_column = column
+            while index < length and source[index] != "\n":
+                index += 1
+                column += 1
+            tokens.append(
+                Token(TokenType.COMMENT, source[start:index], line, start_column)
+            )
+            continue
+
         if char == '"':
             token, index, column = _scan_string(source, index, line, column)
             tokens.append(token)
