@@ -97,14 +97,25 @@ class _Parser:
     def parse_program(self) -> Program:
         statements: list[Stmt] = []
         while True:
-            self._skip_blank_lines()
+            leading = self._collect_leading()
             if self.check(TokenType.EOF):
-                return Program(statements)
-            statements.append(self._statement())
+                return Program(statements, trailing_comments=leading)
+            statement = self._statement()
+            statement.leading_comments = leading
+            statements.append(statement)
 
-    def _skip_blank_lines(self) -> None:
-        while self.check(TokenType.NEWLINE):
-            self.advance()
+    def _collect_leading(self) -> list[str]:
+        """Blank lines and full-line comments before a statement position."""
+        comments: list[str] = []
+        while True:
+            if self.check(TokenType.NEWLINE):
+                self.advance()
+                continue
+            if self.check(TokenType.COMMENT):
+                comments.append(self.advance().lexeme)
+                self.expect(TokenType.NEWLINE, "expected end of line after comment")
+                continue
+            return comments
 
     def _statement(self) -> Stmt:
         token = self.peek()
@@ -145,8 +156,8 @@ class _Parser:
         return node
 
     def _end_statement(self, node: Stmt) -> None:
-        """Consume the statement's line ending. Task 5 teaches it about
-        trailing comments."""
+        if self.check(TokenType.COMMENT):
+            node.trailing_comment = self.advance().lexeme
         self.expect(TokenType.NEWLINE, "expected end of line after the statement")
 
     # --- expressions ------------------------------------------------------

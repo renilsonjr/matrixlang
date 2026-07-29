@@ -178,3 +178,32 @@ def test_flatline_without_a_block_is_an_error():
     with pytest.raises(ParseError) as excinfo:
         program("flatline\n")
     assert "expected a statement" in str(excinfo.value)
+
+
+def test_leading_comments_attach_to_the_next_statement():
+    tree = program("# a\n# b\ntrace 1\n")
+    assert tree.statements[0].leading_comments == ["# a", "# b"]
+
+
+def test_trailing_comment_attaches_to_its_statement():
+    tree = program("trace 1  # loud\n")
+    assert tree.statements[0].trailing_comment == "# loud"
+
+
+def test_comments_after_the_last_statement_belong_to_the_program():
+    tree = program("trace 1\n# end\n")
+    assert tree.trailing_comments == ["# end"]
+
+
+def test_comment_only_source():
+    assert program("# ghost\n") == Program([], trailing_comments=["# ghost"])
+
+
+def test_blank_lines_between_comments_and_statement_do_not_detach_them():
+    tree = program("# a\n\ntrace 1\n")
+    assert tree.statements[0].leading_comments == ["# a"]
+
+
+def test_trivia_changes_equality():
+    # The whole point of D-06: dropping a comment must break AST equality.
+    assert program("trace 1\n") != program("trace 1  # hi\n")
