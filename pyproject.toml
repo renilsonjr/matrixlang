@@ -17,6 +17,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/matrixlang"]
+dev-mode-exact = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
