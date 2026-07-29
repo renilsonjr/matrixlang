@@ -287,8 +287,19 @@ def test_while_missing_flatline_names_dejavu():
 
 
 def test_bluepill_inside_while_is_an_error():
-    with pytest.raises(ParseError):
+    # The message matters, not just the raise. `bluepill` must fall through to
+    # _statement and be rejected there — NOT be accepted as a block closer. A
+    # _while that passed BLUEPILL to _body would still raise a ParseError here,
+    # just a different one, so a bare pytest.raises cannot tell the two apart.
+    with pytest.raises(ParseError) as excinfo:
         program("dejavu true\nbluepill\nflatline\n")
+    assert "expected a statement" in str(excinfo.value)
+    assert excinfo.value.line == 2
+
+
+def test_dangling_comments_before_a_loop_flatline_are_kept():
+    loop = program("dejavu true\n  trace 1\n  # tail\nflatline\n").statements[0]
+    assert loop.body_trailing == ["# tail"]
 
 
 def test_if_nested_in_while():
