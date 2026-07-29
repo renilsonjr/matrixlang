@@ -1152,6 +1152,16 @@ def test_missing_file_exits_two(capsys, tmp_path):
     assert "nope.rain" in capsys.readouterr().err
 
 
+def test_non_utf8_file_exits_two_without_traceback(capsys, tmp_path):
+    path = tmp_path / "binary.rain"
+    path.write_bytes(b"\xff\xfe invalid utf-8")
+    exit_code = main(["lex", str(path)])
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "matrixlang:" in captured.err
+
+
 def test_unimplemented_subcommands_exit_two_naming_the_stage(capsys):
     for command in ("run", "repl", "render"):
         assert main([command]) == 2
@@ -1222,7 +1232,7 @@ def main(argv: list[str] | None = None) -> int:
 def _command_lex(path: str) -> int:
     try:
         source = Path(path).read_text(encoding="utf-8")
-    except OSError as error:
+    except (OSError, UnicodeDecodeError) as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 2
 
