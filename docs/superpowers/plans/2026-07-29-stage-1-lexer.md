@@ -115,10 +115,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/matrixlang"]
+dev-mode-exact = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 ```
+
+> **Note (added during execution):** `dev-mode-exact = true` was added in commit
+> `2d4798c` while diagnosing an editable-install failure. The failure's true cause
+> turned out to be an unrelated macOS filesystem flag, but the setting is correct
+> and kept: it makes hatchling emit an import-style `.pth`, the more robust form.
 
 Create `src/matrixlang/__init__.py`:
 
@@ -1282,7 +1288,7 @@ Note that `tokens` is built **before** any printing in `_command_lex`, so a sour
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `.venv/bin/python -m pytest tests/test_cli.py -v`
-Expected: PASS, 5 passed
+Expected: PASS, 6 passed
 
 - [ ] **Step 5: Verify the whole suite and the real entry point**
 

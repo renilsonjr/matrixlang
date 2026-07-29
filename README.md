@@ -17,6 +17,15 @@ Source files use the `.rain` extension.
 Stage 1 — lexer. See `docs/superpowers/specs/` for the specification and
 `docs/superpowers/plans/` for the implementation plan.
 
+## Usage
+
+```bash
+.venv/bin/matrixlang lex examples/hello.rain
+```
+
+Prints one `line:column<TAB>TOKEN_TYPE<TAB>lexeme` row per token. `run`, `repl` and
+`render` are reserved for Stages 3–4 and currently exit 2.
+
 ## Development
 
 ```bash

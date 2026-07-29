@@ -244,6 +244,7 @@ def test_unknown_escape_is_an_error():
     with pytest.raises(LexError) as excinfo:
         lex(r'"\q"')
     assert "\\q" in str(excinfo.value)
+    assert excinfo.value.column == 2
 
 
 def test_empty_string_is_valid():
@@ -283,3 +284,9 @@ def test_hash_inside_a_string_is_not_a_comment():
 def test_comment_column_points_at_the_hash():
     tokens = lex("x # here")
     assert tokens[1].column == 3
+
+
+def test_whitespace_only_source_yields_only_eof():
+    # No tokens were produced, so there is no statement to terminate:
+    # the synthesised NEWLINE keys on "produced no tokens", not "source empty".
+    assert kinds("   ") == [TokenType.EOF]

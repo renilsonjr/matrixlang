@@ -154,6 +154,10 @@ For any valid program `t`:
 parse(render_glyph(t)) == parse(render_ascii(t)) == t
 ```
 
+AST equality includes comment trivia. Comments are preserved as trivia attached to
+AST nodes (see the language-surface addendum §6.1); a round-trip that drops comments
+fails this criterion even though the executable code survives.
+
 Property-tested, not example-tested.
 
 ## 5. Build stages
@@ -266,6 +270,13 @@ git init
 ```
 
 Make `lex("x = 2 + 3")` produce the expected token list. Commit.
+
+The expected token list, from the language-surface addendum §7.2:
+
+```python
+lex("x = 2 + 3")
+# [IDENT(x), ASSIGN, NUMBER(2), PLUS, NUMBER(3), NEWLINE, EOF]
+```
 
 That is Stage 1, and at that point the project exists.
 

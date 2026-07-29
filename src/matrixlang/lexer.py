@@ -127,7 +127,8 @@ def _scan_string(
     """Scan a double-quoted string starting at `index`.
 
     Returns the token plus the updated index and column. Errors are reported
-    at the opening quote, which is the position a reader needs to find.
+    at the opening quote, which is the position a reader needs to find,
+    except unknown escapes, which report at the backslash.
     """
     length = len(source)
     start = index
