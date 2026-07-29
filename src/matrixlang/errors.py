@@ -17,3 +17,7 @@ class MatrixLangError(Exception):
 
 class LexError(MatrixLangError):
     """The scanner could not turn the source into tokens."""
+
+
+class ParseError(MatrixLangError):
+    """The parser could not build a tree from the tokens."""

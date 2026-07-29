@@ -168,6 +168,9 @@ which contradicts R-02's promise that round-tripping is loss-free.
   `trailing_comment: str` for a same-line comment.
 - The program node carries `trailing_comments` for anything after the last statement.
 - AST equality in §4.3 includes trivia.
+- Source positions (line, column) are carried on nodes for error reporting but are
+  **excluded** from AST equality — a re-rendered face has different columns, and the
+  §4.3 criterion must still hold.
 
 Cheap at Stage 1, expensive to retrofit at Stage 4. It also gives episode 1 a good aside:
 *where do comments live in a compiler, and why is the obvious answer wrong?*
