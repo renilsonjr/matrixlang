@@ -109,3 +109,31 @@ def test_bare_bang_is_an_error():
     with pytest.raises(LexError) as excinfo:
         lex("! ")
     assert excinfo.value.column == 1
+
+
+def test_multi_digit_number_is_one_token_with_int_value():
+    tokens = lex("1024")
+    assert tokens[0].type is TokenType.NUMBER
+    assert tokens[0].lexeme == "1024"
+    assert tokens[0].value == 1024
+
+
+def test_numbers_and_operators_interleave():
+    assert pairs("2+3") == [
+        (TokenType.NUMBER, "2"),
+        (TokenType.PLUS, "+"),
+        (TokenType.NUMBER, "3"),
+        (TokenType.NEWLINE, ""),
+        (TokenType.EOF, ""),
+    ]
+
+
+def test_number_column_points_at_first_digit():
+    tokens = lex("  42")
+    assert tokens[0].column == 3
+
+
+def test_non_ascii_digits_are_rejected():
+    # str.isdigit() would accept these. See Global Constraints.
+    with pytest.raises(LexError):
+        lex("４")

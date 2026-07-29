@@ -54,6 +54,18 @@ def lex(source: str) -> list[Token]:
             column += 1
             continue
 
+        if char in _DIGITS:
+            start = index
+            start_column = column
+            while index < length and source[index] in _DIGITS:
+                index += 1
+                column += 1
+            lexeme = source[start:index]
+            tokens.append(
+                Token(TokenType.NUMBER, lexeme, line, start_column, int(lexeme))
+            )
+            continue
+
         two = source[index : index + 2]
         if two in _DOUBLE:
             tokens.append(Token(_DOUBLE[two], two, line, column))
