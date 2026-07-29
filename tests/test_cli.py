@@ -58,3 +58,34 @@ def test_non_utf8_file_exits_two_without_traceback(capsys, tmp_path):
     assert exit_code == 2
     assert captured.out == ""
     assert "matrixlang:" in captured.err
+
+
+def test_parse_prints_the_tree(source_file, capsys):
+    exit_code = main(["parse", source_file("x = 2 + 3 * 4\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == (
+        "Program\n"
+        "  Assign 'x'\n"
+        "    Binary +\n"
+        "      NumberLiteral 2\n"
+        "      Binary *\n"
+        "        NumberLiteral 3\n"
+        "        NumberLiteral 4\n"
+    )
+
+
+def test_parse_reports_errors_and_exits_one(source_file, capsys):
+    exit_code = main(["parse", source_file("construct = 5\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "line 1" in captured.err
+
+
+def test_parse_missing_file_exits_two(capsys, tmp_path):
+    assert main(["parse", str(tmp_path / "nope.rain")]) == 2
+
+
+def test_lex_still_works_after_the_read_refactor(source_file, capsys):
+    assert main(["lex", source_file("x = 1\n")]) == 0
