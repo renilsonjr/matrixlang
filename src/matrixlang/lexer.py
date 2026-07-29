@@ -17,6 +17,13 @@ _SINGLE: dict[str, TokenType] = {
     ">": TokenType.GT,
 }
 
+_DOUBLE: dict[str, TokenType] = {
+    "==": TokenType.EQ,
+    "!=": TokenType.NEQ,
+    "<=": TokenType.LTE,
+    ">=": TokenType.GTE,
+}
+
 # Explicit ASCII sets. str.isdigit() and str.isalpha() accept Unicode, which
 # would let Stage 4 glyphs lex as identifiers. See Global Constraints.
 _DIGITS = frozenset(string.digits)
@@ -45,6 +52,13 @@ def lex(source: str) -> list[Token]:
         if char in " \t\r":
             index += 1
             column += 1
+            continue
+
+        two = source[index : index + 2]
+        if two in _DOUBLE:
+            tokens.append(Token(_DOUBLE[two], two, line, column))
+            index += 2
+            column += 2
             continue
 
         if char in _SINGLE:

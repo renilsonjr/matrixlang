@@ -75,3 +75,37 @@ def test_unknown_character_reports_line_and_column():
     assert error.line == 2
     assert error.column == 3
     assert "@" in str(error)
+
+
+def test_two_character_operators_win_over_single():
+    # Acceptance case 4.
+    assert kinds("<= >= == !=") == [
+        TokenType.LTE,
+        TokenType.GTE,
+        TokenType.EQ,
+        TokenType.NEQ,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+
+
+def test_single_character_comparisons_still_work():
+    assert kinds("< > =") == [
+        TokenType.LT,
+        TokenType.GT,
+        TokenType.ASSIGN,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+
+
+def test_two_character_operator_advances_column_by_two():
+    tokens = lex("<= <=")
+    assert tokens[0].column == 1
+    assert tokens[1].column == 4
+
+
+def test_bare_bang_is_an_error():
+    with pytest.raises(LexError) as excinfo:
+        lex("! ")
+    assert excinfo.value.column == 1
