@@ -7,6 +7,7 @@ from matrixlang.nodes import (
     Binary,
     BoolLiteral,
     Declare,
+    If,
     Name,
     NumberLiteral,
     Program,
@@ -207,3 +208,62 @@ def test_blank_lines_between_comments_and_statement_do_not_detach_them():
 def test_trivia_changes_equality():
     # The whole point of D-06: dropping a comment must break AST equality.
     assert program("trace 1\n") != program("trace 1  # hi\n")
+
+
+def test_if_without_else():
+    tree = program("redpill x == 1\n  trace x\nflatline\n")
+    assert tree.statements == [
+        If(
+            Binary(Name("x"), TokenType.EQ, NumberLiteral(1)),
+            [Trace(Name("x"))],
+            None,
+        )
+    ]
+
+
+def test_if_with_else():
+    branch = program(
+        "redpill x\n  trace 1\nbluepill\n  trace 2\nflatline\n"
+    ).statements[0]
+    assert branch.then_body == [Trace(NumberLiteral(1))]
+    assert branch.else_body == [Trace(NumberLiteral(2))]
+
+
+def test_nested_ifs():
+    source = "redpill x\n  redpill y\n    trace 1\n  flatline\nflatline\n"
+    outer = program(source).statements[0]
+    inner = outer.then_body[0]
+    assert isinstance(inner, If)
+    assert inner.then_body == [Trace(NumberLiteral(1))]
+
+
+def test_empty_bodies_are_legal():
+    branch = program("redpill x\nbluepill\nflatline\n").statements[0]
+    assert branch.then_body == []
+    assert branch.else_body == []
+
+
+def test_missing_flatline_reports_end_of_input():
+    with pytest.raises(ParseError) as excinfo:
+        program("redpill x\n  trace 1\n")
+    assert "flatline" in str(excinfo.value)
+
+
+def test_header_comment_normalizes_into_the_body():
+    branch = program("redpill x  # why\n  trace 1\nflatline\n").statements[0]
+    assert branch.then_body[0].leading_comments == ["# why"]
+
+
+def test_comment_on_the_flatline_line_trails_the_whole_if():
+    branch = program("redpill x\n  trace 1\nflatline  # done\n").statements[0]
+    assert branch.trailing_comment == "# done"
+
+
+def test_dangling_comments_before_flatline_are_kept():
+    branch = program("redpill x\n  trace 1\n  # tail\nflatline\n").statements[0]
+    assert branch.then_trailing == ["# tail"]
+
+
+def test_bluepill_outside_redpill_is_an_error():
+    with pytest.raises(ParseError):
+        program("bluepill\n")

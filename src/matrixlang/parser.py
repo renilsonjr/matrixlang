@@ -13,6 +13,7 @@ from matrixlang.nodes import (
     BoolLiteral,
     Declare,
     Expr,
+    If,
     Name,
     NumberLiteral,
     Program,
@@ -58,6 +59,22 @@ def _describe(token: Token) -> str:
     if token.type is TokenType.NEWLINE:
         return "end of line"
     return f"'{token.lexeme}'"
+
+
+def _adopt_header_comment(
+    comment: str | None, body: list, trailing: list[str]
+) -> None:
+    """A comment on a block-header line normalizes into the block's body.
+
+    Lossless at AST level: the text survives in the tree and re-parses
+    equal; only its line placement is normalized by a render.
+    """
+    if comment is None:
+        return
+    if body:
+        body[0].leading_comments.insert(0, comment)
+    else:
+        trailing.insert(0, comment)
 
 
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
@@ -123,6 +140,8 @@ class _Parser:
             return self._declare()
         if token.type is TokenType.TRACE:
             return self._trace()
+        if token.type is TokenType.REDPILL:
+            return self._if()
         if token.type is TokenType.IDENT:
             return self._assign()
         raise ParseError(
@@ -154,6 +173,54 @@ class _Parser:
         node = Trace(value, line=keyword.line, column=keyword.column)
         self._end_statement(node)
         return node
+
+    def _if(self) -> If:
+        keyword = self.advance()
+        condition = self.expression()
+        header_comment = self._end_header()
+        then_body, then_trailing = self._body(
+            TokenType.BLUEPILL, TokenType.FLATLINE
+        )
+        _adopt_header_comment(header_comment, then_body, then_trailing)
+        else_body: list[Stmt] | None = None
+        else_trailing: list[str] = []
+        if self.check(TokenType.BLUEPILL):
+            self.advance()
+            else_header = self._end_header()
+            else_body, else_trailing = self._body(TokenType.FLATLINE)
+            _adopt_header_comment(else_header, else_body, else_trailing)
+        self.expect(TokenType.FLATLINE, "expected 'flatline' to close 'redpill'")
+        node = If(
+            condition,
+            then_body,
+            else_body,
+            line=keyword.line,
+            column=keyword.column,
+            then_trailing=then_trailing,
+            else_trailing=else_trailing,
+        )
+        self._end_statement(node)
+        return node
+
+    def _end_header(self) -> str | None:
+        """Line ending after a block header; returns its trailing comment."""
+        comment = None
+        if self.check(TokenType.COMMENT):
+            comment = self.advance().lexeme
+        self.expect(TokenType.NEWLINE, "expected end of line")
+        return comment
+
+    def _body(self, *closers: TokenType) -> tuple[list[Stmt], list[str]]:
+        """Statements until a closer keyword. Returns (statements, dangling
+        comments collected after the last statement)."""
+        statements: list[Stmt] = []
+        while True:
+            leading = self._collect_leading()
+            if self.peek().type in closers or self.check(TokenType.EOF):
+                return statements, leading
+            statement = self._statement()
+            statement.leading_comments = leading
+            statements.append(statement)
 
     def _end_statement(self, node: Stmt) -> None:
         if self.check(TokenType.COMMENT):
