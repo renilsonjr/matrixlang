@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from matrixlang.errors import ParseError
@@ -14,6 +16,7 @@ from matrixlang.nodes import (
     StringLiteral,
     Trace,
     Unary,
+    While,
 )
 from matrixlang.parser import parse, parse_expression
 from matrixlang.tokens import TokenType
@@ -267,3 +270,56 @@ def test_dangling_comments_before_flatline_are_kept():
 def test_bluepill_outside_redpill_is_an_error():
     with pytest.raises(ParseError):
         program("bluepill\n")
+
+
+def test_while_loop():
+    loop = program("dejavu n < 3\n  n = n + 1\nflatline\n").statements[0]
+    assert loop == While(
+        Binary(Name("n"), TokenType.LT, NumberLiteral(3)),
+        [Assign("n", Binary(Name("n"), TokenType.PLUS, NumberLiteral(1)))],
+    )
+
+
+def test_while_missing_flatline_names_dejavu():
+    with pytest.raises(ParseError) as excinfo:
+        program("dejavu true\n  trace 1\n")
+    assert "dejavu" in str(excinfo.value)
+
+
+def test_bluepill_inside_while_is_an_error():
+    with pytest.raises(ParseError):
+        program("dejavu true\nbluepill\nflatline\n")
+
+
+def test_if_nested_in_while():
+    loop = program(
+        "dejavu x < 3\n"
+        "  redpill x == 1\n"
+        "    trace x\n"
+        "  flatline\n"
+        "  x = x + 1\n"
+        "flatline\n"
+    ).statements[0]
+    assert [type(s).__name__ for s in loop.body] == ["If", "Assign"]
+
+
+def test_hello_rain_parses_end_to_end():
+    source = (Path(__file__).parent.parent / "examples" / "hello.rain").read_text(
+        encoding="utf-8"
+    )
+    tree = program(source)
+    assert [type(s).__name__ for s in tree.statements] == [
+        "Declare",
+        "Declare",
+        "While",
+    ]
+    assert tree.statements[0].leading_comments == [
+        "# The Stage 3 demo. Lexes today; runs once the interpreter lands."
+    ]
+    loop = tree.statements[2]
+    assert [type(s).__name__ for s in loop.body] == ["If", "Assign"]
+    branch = loop.body[0]
+    assert branch.else_body is not None
+    concat = branch.then_body[0].value
+    assert isinstance(concat, Binary)
+    assert concat.op is TokenType.PLUS

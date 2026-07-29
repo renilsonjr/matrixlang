@@ -21,6 +21,7 @@ from matrixlang.nodes import (
     Stmt,
     Trace,
     Unary,
+    While,
 )
 from matrixlang.tokens import Token, TokenType
 
@@ -142,6 +143,8 @@ class _Parser:
             return self._trace()
         if token.type is TokenType.REDPILL:
             return self._if()
+        if token.type is TokenType.DEJAVU:
+            return self._while()
         if token.type is TokenType.IDENT:
             return self._assign()
         raise ParseError(
@@ -198,6 +201,23 @@ class _Parser:
             column=keyword.column,
             then_trailing=then_trailing,
             else_trailing=else_trailing,
+        )
+        self._end_statement(node)
+        return node
+
+    def _while(self) -> While:
+        keyword = self.advance()
+        condition = self.expression()
+        header_comment = self._end_header()
+        body, body_trailing = self._body(TokenType.FLATLINE)
+        _adopt_header_comment(header_comment, body, body_trailing)
+        self.expect(TokenType.FLATLINE, "expected 'flatline' to close 'dejavu'")
+        node = While(
+            condition,
+            body,
+            line=keyword.line,
+            column=keyword.column,
+            body_trailing=body_trailing,
         )
         self._end_statement(node)
         return node
