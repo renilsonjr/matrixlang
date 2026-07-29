@@ -48,3 +48,13 @@ def test_no_subcommand_is_a_usage_error():
     with pytest.raises(SystemExit) as excinfo:
         main([])
     assert excinfo.value.code == 2
+
+
+def test_non_utf8_file_exits_two_without_traceback(capsys, tmp_path):
+    path = tmp_path / "binary.rain"
+    path.write_bytes(b"\xff\xfe invalid utf-8")
+    exit_code = main(["lex", str(path)])
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "matrixlang:" in captured.err

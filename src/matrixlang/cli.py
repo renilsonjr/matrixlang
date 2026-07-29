@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
 def _command_lex(path: str) -> int:
     try:
         source = Path(path).read_text(encoding="utf-8")
-    except OSError as error:
+    except (OSError, UnicodeDecodeError) as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 2
 
