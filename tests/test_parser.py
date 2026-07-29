@@ -3,14 +3,18 @@ import pytest
 from matrixlang.errors import ParseError
 from matrixlang.lexer import lex
 from matrixlang.nodes import (
+    Assign,
     Binary,
     BoolLiteral,
+    Declare,
     Name,
     NumberLiteral,
+    Program,
     StringLiteral,
+    Trace,
     Unary,
 )
-from matrixlang.parser import parse_expression
+from matrixlang.parser import parse, parse_expression
 from matrixlang.tokens import TokenType
 
 
@@ -121,3 +125,56 @@ def test_unary_binds_tighter_than_multiplication():
     assert expr("-2 * 3") == Binary(
         Unary(TokenType.MINUS, NumberLiteral(2)), TokenType.STAR, NumberLiteral(3)
     )
+
+
+def program(source):
+    return parse(lex(source))
+
+
+def test_declare_statement():
+    assert program("construct x = 5\n") == Program([Declare("x", NumberLiteral(5))])
+
+
+def test_assign_and_trace():
+    tree = program("x = x + 1\ntrace x\n")
+    assert tree.statements == [
+        Assign("x", Binary(Name("x"), TokenType.PLUS, NumberLiteral(1))),
+        Trace(Name("x")),
+    ]
+
+
+def test_blank_lines_are_skipped():
+    assert program("\n\ntrace 1\n\n") == Program([Trace(NumberLiteral(1))])
+
+
+def test_empty_source_is_an_empty_program():
+    assert program("") == Program([])
+
+
+def test_statement_positions_point_at_the_keyword():
+    statement = program("  trace 1\n").statements[0]
+    assert (statement.line, statement.column) == (1, 3)
+
+
+def test_declare_without_name_is_an_error():
+    with pytest.raises(ParseError) as excinfo:
+        program("construct = 5\n")
+    assert "expected a name" in str(excinfo.value)
+
+
+def test_bare_expression_is_not_a_statement():
+    with pytest.raises(ParseError) as excinfo:
+        program("x + 1\n")
+    assert "expected '='" in str(excinfo.value)
+
+
+def test_two_statements_on_one_line_is_an_error():
+    with pytest.raises(ParseError) as excinfo:
+        program("trace 1 trace 2\n")
+    assert "expected end of line" in str(excinfo.value)
+
+
+def test_flatline_without_a_block_is_an_error():
+    with pytest.raises(ParseError) as excinfo:
+        program("flatline\n")
+    assert "expected a statement" in str(excinfo.value)

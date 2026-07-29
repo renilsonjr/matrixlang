@@ -8,15 +8,25 @@ both source faces in Stage 4.
 
 from matrixlang.errors import ParseError
 from matrixlang.nodes import (
+    Assign,
     Binary,
     BoolLiteral,
+    Declare,
     Expr,
     Name,
     NumberLiteral,
+    Program,
     StringLiteral,
+    Stmt,
+    Trace,
     Unary,
 )
 from matrixlang.tokens import Token, TokenType
+
+
+def parse(tokens: list[Token]) -> Program:
+    """Parse a complete program."""
+    return _Parser(tokens).parse_program()
 
 
 def parse_expression(tokens: list[Token]) -> Expr:
@@ -81,6 +91,63 @@ class _Parser:
                 f"{message}, found {_describe(token)}", token.line, token.column
             )
         return self.advance()
+
+    # --- statements -------------------------------------------------------
+
+    def parse_program(self) -> Program:
+        statements: list[Stmt] = []
+        while True:
+            self._skip_blank_lines()
+            if self.check(TokenType.EOF):
+                return Program(statements)
+            statements.append(self._statement())
+
+    def _skip_blank_lines(self) -> None:
+        while self.check(TokenType.NEWLINE):
+            self.advance()
+
+    def _statement(self) -> Stmt:
+        token = self.peek()
+        if token.type is TokenType.CONSTRUCT:
+            return self._declare()
+        if token.type is TokenType.TRACE:
+            return self._trace()
+        if token.type is TokenType.IDENT:
+            return self._assign()
+        raise ParseError(
+            f"expected a statement, found {_describe(token)}",
+            token.line,
+            token.column,
+        )
+
+    def _declare(self) -> Declare:
+        keyword = self.advance()
+        name = self.expect(TokenType.IDENT, "expected a name after 'construct'")
+        self.expect(TokenType.ASSIGN, "expected '=' after the name")
+        value = self.expression()
+        node = Declare(name.lexeme, value, line=keyword.line, column=keyword.column)
+        self._end_statement(node)
+        return node
+
+    def _assign(self) -> Assign:
+        name = self.advance()
+        self.expect(TokenType.ASSIGN, "expected '=' after the name")
+        value = self.expression()
+        node = Assign(name.lexeme, value, line=name.line, column=name.column)
+        self._end_statement(node)
+        return node
+
+    def _trace(self) -> Trace:
+        keyword = self.advance()
+        value = self.expression()
+        node = Trace(value, line=keyword.line, column=keyword.column)
+        self._end_statement(node)
+        return node
+
+    def _end_statement(self, node: Stmt) -> None:
+        """Consume the statement's line ending. Task 5 teaches it about
+        trailing comments."""
+        self.expect(TokenType.NEWLINE, "expected end of line after the statement")
 
     # --- expressions ------------------------------------------------------
 
