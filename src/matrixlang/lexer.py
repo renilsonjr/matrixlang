@@ -30,6 +30,8 @@ _DIGITS = frozenset(string.digits)
 _ID_START = frozenset(string.ascii_letters + "_")
 _ID_CONTINUE = frozenset(string.ascii_letters + string.digits + "_")
 
+_ESCAPES: dict[str, str] = {'"': '"', "\\": "\\", "n": "\n"}
+
 
 def lex(source: str) -> list[Token]:
     """Scan `source` into a flat token list terminated by NEWLINE, EOF."""
@@ -52,6 +54,11 @@ def lex(source: str) -> list[Token]:
         if char in " \t\r":
             index += 1
             column += 1
+            continue
+
+        if char == '"':
+            token, index, column = _scan_string(source, index, line, column)
+            tokens.append(token)
             continue
 
         if char in _DIGITS:
@@ -101,3 +108,57 @@ def lex(source: str) -> list[Token]:
         tokens.append(Token(TokenType.NEWLINE, "", line, column))
     tokens.append(Token(TokenType.EOF, "", line, column))
     return tokens
+
+
+def _scan_string(
+    source: str, index: int, line: int, column: int
+) -> tuple[Token, int, int]:
+    """Scan a double-quoted string starting at `index`.
+
+    Returns the token plus the updated index and column. Errors are reported
+    at the opening quote, which is the position a reader needs to find.
+    """
+    length = len(source)
+    start = index
+    start_column = column
+    index += 1
+    column += 1
+    decoded: list[str] = []
+
+    while True:
+        if index >= length or source[index] == "\n":
+            raise LexError("unterminated string", line, start_column)
+
+        char = source[index]
+
+        if char == '"':
+            index += 1
+            column += 1
+            return (
+                Token(
+                    TokenType.STRING,
+                    source[start:index],
+                    line,
+                    start_column,
+                    "".join(decoded),
+                ),
+                index,
+                column,
+            )
+
+        if char == "\\":
+            if index + 1 >= length or source[index + 1] == "\n":
+                raise LexError("unterminated string", line, start_column)
+            escape = source[index + 1]
+            if escape not in _ESCAPES:
+                raise LexError(
+                    f"unknown escape sequence '\\{escape}'", line, column
+                )
+            decoded.append(_ESCAPES[escape])
+            index += 2
+            column += 2
+            continue
+
+        decoded.append(char)
+        index += 1
+        column += 1

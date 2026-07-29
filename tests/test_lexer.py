@@ -199,3 +199,53 @@ def test_assignment_statement_lexes_as_specified():
         TokenType.NEWLINE,
         TokenType.EOF,
     ]
+
+
+def test_string_keeps_raw_lexeme_and_decoded_value():
+    # Acceptance case 5.
+    tokens = lex('"wake up, "')
+    assert tokens[0].type is TokenType.STRING
+    assert tokens[0].lexeme == '"wake up, "'
+    assert tokens[0].value == "wake up, "
+
+
+def test_string_escapes_are_decoded():
+    tokens = lex(r'"a\"b\\c\nd"')
+    assert tokens[0].value == 'a"b\\c\nd'
+
+
+def test_string_concatenation_expression_lexes():
+    assert kinds('"wake up, " + name') == [
+        TokenType.STRING,
+        TokenType.PLUS,
+        TokenType.IDENT,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+
+
+def test_unterminated_string_reports_the_opening_quote():
+    # Acceptance case 8.
+    with pytest.raises(LexError) as excinfo:
+        lex('trace "unterminated')
+    error = excinfo.value
+    assert error.line == 1
+    assert error.column == 7
+    assert "unterminated" in str(error)
+
+
+def test_newline_inside_string_is_unterminated():
+    with pytest.raises(LexError) as excinfo:
+        lex('"broken\n"')
+    assert excinfo.value.line == 1
+
+
+def test_unknown_escape_is_an_error():
+    with pytest.raises(LexError) as excinfo:
+        lex(r'"\q"')
+    assert "\\q" in str(excinfo.value)
+
+
+def test_empty_string_is_valid():
+    tokens = lex('""')
+    assert tokens[0].value == ""
