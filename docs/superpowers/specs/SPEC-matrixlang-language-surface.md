@@ -274,7 +274,8 @@ Out of scope for v1, consistent with the parent spec §6:
 
 ## 10. Amendments to the parent spec
 
-If this addendum is adopted, `SPEC-matrixlang.md` needs two edits:
+Both amendments below were applied to `SPEC-matrixlang.md` during Stage 1 and are
+recorded here for provenance:
 
 1. **§4.3** — state that AST equality includes comment trivia (§6.1 above). As written, the
    criterion passes while the feature it exists to guarantee is broken.

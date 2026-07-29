@@ -6,6 +6,8 @@ lexer — it consumes any list[Token], which is what lets one parser serve
 both source faces in Stage 4.
 """
 
+from collections.abc import Callable
+
 from matrixlang.errors import ParseError
 from matrixlang.nodes import (
     Assign,
@@ -63,7 +65,7 @@ def _describe(token: Token) -> str:
 
 
 def _adopt_header_comment(
-    comment: str | None, body: list, trailing: list[str]
+    comment: str | None, body: list[Stmt], trailing: list[str]
 ) -> None:
     """A comment on a block-header line normalizes into the block's body.
 
@@ -268,7 +270,9 @@ class _Parser:
     def _factor(self) -> Expr:
         return self._binary_level(_FACTOR_OPS, self._unary)
 
-    def _binary_level(self, operators, next_level) -> Expr:
+    def _binary_level(
+        self, operators: tuple[TokenType, ...], next_level: Callable[[], Expr]
+    ) -> Expr:
         expr = next_level()
         while self.peek().type in operators:
             op = self.advance()

@@ -19,7 +19,7 @@ from matrixlang.nodes import (
     While,
 )
 from matrixlang.parser import parse, parse_expression
-from matrixlang.tokens import TokenType
+from matrixlang.tokens import Token, TokenType
 
 
 def expr(source):
@@ -334,3 +334,52 @@ def test_hello_rain_parses_end_to_end():
     concat = branch.then_body[0].value
     assert isinstance(concat, Binary)
     assert concat.op is TokenType.PLUS
+
+
+def test_parser_consumes_tokens_from_any_source():
+    # The parser must never import the lexer — Stage 4 feeds it tokens from
+    # both the ASCII and glyph faces. Building the list by hand is the only
+    # test here that would fail if someone added a lexer import to parser.py.
+    tokens = [
+        Token(TokenType.TRACE, "trace", 1, 1),
+        Token(TokenType.NUMBER, "7", 1, 7, 7),
+        Token(TokenType.NEWLINE, "", 1, 8),
+        Token(TokenType.EOF, "", 1, 8),
+    ]
+    assert parse(tokens) == Program([Trace(NumberLiteral(7))])
+
+
+def test_parser_performs_no_semantic_checks():
+    # Language spec §5 puts all three of these errors in Stage 3, at runtime.
+    # The parser builds trees and judges nothing.
+    assert len(program("zzz = 1\n").statements) == 1
+    assert len(program("construct x = 1\nconstruct x = 2\n").statements) == 2
+    assert len(program('redpill "neo"\n  trace 1\nflatline\n').statements) == 1
+
+
+def test_eof_where_an_expression_was_expected():
+    with pytest.raises(ParseError) as excinfo:
+        expr("")
+    assert "expected an expression" in str(excinfo.value)
+    assert excinfo.value.column == 1
+
+
+def test_chained_comparison_associates_left():
+    assert expr("1 < 2 < 3") == Binary(
+        Binary(NumberLiteral(1), TokenType.LT, NumberLiteral(2)),
+        TokenType.LT,
+        NumberLiteral(3),
+    )
+
+
+def test_leading_and_trailing_trivia_coexist_on_one_statement():
+    statement = program("# above\ntrace 1  # beside\n").statements[0]
+    assert statement.leading_comments == ["# above"]
+    assert statement.trailing_comment == "# beside"
+
+
+def test_comment_on_the_bluepill_header_adopts_into_the_else_body():
+    branch = program(
+        "redpill x\n  trace 1\nbluepill  # why\n  trace 2\nflatline\n"
+    ).statements[0]
+    assert branch.else_body[0].leading_comments == ["# why"]

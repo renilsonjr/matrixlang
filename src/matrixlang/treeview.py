@@ -84,6 +84,8 @@ def _statement(stmt: Stmt, depth: int, lines: list[str]) -> None:
             _statement(child, depth + 2, lines)
         for comment in stmt.body_trailing:
             lines.append(f"{pad}    {comment}")
+    else:
+        raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
 
 def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
@@ -103,3 +105,5 @@ def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
         lines.append(f"{pad}Binary {_OPS[expr.op]}")
         _expression(expr.left, depth + 1, lines)
         _expression(expr.right, depth + 1, lines)
+    else:
+        raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
