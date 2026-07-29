@@ -1,0 +1,12 @@
+# The Stage 3 demo. Lexes today; runs once the interpreter lands.
+construct n = 0
+construct name = "Neo"
+
+dejavu n < 3
+  redpill n == 1
+    trace "wake up, " + name
+  bluepill
+    trace n
+  flatline
+  n = n + 1
+flatline
