@@ -137,3 +137,65 @@ def test_non_ascii_digits_are_rejected():
     # str.isdigit() would accept these. See Global Constraints.
     with pytest.raises(LexError):
         lex("４")
+
+
+def test_identifier_is_scanned():
+    tokens = lex("counter")
+    assert tokens[0].type is TokenType.IDENT
+    assert tokens[0].lexeme == "counter"
+    assert tokens[0].value is None
+
+
+def test_keyword_is_recognised():
+    # Acceptance case 2.
+    assert kinds("construct") == [
+        TokenType.CONSTRUCT,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+
+
+def test_keyword_matching_does_not_fire_on_a_prefix():
+    # Acceptance case 3. 'constructor' starts with 'construct'.
+    tokens = lex("constructor = 1")
+    assert tokens[0].type is TokenType.IDENT
+    assert tokens[0].lexeme == "constructor"
+
+
+def test_booleans_carry_python_bool_values():
+    tokens = lex("true false")
+    assert (tokens[0].type, tokens[0].value) == (TokenType.TRUE, True)
+    assert (tokens[1].type, tokens[1].value) == (TokenType.FALSE, False)
+
+
+def test_identifiers_may_contain_digits_and_underscores():
+    tokens = lex("_x1 count_2")
+    assert [t.lexeme for t in tokens[:2]] == ["_x1", "count_2"]
+
+
+def test_identifiers_may_not_start_with_a_digit():
+    assert kinds("1x") == [
+        TokenType.NUMBER,
+        TokenType.IDENT,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+
+
+def test_katakana_is_not_an_identifier():
+    # str.isalpha() would accept this. Stage 4 needs glyphs to stay unclaimed.
+    with pytest.raises(LexError):
+        lex("ｱ")
+
+
+def test_assignment_statement_lexes_as_specified():
+    # Acceptance case 1 — the parent spec's opening commit.
+    assert kinds("x = 2 + 3") == [
+        TokenType.IDENT,
+        TokenType.ASSIGN,
+        TokenType.NUMBER,
+        TokenType.PLUS,
+        TokenType.NUMBER,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]

@@ -3,7 +3,7 @@
 import string
 
 from matrixlang.errors import LexError
-from matrixlang.tokens import Token, TokenType
+from matrixlang.tokens import KEYWORDS, Token, TokenType
 
 _SINGLE: dict[str, TokenType] = {
     "+": TokenType.PLUS,
@@ -64,6 +64,22 @@ def lex(source: str) -> list[Token]:
             tokens.append(
                 Token(TokenType.NUMBER, lexeme, line, start_column, int(lexeme))
             )
+            continue
+
+        if char in _ID_START:
+            start = index
+            start_column = column
+            while index < length and source[index] in _ID_CONTINUE:
+                index += 1
+                column += 1
+            lexeme = source[start:index]
+            token_type = KEYWORDS.get(lexeme, TokenType.IDENT)
+            value: bool | None = None
+            if token_type is TokenType.TRUE:
+                value = True
+            elif token_type is TokenType.FALSE:
+                value = False
+            tokens.append(Token(token_type, lexeme, line, start_column, value))
             continue
 
         two = source[index : index + 2]
