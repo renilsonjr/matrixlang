@@ -8,6 +8,7 @@ both source faces in Stage 4.
 
 from matrixlang.errors import ParseError
 from matrixlang.nodes import (
+    Binary,
     BoolLiteral,
     Expr,
     Name,
@@ -49,6 +50,12 @@ def _describe(token: Token) -> str:
     return f"'{token.lexeme}'"
 
 
+_EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
+_COMPARISON_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
+_TERM_OPS = (TokenType.PLUS, TokenType.MINUS)
+_FACTOR_OPS = (TokenType.STAR, TokenType.SLASH)
+
+
 class _Parser:
     def __init__(self, tokens: list[Token]) -> None:
         self._tokens = tokens
@@ -78,7 +85,31 @@ class _Parser:
     # --- expressions ------------------------------------------------------
 
     def expression(self) -> Expr:
-        return self._unary()
+        return self._equality()
+
+    # The ladder: each level parses the next-tighter level, then folds a
+    # left-associative chain of its own operators. Named levels keep the
+    # grammar visible; the shared loop lives once in _binary_level.
+
+    def _equality(self) -> Expr:
+        return self._binary_level(_EQUALITY_OPS, self._comparison)
+
+    def _comparison(self) -> Expr:
+        return self._binary_level(_COMPARISON_OPS, self._term)
+
+    def _term(self) -> Expr:
+        return self._binary_level(_TERM_OPS, self._factor)
+
+    def _factor(self) -> Expr:
+        return self._binary_level(_FACTOR_OPS, self._unary)
+
+    def _binary_level(self, operators, next_level) -> Expr:
+        expr = next_level()
+        while self.peek().type in operators:
+            op = self.advance()
+            right = next_level()
+            expr = Binary(expr, op.type, right, line=op.line, column=op.column)
+        return expr
 
     def _unary(self) -> Expr:
         if self.check(TokenType.MINUS):

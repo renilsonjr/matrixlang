@@ -3,6 +3,7 @@ import pytest
 from matrixlang.errors import ParseError
 from matrixlang.lexer import lex
 from matrixlang.nodes import (
+    Binary,
     BoolLiteral,
     Name,
     NumberLiteral,
@@ -55,7 +56,7 @@ def test_positions_are_captured_but_not_compared():
 def test_unclosed_paren_reports_position():
     with pytest.raises(ParseError) as excinfo:
         expr("(1 + 2")
-    assert excinfo.value.column == 4
+    assert excinfo.value.column == 7
 
 
 def test_missing_expression_is_an_error():
@@ -73,3 +74,50 @@ def test_trailing_comment_is_tolerated_and_discarded():
     # REPL convenience. The §4.3 round-trip criterion applies to whole
     # programs via parse(), where trivia is preserved.
     assert expr("1  # note") == NumberLiteral(1)
+
+
+def test_multiplication_binds_tighter_than_addition():
+    # THE Stage 2 done-when from the parent spec: * sits BELOW + in the tree.
+    assert expr("2 + 3 * 4") == Binary(
+        NumberLiteral(2),
+        TokenType.PLUS,
+        Binary(NumberLiteral(3), TokenType.STAR, NumberLiteral(4)),
+    )
+
+
+def test_same_level_operators_associate_left():
+    assert expr("10 - 3 - 2") == Binary(
+        Binary(NumberLiteral(10), TokenType.MINUS, NumberLiteral(3)),
+        TokenType.MINUS,
+        NumberLiteral(2),
+    )
+
+
+def test_parens_override_precedence():
+    assert expr("(2 + 3) * 4") == Binary(
+        Binary(NumberLiteral(2), TokenType.PLUS, NumberLiteral(3)),
+        TokenType.STAR,
+        NumberLiteral(4),
+    )
+
+
+def test_comparison_sits_below_arithmetic():
+    assert expr("1 + 2 < 4") == Binary(
+        Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2)),
+        TokenType.LT,
+        NumberLiteral(4),
+    )
+
+
+def test_equality_sits_below_comparison():
+    assert expr("1 < 2 == 3 < 4") == Binary(
+        Binary(NumberLiteral(1), TokenType.LT, NumberLiteral(2)),
+        TokenType.EQ,
+        Binary(NumberLiteral(3), TokenType.LT, NumberLiteral(4)),
+    )
+
+
+def test_unary_binds_tighter_than_multiplication():
+    assert expr("-2 * 3") == Binary(
+        Unary(TokenType.MINUS, NumberLiteral(2)), TokenType.STAR, NumberLiteral(3)
+    )
