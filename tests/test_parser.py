@@ -325,7 +325,7 @@ def test_hello_rain_parses_end_to_end():
         "While",
     ]
     assert tree.statements[0].leading_comments == [
-        "# The Stage 3 demo. Lexes today; runs once the interpreter lands."
+        "# The Stage 3 demo. This runs: `matrixlang run examples/hello.rain`."
     ]
     loop = tree.statements[2]
     assert [type(s).__name__ for s in loop.body] == ["If", "Assign"]

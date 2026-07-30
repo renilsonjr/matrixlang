@@ -21,3 +21,12 @@ class LexError(MatrixLangError):
 
 class ParseError(MatrixLangError):
     """The parser could not build a tree from the tokens."""
+
+
+class RuntimeErrorML(MatrixLangError):
+    """Execution reached something the language forbids.
+
+    Named with the ML suffix because `RuntimeError` is a Python builtin and
+    shadowing it here would make `except RuntimeError` ambiguous for every
+    future reader.
+    """

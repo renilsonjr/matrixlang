@@ -1,4 +1,4 @@
-# The Stage 3 demo. Lexes today; runs once the interpreter lands.
+# The Stage 3 demo. This runs: `matrixlang run examples/hello.rain`.
 construct n = 0
 construct name = "Neo"
 

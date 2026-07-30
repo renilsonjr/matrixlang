@@ -16,3 +16,11 @@ def test_attributes_survive():
 def test_hierarchy():
     assert issubclass(LexError, MatrixLangError)
     assert issubclass(ParseError, MatrixLangError)
+
+
+def test_runtime_error_joins_the_hierarchy():
+    from matrixlang.errors import RuntimeErrorML
+
+    error = RuntimeErrorML("boom", 4, 9)
+    assert isinstance(error, MatrixLangError)
+    assert str(error) == "[line 4, column 9] boom"

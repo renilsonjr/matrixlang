@@ -5,15 +5,13 @@ import sys
 from pathlib import Path
 
 from matrixlang.errors import MatrixLangError
+from matrixlang.interpreter import run as run_program
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
+from matrixlang.repl import repl as run_repl
 from matrixlang.treeview import format_tree
 
-_PENDING: dict[str, str] = {
-    "run": "Stage 3",
-    "repl": "Stage 3",
-    "render": "Stage 4",
-}
+_PENDING: dict[str, str] = {"render": "Stage 4"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -32,8 +30,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parse_parser.add_argument("path", help="Path to a .rain source file.")
 
-    subcommands.add_parser("run", help="Execute a source file. (Stage 3)")
-    subcommands.add_parser("repl", help="Start an interactive session. (Stage 3)")
+    run_parser = subcommands.add_parser("run", help="Execute a source file.")
+    run_parser.add_argument("path", help="Path to a .rain source file.")
+
+    subcommands.add_parser("repl", help="Start an interactive session.")
     subcommands.add_parser(
         "render", help="Convert between the ASCII and glyph faces. (Stage 4)"
     )
@@ -44,6 +44,10 @@ def main(argv: list[str] | None = None) -> int:
         return _command_lex(args.path)
     if args.command == "parse":
         return _command_parse(args.path)
+    if args.command == "run":
+        return _command_run(args.path)
+    if args.command == "repl":
+        return run_repl()
 
     stage = _PENDING[args.command]
     print(
@@ -86,4 +90,25 @@ def _command_lex(path: str) -> int:
 
     for token in tokens:
         print(f"{token.line}:{token.column}\t{token.type.name}\t{token.lexeme!r}")
+    return 0
+
+
+def _command_run(path: str) -> int:
+    source = _read_source(path)
+    if source is None:
+        return 2
+
+    try:
+        tree = parse(lex(source))
+    except MatrixLangError as error:
+        print(f"matrixlang: {error}", file=sys.stderr)
+        return 1
+
+    # Execution is deliberately outside the parse try-block: a program that
+    # fails partway has already printed real output, and that output stays.
+    try:
+        run_program(tree)
+    except MatrixLangError as error:
+        print(f"matrixlang: {error}", file=sys.stderr)
+        return 1
     return 0
