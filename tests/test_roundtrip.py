@@ -16,13 +16,8 @@ from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
 from matrixlang.nodes import Binary, If, Unary
 from matrixlang.parser import parse
-from matrixlang.render import render, render_ascii, render_glyph
+from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
-
-_LEVEL_GROUPS = {
-    "EQ": 1, "NEQ": 1, "LT": 2, "GT": 2, "LTE": 2, "GTE": 2,
-    "PLUS": 3, "MINUS": 3, "STAR": 4, "SLASH": 4,
-}
 
 
 def _mixed_face(rng: random.Random) -> dict[str, str]:
@@ -65,7 +60,7 @@ def test_the_generator_produces_the_shapes_the_parens_rules_need():
         if isinstance(expr, Binary):
             if (
                 isinstance(expr.right, Binary)
-                and _LEVEL_GROUPS[expr.right.op.name] == _LEVEL_GROUPS[expr.op.name]
+                and _LEVEL[expr.right.op] == _LEVEL[expr.op]
             ):
                 equal_precedence_right = True
             walk_expr(expr.left)

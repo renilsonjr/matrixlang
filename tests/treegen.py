@@ -37,9 +37,15 @@ from matrixlang.tokens import TokenType
 _IDENTS = ["x", "y", "neo", "trinity", "n1", "x2", "_tmp", "constructor"]
 # 'flatline' inside a string and 'ｱ' in strings/comments prove that
 # string contents and comment text bypass keyword recognition and the
-# face table. '"' and '\\' and '\n' exercise every escape.
-_STRING_CHARS = ["a", "b", "z", " ", "_", '"', "\\", "\n", "0", "7", "ｱ", "flatline"]
-_COMMENT_CHARS = ["a", "b", " ", "9", "+", "ｱ", '"', "flatline"]
+# face table. '"' and '\\' and '\n' exercise every escape. '#' is the one
+# character whose mishandling inside a comment would corrupt it — a stray
+# unescaped '#' would (wrongly) look like the start of a NEW comment or
+# change where one ends, so it belongs in both pools alongside the other
+# corruption-prone characters.
+_STRING_CHARS = [
+    "a", "b", "z", " ", "_", '"', "\\", "\n", "0", "7", "#", "ｱ", "flatline",
+]
+_COMMENT_CHARS = ["a", "b", " ", "9", "+", "#", "ｱ", '"', "flatline"]
 _NUMBERS = [0, 1, 7, 10, 42, 305]
 _BINARY_OPS = [
     TokenType.EQ, TokenType.NEQ,
