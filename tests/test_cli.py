@@ -1,3 +1,5 @@
+import io
+
 import pytest
 
 from matrixlang.cli import main
@@ -36,13 +38,6 @@ def test_missing_file_exits_two(capsys, tmp_path):
     exit_code = main(["lex", str(tmp_path / "nope.rain")])
     assert exit_code == 2
     assert "nope.rain" in capsys.readouterr().err
-
-
-def test_unimplemented_subcommands_exit_two_naming_the_stage(capsys):
-    # run and repl are implemented as of Stage 3 (see test_run_* and the REPL
-    # tests); only render remains pending, for Stage 4.
-    assert main(["render"]) == 2
-    assert "Stage" in capsys.readouterr().err
 
 
 def test_no_subcommand_is_a_usage_error():
@@ -129,3 +124,12 @@ def test_run_missing_file_exits_two(capsys, tmp_path):
 def test_only_render_remains_unimplemented(capsys):
     assert main(["render"]) == 2
     assert "Stage 4" in capsys.readouterr().err
+
+
+def test_repl_subcommand_reads_until_eof(capsys, monkeypatch):
+    # The other half of this task's wiring. `repl` takes no path argument and
+    # reads stdin, so drive it with a finite stream — an interactive run
+    # blocks until EOF. Prompts also land on stdout, hence the `in` check.
+    monkeypatch.setattr("sys.stdin", io.StringIO("construct x = 2\ntrace x\n"))
+    assert main(["repl"]) == 0
+    assert "2\n" in capsys.readouterr().out
