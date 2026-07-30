@@ -15,6 +15,7 @@ _SRC = Path(__file__).parent.parent / "src" / "matrixlang"
 
 # module -> the matrixlang siblings it may import
 _ALLOWED: dict[str, set[str]] = {
+    "ansi": set(),
     "tokens": set(),
     "errors": set(),
     "glyphs": set(),
