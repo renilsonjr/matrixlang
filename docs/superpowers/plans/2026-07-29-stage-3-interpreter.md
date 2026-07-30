@@ -733,7 +733,9 @@ Add:
                 return left > right
             if node.op is TokenType.LTE:
                 return left <= right
-            return left >= right
+            if node.op is TokenType.GTE:
+                return left >= right
+            raise AssertionError(f"unhandled ordering operator: {node.op.name}")
 
         # Equality: same type only. type_name is the arbiter, so a bool can
         # never equal an int even though Python says True == 1.
@@ -743,8 +745,14 @@ Add:
                 node.line,
                 node.column,
             )
-        return left == right if node.op is TokenType.EQ else left != right
+        if node.op is TokenType.EQ:
+            return left == right
+        if node.op is TokenType.NEQ:
+            return left != right
+        raise AssertionError(f"unhandled equality operator: {node.op.name}")
 ```
+
+Both tails terminate in an explicit `raise`, matching `_execute`, `_evaluate` and `_arithmetic`. A ternary or a bare fall-through would mean that adding an operator to either tuple without a branch silently evaluates it as `>=` or `!=` — the exact silent-fallthrough failure this pattern exists to prevent.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
