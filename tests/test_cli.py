@@ -39,8 +39,9 @@ def test_missing_file_exits_two(capsys, tmp_path):
 
 
 def test_unimplemented_subcommands_exit_two_naming_the_stage(capsys):
-    for command in ("run", "repl", "render"):
-        assert main([command]) == 2
+    # run and repl are implemented as of Stage 3 (see test_run_* and the REPL
+    # tests); only render remains pending, for Stage 4.
+    assert main(["render"]) == 2
     assert "Stage" in capsys.readouterr().err
 
 
@@ -89,3 +90,42 @@ def test_parse_missing_file_exits_two(capsys, tmp_path):
 
 def test_lex_still_works_after_the_read_refactor(source_file, capsys):
     assert main(["lex", source_file("x = 1\n")]) == 0
+
+
+def test_run_executes_a_program(source_file, capsys):
+    exit_code = main(["run", source_file("construct x = 2\ntrace x + 3\n")])
+    assert exit_code == 0
+    assert capsys.readouterr().out == "5\n"
+
+
+def test_run_reports_a_runtime_error_and_exits_one(source_file, capsys):
+    exit_code = main(["run", source_file("trace 1 / 0\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "divide by zero" in captured.err
+    assert "line 1" in captured.err
+
+
+def test_run_reports_a_parse_error_and_exits_one(source_file, capsys):
+    exit_code = main(["run", source_file("construct = 5\n")])
+    assert exit_code == 1
+    assert "line 1" in capsys.readouterr().err
+
+
+def test_run_emits_output_produced_before_a_runtime_error(source_file, capsys):
+    # Unlike lex and parse, run has side effects as it goes. Output already
+    # printed is real and must not be swallowed.
+    exit_code = main(["run", source_file("trace 1\ntrace 2 / 0\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == "1\n"
+    assert "divide by zero" in captured.err
+
+
+def test_run_missing_file_exits_two(capsys, tmp_path):
+    assert main(["run", str(tmp_path / "nope.rain")]) == 2
+
+
+def test_only_render_remains_unimplemented(capsys):
+    assert main(["render"]) == 2
+    assert "Stage 4" in capsys.readouterr().err

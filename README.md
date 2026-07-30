@@ -14,7 +14,7 @@ Source files use the `.rain` extension.
 
 ## Status
 
-Stage 2 — parser. The full grammar parses to a syntax tree.
+Stage 3 — interpreter. The language runs.
 
 ## Usage
 
@@ -22,14 +22,22 @@ Stage 2 — parser. The full grammar parses to a syntax tree.
 .venv/bin/matrixlang lex examples/hello.rain
 ```
 
-Prints one `line:column<TAB>TOKEN_TYPE<TAB>lexeme` row per token. `run`, `repl` and
-`render` are reserved for Stages 3–4 and currently exit 2.
+Prints one `line:column<TAB>TOKEN_TYPE<TAB>lexeme` row per token. `render` is
+reserved for Stage 4 and currently exits 2.
 
 ```bash
 .venv/bin/matrixlang parse examples/hello.rain
 ```
 
 Prints the syntax tree as indented text — the tree's shape is the precedence lesson.
+
+```bash
+.venv/bin/matrixlang run examples/hello.rain
+.venv/bin/matrixlang repl
+```
+
+`run` executes a program. `repl` starts an interactive session — blocks span
+multiple lines, so a `dejavu` loop can be typed at the prompt.
 
 ## Development
 
