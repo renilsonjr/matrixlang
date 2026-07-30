@@ -6,6 +6,11 @@ unary operands (R-PAREN-3) emits source that parses to a DIFFERENT tree
 — silently changed meaning, the worst failure this stage can have.
 """
 
+import ast
+import string
+from pathlib import Path
+
+from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
 from matrixlang.nodes import (
     Binary,
@@ -19,8 +24,10 @@ from matrixlang.nodes import (
     Unary,
 )
 from matrixlang.parser import parse
-from matrixlang.render import render, render_ascii, render_glyph
+from matrixlang.render import _OPS, render, render_ascii, render_glyph
 from matrixlang.tokens import TokenType
+
+_RENDER_SRC = Path(__file__).parent.parent / "src" / "matrixlang" / "render.py"
 
 
 def prog(*statements) -> Program:
@@ -207,3 +214,57 @@ def test_a_partial_face_renders_mixed_source():
 def test_glyph_blocks_keep_ascii_layout():
     tree = parse(lex("dejavu false\n  trace 1\nflatline\n"))
     assert render_glyph(tree) == "ﾃ ｷ\n  ﾄ ｧ\nﾗ\n"
+
+
+def _slots_the_renderer_can_emit() -> set[str]:
+    """Every slot `render.py` can pass through `_map(face, slot)`.
+
+    I-2: `_map` is `face.get(slot, slot)` — a slot the renderer names but
+    GLYPHS lacks silently falls back to its ASCII spelling INSIDE the
+    glyph face, and the §4.3 round-trip property cannot see that: ASCII
+    text embedded in the glyph face still lexes and still round-trips.
+    So this derives the vocabulary from render.py's own tables instead of
+    retyping a second list — the point is that a future stage teaching
+    the renderer a new operator or keyword, without adding it to GLYPHS,
+    must make THIS test fail on its own, the same way it would silently
+    slip past every round-trip seed.
+
+    Most slots reach `_map` as a literal string argument (`_map(face,
+    "trace")`, `_map(face, "(")`, ...), or as a ternary between two
+    literals (`_map(face, "true" if expr.value else "false")`); walking
+    render.py's AST for `_map(face, ...)` calls and collecting every
+    string constant reachable from the second argument (through nested
+    ternaries) picks up the keywords, punctuation, and the comment marker
+    without hand-copying them. Two slot families aren't literals-or-
+    ternaries at their call site and are added separately, for the same
+    non-duplication reason: `_OPS[expr.op]` (imported as `_OPS`, not
+    retyped) and the per-digit call in `_number` (`string.digits` is a
+    fact about base 10, not a copy of anything render.py could drift
+    from).
+    """
+
+    def string_leaves(node: ast.expr) -> set[str]:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return {node.value}
+        if isinstance(node, ast.IfExp):
+            return string_leaves(node.body) | string_leaves(node.orelse)
+        return set()
+
+    tree = ast.parse(_RENDER_SRC.read_text(encoding="utf-8"))
+    literal_slots: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_map"
+            and len(node.args) == 2
+        ):
+            literal_slots |= string_leaves(node.args[1])
+    return literal_slots | set(_OPS.values()) | set(string.digits)
+
+
+def test_the_glyph_table_covers_every_slot_the_renderer_can_emit():
+    # See _slots_the_renderer_can_emit for why this is derived rather
+    # than hardcoded. A missing entry here means render(tree, GLYPH_FACE)
+    # can silently print ASCII where a glyph belongs.
+    assert _slots_the_renderer_can_emit() <= set(GLYPHS)
