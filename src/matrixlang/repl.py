@@ -14,6 +14,7 @@ from matrixlang.errors import MatrixLangError
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
+from matrixlang.render import render_glyph
 from matrixlang.tokens import TokenType
 
 PROMPT = "> "
@@ -21,15 +22,21 @@ CONTINUATION = "... "
 
 _OPENERS = (TokenType.REDPILL, TokenType.DEJAVU)
 
+_FACE_COMMANDS: dict[str, str] = {":ascii": "ascii", ":glyph": "glyph"}
+
 
 class Repl:
     def __init__(self, out: TextIO | None = None) -> None:
         self._out = sys.stdout if out is None else out
         self.interpreter = Interpreter(out=self._out)
         self._buffer: list[str] = []
+        self._face = "ascii"
 
     def feed(self, line: str) -> bool:
         """Take one line. Return True if more input is needed."""
+        if not self._buffer and line.strip() in _FACE_COMMANDS:
+            self._face = _FACE_COMMANDS[line.strip()]
+            return False
         self._buffer.append(line)
         source = "\n".join(self._buffer) + "\n"
 
@@ -43,7 +50,18 @@ class Repl:
             return True
 
         try:
-            self.interpreter.run(parse(lex(source)))
+            tree = parse(lex(source))
+        except MatrixLangError as error:
+            self._fail(error)
+            return False
+
+        if self._face == "glyph":
+            # The echo precedes execution: it shows what is about to run,
+            # and still appears when execution then fails.
+            print(render_glyph(tree), end="", file=self._out)
+
+        try:
+            self.interpreter.run(tree)
         except MatrixLangError as error:
             self._fail(error)
         self._buffer.clear()

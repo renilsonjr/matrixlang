@@ -26,7 +26,7 @@ _ALLOWED: dict[str, set[str]] = {
     "treeview": {"nodes", "tokens"},
     "cli": {"errors", "interpreter", "lexer", "parser", "render", "repl", "treeview"},
     "interpreter": {"errors", "nodes", "tokens", "values"},
-    "repl": {"errors", "interpreter", "lexer", "parser", "tokens"},
+    "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
 }
 
 

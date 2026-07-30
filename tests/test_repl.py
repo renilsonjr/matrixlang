@@ -84,3 +84,44 @@ def test_repl_reads_until_eof_and_returns_zero():
     out = io.StringIO()
     assert repl(in_=source, out=out) == 0
     assert "2\n" in out.getvalue()
+
+
+def test_the_glyph_command_turns_on_glyph_echo():
+    # ﾄ=trace ｧ=1 ﾀ=+ ｨ=2 — the echo is the statement re-rendered in the
+    # operator view, printed before the execution output.
+    buffer = io.StringIO()
+    session = Repl(out=buffer)
+    assert session.feed(":glyph") is False
+    session.feed("trace 1 + 2")
+    assert buffer.getvalue() == "ﾄ ｧ ﾀ ｨ\n3\n"
+
+
+def test_the_ascii_command_turns_echo_back_off():
+    assert feed_all([":glyph", ":ascii", "trace 1"]) == "1\n"
+
+
+def test_glyph_echo_covers_a_whole_block():
+    # ﾃ=dejavu ｷ=false ﾗ=flatline. The echo appears once, after the block
+    # completes, in canonical block form.
+    output = feed_all([":glyph", "dejavu false", "  trace 1", "flatline"])
+    assert output == "ﾃ ｷ\n  ﾄ ｧ\nﾗ\n"
+
+
+def test_glyph_input_runs_without_any_mode():
+    # §6.3: one lexer, no mode flag — the REPL accepts glyph source
+    # as-is, even in the default ascii face. ﾄ ｩ == trace 3.
+    assert feed_all(["ﾄ ｩ"]) == "3\n"
+
+
+def test_a_face_command_mid_block_is_just_source():
+    # Meta-commands exist only at a fresh prompt. Mid-block, ':glyph' is
+    # source text, and ':' is not a MatrixLang character.
+    output = feed_all(["dejavu false", ":glyph", "flatline"])
+    assert "unexpected character" in output
+
+
+def test_echo_still_prints_when_execution_fails():
+    # The echo shows what was ABOUT to run; a runtime error follows it.
+    output = feed_all([":glyph", "trace nope"])
+    assert output.startswith("ﾄ nope\n")
+    assert "not declared" in output
