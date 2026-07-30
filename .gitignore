@@ -6,3 +6,7 @@ __pycache__/
 dist/
 build/
 .superpowers/
+
+# Scratch workspace for planning features and next steps. Deliberately
+# outside version control — not part of the language or its toolchain.
+matrixlang.features/
