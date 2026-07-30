@@ -17,6 +17,7 @@ _SRC = Path(__file__).parent.parent / "src" / "matrixlang"
 _ALLOWED: dict[str, set[str]] = {
     "tokens": set(),
     "errors": set(),
+    "glyphs": set(),
     "nodes": {"tokens"},
     "values": set(),
     "lexer": {"errors", "tokens"},
