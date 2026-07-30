@@ -84,7 +84,12 @@ def fg(level: float, mode: ColorMode) -> str:
     if mode is ColorMode.NONE:
         return ""
     if mode is ColorMode.BASIC:
-        return f"{CSI}1;32m" if level >= _HEAD_LEVEL else f"{CSI}32m"
+        # SGR 1 (bold) is set-only; nothing about SGR 32 (green) clears it.
+        # _draw concatenates these as absolute per-cell states, so once any
+        # head is drawn every later trail cell would render bold too unless
+        # the trail explicitly emits SGR 22, "normal intensity" — the only
+        # code that turns bold back off.
+        return f"{CSI}1;32m" if level >= _HEAD_LEVEL else f"{CSI}22;32m"
     if mode is ColorMode.COLOR256:
         if level >= _HEAD_LEVEL:
             return f"{CSI}38;5;231m"

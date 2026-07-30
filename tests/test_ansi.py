@@ -6,7 +6,18 @@ file can hand it fixtures instead of mutating os.environ.
 
 import pytest
 
-from matrixlang.ansi import ColorMode, detect_color_mode, fg, move
+from matrixlang.ansi import (
+    ColorMode,
+    clear,
+    detect_color_mode,
+    enter_alt_screen,
+    fg,
+    hide_cursor,
+    leave_alt_screen,
+    move,
+    reset,
+    show_cursor,
+)
 
 
 @pytest.mark.parametrize(
@@ -46,8 +57,14 @@ def test_none_mode_produces_no_colour_at_all():
 
 
 def test_basic_mode_separates_head_from_trail():
+    # SGR 1 sets bold; SGR 22 is "normal intensity", the only code that
+    # clears it. _draw concatenates these codes as absolute states across
+    # a frame, so the trail must explicitly emit 22 — otherwise a head
+    # drawn earlier in the same frame leaves every later trail cell bold
+    # too, and BASIC (the one tier with no colour gradient) loses its
+    # head entirely.
     assert fg(1.0, ColorMode.BASIC) == "\x1b[1;32m"
-    assert fg(0.5, ColorMode.BASIC) == "\x1b[32m"
+    assert fg(0.5, ColorMode.BASIC) == "\x1b[22;32m"
 
 
 def test_256_mode_uses_the_cube_and_a_white_head():
@@ -69,3 +86,17 @@ def test_truecolor_green_rises_monotonically_with_level():
     greens = [green(level) for level in levels]
     assert greens == sorted(greens)
     assert len(set(greens)) == len(greens)
+
+
+def test_the_escape_literals_are_what_terminals_actually_expect():
+    # Asserted as literals on purpose. Everywhere else these are compared
+    # against the module itself (`ansi.enter_alt_screen() in output`),
+    # which is a tautology: swapping the enter/leave or hide/show pairs
+    # would keep every other test green while painting over the user's
+    # scrollback or leaving the cursor blinking through the animation.
+    assert enter_alt_screen() == "\x1b[?1049h"
+    assert leave_alt_screen() == "\x1b[?1049l"
+    assert hide_cursor() == "\x1b[?25l"
+    assert show_cursor() == "\x1b[?25h"
+    assert clear() == "\x1b[2J"
+    assert reset() == "\x1b[0m"
