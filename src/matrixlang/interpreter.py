@@ -15,6 +15,7 @@ from typing import TextIO
 from matrixlang.errors import RuntimeErrorML
 from matrixlang.nodes import (
     Assign,
+    Binary,
     BoolLiteral,
     Declare,
     Expr,
@@ -24,8 +25,10 @@ from matrixlang.nodes import (
     Stmt,
     StringLiteral,
     Trace,
+    Unary,
 )
-from matrixlang.values import to_display
+from matrixlang.tokens import TokenType
+from matrixlang.values import is_int, is_str, to_display, type_name
 
 
 class Interpreter:
@@ -74,7 +77,46 @@ class Interpreter:
                     f"'{expr.ident}' is not declared", expr.line, expr.column
                 )
             return self.environment[expr.ident]
+        if isinstance(expr, Unary):
+            operand = self._evaluate(expr.operand)
+            self._require_int(operand, expr, "operand of unary '-'")
+            return -operand
+        if isinstance(expr, Binary):
+            left = self._evaluate(expr.left)
+            right = self._evaluate(expr.right)
+            return self._binary(expr, left, right)
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
+
+    def _binary(self, node: Binary, left: object, right: object) -> object:
+        if node.op is TokenType.PLUS and is_str(left) and is_str(right):
+            return left + right
+        return self._arithmetic(node, left, right)
+
+    def _arithmetic(self, node: Binary, left: object, right: object) -> object:
+        self._require_int(left, node, "left operand")
+        self._require_int(right, node, "right operand")
+        if node.op is TokenType.PLUS:
+            return left + right
+        if node.op is TokenType.MINUS:
+            return left - right
+        if node.op is TokenType.STAR:
+            return left * right
+        if node.op is TokenType.SLASH:
+            if right == 0:
+                raise RuntimeErrorML("cannot divide by zero", node.line, node.column)
+            # Truncate toward zero. Python's // floors, which differs for
+            # negatives: -7 // 2 is -4, but the spec requires -3.
+            quotient = abs(left) // abs(right)
+            return -quotient if (left < 0) != (right < 0) else quotient
+        raise AssertionError(f"unhandled binary operator: {node.op.name}")
+
+    def _require_int(self, value: object, node: Expr, role: str) -> None:
+        if not is_int(value):
+            raise RuntimeErrorML(
+                f"{role} must be an integer, got {type_name(value)}",
+                node.line,
+                node.column,
+            )
 
 
 def run(program: Program, out: TextIO | None = None) -> None:

@@ -93,3 +93,58 @@ def test_reading_an_undeclared_name_is_an_error():
 def test_a_name_may_hold_a_different_type_after_assignment():
     # Dynamic typing, spec §5: no declared types, so this is legal.
     assert output('construct x = 1\nx = "now a string"\ntrace x\n') == "now a string\n"
+
+
+def test_integer_arithmetic():
+    assert output("trace 2 + 3 * 4\n") == "14\n"
+    assert output("trace (2 + 3) * 4\n") == "20\n"
+    assert output("trace 10 - 3 - 2\n") == "5\n"
+
+
+def test_division_truncates_toward_zero_not_floor():
+    # Python's // floors: -7 // 2 == -4. Spec §5 requires -3.
+    assert output("trace 7 / 2\n") == "3\n"
+    assert output("trace -7 / 2\n") == "-3\n"
+    assert output("trace 7 / -2\n") == "-3\n"
+
+
+def test_division_by_zero_is_a_runtime_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace 1 / 0\n")
+    assert "divide by zero" in str(excinfo.value)
+
+
+def test_unary_minus():
+    assert output("trace -5\n") == "-5\n"
+    assert output("construct x = 3\ntrace -x\n") == "-3\n"
+
+
+def test_string_concatenation():
+    assert output('trace "wake up, " + "Neo"\n') == "wake up, Neo\n"
+
+
+def test_mixing_a_string_and_an_integer_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output('trace "count: " + 1\n')
+    assert "string" in str(excinfo.value)
+    assert "integer" in str(excinfo.value)
+
+
+def test_booleans_are_not_integers_in_arithmetic():
+    # THE bool-is-an-int trap. Python would evaluate True + 1 to 2.
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace true + 1\n")
+    assert "boolean" in str(excinfo.value)
+
+
+def test_booleans_are_not_integers_under_unary_minus():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace -true\n")
+    assert "boolean" in str(excinfo.value)
+
+
+def test_arithmetic_errors_report_the_operator_position():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace 1 + true\n")
+    assert excinfo.value.line == 1
+    assert excinfo.value.column == 9
