@@ -126,7 +126,14 @@ def _command_run(path: str, rain: bool = True) -> int:
             play_if_supported(sys.stdout, os.environ, shutil.get_terminal_size())
         except KeyboardInterrupt:
             # play() has already restored the terminal in its finally.
+            # This must stay first: KeyboardInterrupt is a BaseException,
+            # so a later `except Exception` cannot catch it here.
             return 130
+        except Exception:
+            # Decoration must never be the reason a run fails: an
+            # unencodable glyph or a dropped terminal loses the rain,
+            # not the program.
+            pass
 
     # Execution is deliberately outside the parse try-block: a program that
     # fails partway has already printed real output, and that output stays.

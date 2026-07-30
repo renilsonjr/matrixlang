@@ -6,6 +6,7 @@ look fine until something downstream parses them.
 """
 
 import io
+import re
 from random import Random
 
 import pytest
@@ -40,7 +41,9 @@ def test_the_curtain_enters_and_leaves_the_alternate_screen():
     writer = FakeTty()
     play(writer, (40, 12), ColorMode.BASIC, nap, Random(1))
     output = writer.getvalue()
-    assert output.startswith(ansi.enter_alt_screen())
+    # reset() leads, so a bold/coloured SGR state left by the shell can't
+    # bleed into the field (minor fix 8).
+    assert output.startswith(ansi.reset() + ansi.enter_alt_screen())
     assert output.endswith(ansi.leave_alt_screen())
     assert ansi.hide_cursor() in output
     assert ansi.show_cursor() in output
@@ -53,10 +56,16 @@ def test_the_curtain_actually_draws_something():
 
 
 def test_the_curtain_terminates():
-    # A player that never returns hangs the run it was decorating.
+    # A player that never returns hangs the run it was decorating. Guards
+    # that the loop actually drew frames, not just that the unconditional
+    # enter_alt_screen write produced output — deleting the entire frame
+    # loop would still satisfy `len(output) > 0`. A cursor-move escape
+    # (ansi.move) is written only from inside the loop's _draw call, so
+    # its presence is evidence the loop ran.
     writer = FakeTty()
     play(writer, (40, 12), ColorMode.BASIC, nap, Random(3))
-    assert len(writer.getvalue()) > 0
+    output = writer.getvalue()
+    assert re.search(r"\x1b\[\d+;\d+H", output), "no cursor-move escape: loop never drew"
 
 
 def test_the_terminal_is_restored_even_when_the_loop_raises():
@@ -86,6 +95,22 @@ def test_the_terminal_is_restored_on_keyboard_interrupt():
         play(writer, (40, 12), ColorMode.BASIC, interrupt, Random(5))
 
     assert ansi.leave_alt_screen() in writer.getvalue()
+
+
+def test_a_failing_restore_does_not_mask_the_original_error():
+    # If the writer breaks mid-loop (a broken pipe, an unencodable glyph)
+    # and the finally's own restore write breaks for the same reason, the
+    # restore's exception must not replace the original — that would leave
+    # the terminal on the alternate screen with a hidden cursor AND report
+    # the wrong error.
+    class BrokenWriter(FakeTty):
+        def write(self, text: str) -> int:
+            if ansi.leave_alt_screen() in text or "\x1b[38" in text or "\x1b[3" in text:
+                raise OSError("terminal went away")
+            return super().write(text)
+
+    with pytest.raises(OSError, match="terminal went away"):
+        play(BrokenWriter(), (40, 12), ColorMode.BASIC, nap, Random(1))
 
 
 def test_a_non_tty_gets_no_curtain_and_not_one_byte():

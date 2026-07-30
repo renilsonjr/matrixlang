@@ -46,7 +46,11 @@ def play(
     """Run the curtain, restoring the terminal however this exits."""
     width, height = size
     field = RainField(width, height, rng)
-    writer.write(ansi.enter_alt_screen() + ansi.hide_cursor() + ansi.clear())
+    # reset() first: a bold or coloured SGR state left by the shell must
+    # not bleed into the field (pairs with the BASIC-mode fix above).
+    writer.write(
+        ansi.reset() + ansi.enter_alt_screen() + ansi.hide_cursor() + ansi.clear()
+    )
     try:
         while not field.is_done():
             writer.write(_draw(field.advance(), mode))
@@ -55,8 +59,14 @@ def play(
     finally:
         # Unconditional. A normal end, an exception and a KeyboardInterrupt
         # all leave the terminal exactly as we found it.
-        writer.write(ansi.reset() + ansi.show_cursor() + ansi.leave_alt_screen())
-        writer.flush()
+        try:
+            writer.write(ansi.reset() + ansi.show_cursor() + ansi.leave_alt_screen())
+            writer.flush()
+        except Exception:
+            # A restore that fails for the same reason the loop failed
+            # (broken pipe, EIO) must not replace the original exception
+            # with a more confusing one.
+            pass
 
 
 def _draw(frame: Frame, mode: ColorMode) -> str:

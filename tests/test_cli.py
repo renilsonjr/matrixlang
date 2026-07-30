@@ -281,6 +281,38 @@ def test_ctrl_c_during_the_curtain_exits_130(source_file, capsys, monkeypatch):
     assert capsys.readouterr().out == ""
 
 
+def test_a_broken_curtain_does_not_break_the_run(source_file, capsys, monkeypatch):
+    # Design section 4: a presentation layer must never be the reason a
+    # run fails. The rain is lost; the program is not.
+    def explode(*_args, **_kwargs):
+        raise OSError("terminal went away")
+
+    monkeypatch.setattr(cli, "play_if_supported", explode)
+    assert main(["run", source_file("trace 1\n")]) == 0
+    assert capsys.readouterr().out == "1\n"
+
+
+def test_run_hands_the_curtain_stdout_the_environment_and_the_size(
+    source_file, capsys, monkeypatch
+):
+    # The single seam between the tested half of this feature and the
+    # half no automated test can exercise. Transposing env and size
+    # passes everything else and fails only in front of a user.
+    import os
+    import shutil
+    import sys
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
+    )
+    main(["run", source_file("trace 1\n")])
+    writer, env, size = calls[0]
+    assert writer is sys.stdout
+    assert env is os.environ
+    assert size == shutil.get_terminal_size()
+
+
 def test_only_run_takes_the_rain_flag(source_file):
     # R-03: rain in the runner, never the editor. The flag exists on run
     # and nowhere else.
