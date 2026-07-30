@@ -85,15 +85,20 @@ def test_a_visible_head_is_exactly_full_brightness():
     assert seen_full, "no column ever showed its head on screen"
 
 
-def test_columns_are_born_staggered_not_all_at_once():
-    # Density waves (design S5-4). If every column existed at tick 1 the
-    # field would appear as a single slab.
-    field = RainField(40, 12, Random(8))
-    field.advance()
-    early = field.active
-    for _ in range(11):
+def test_columns_are_born_in_waves_not_at_a_flat_rate():
+    # Density waves (design S5-4). The previous version asserted only
+    # that the field grows, which stays true with the ramp deleted —
+    # forcing ramp = 1.0 passed it happily. The ramp controls the RATE,
+    # so that is what to measure: with it, births accelerate; without it
+    # they are flat and the field appears as one slab.
+    field = RainField(80, 24, Random(8))
+    for _ in range(3):
         field.advance()
-    assert early < field.active
+    early = field.active
+    for _ in range(9):
+        field.advance()
+    late = field.active - early
+    assert late >= early * 4, f"births look flat: {early} early vs {late} late"
 
 
 def test_no_two_cells_ever_collide_in_a_frame():
@@ -151,3 +156,25 @@ def test_the_curtain_clears_a_tall_terminal_too():
         while not field.is_done():
             field.advance()
         assert field.active == 0, f"height {height} still had columns"
+
+
+def test_the_screen_is_empty_when_the_curtain_ends():
+    # THE dissolve, and the invariant nothing else asserted. Every other
+    # "drain"/"clears" test checks that the COLUMN LIST emptied, which
+    # stays true even if nothing is ever erased — delete the erase
+    # mechanism entirely and they all stay green. This replays the real
+    # frames into a virtual screen and asserts what a viewer actually sees
+    # at the moment the terminal is restored.
+    for seed in range(10):
+        for width, height in ((40, 12), (80, 24), (120, 50)):
+            field = RainField(width, height, Random(seed))
+            lit: set[tuple[int, int]] = set()
+            while not field.is_done():
+                frame = field.advance()
+                for cell in frame.paint:
+                    lit.add((cell.row, cell.col))
+                for position in frame.erase:
+                    lit.discard(position)
+            assert not lit, (
+                f"{width}x{height} seed {seed}: {len(lit)} cells still lit"
+            )

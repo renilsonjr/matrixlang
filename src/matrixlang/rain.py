@@ -65,18 +65,21 @@ class _Column:
         self._rng = rng
         self._head = 0.0
         self._row = -1
+        self._previous_row = -1
         self._glyphs: dict[int, str] = {}
 
     def advance(self) -> bool:
         """Move the head. True if it crossed into a new row."""
+        previous = self._row
         self._head += self._speed
         row = int(self._head)
-        if row == self._row:
+        if row == previous:
             return False
         # Fill EVERY row crossed, not just the new head: a speed above 1.0
         # skips rows, and a skipped row would have no glyph to draw.
-        for crossed in range(self._row + 1, row + 1):
+        for crossed in range(previous + 1, row + 1):
             self._glyphs[crossed] = self._rng.choice(RAIN_ALPHABET)
+        self._previous_row = previous
         self._row = row
         self._mutate()
         return True
@@ -101,6 +104,17 @@ class _Column:
     def tail_row(self) -> int:
         """The row that just fell off the end of the trail."""
         return self._row - self._length
+
+    def vacated(self, height: int) -> list[int]:
+        """Every row that left the trail on the last advance.
+
+        One row per tick is not enough: a head moving `speed` rows drops
+        `speed` rows off the tail, and erasing only the last of them
+        leaves the rest lit until the curtain ends.
+        """
+        start = self._previous_row - self._length + 1
+        stop = self._row - self._length + 1
+        return [row for row in range(start, stop) if 0 <= row < height]
 
     def is_finished(self, height: int) -> bool:
         return self.tail_row() >= height
@@ -131,9 +145,7 @@ class RainField:
             if not column.advance():
                 continue
             paint.extend(column.cells(self.height))
-            tail = column.tail_row()
-            if 0 <= tail < self.height:
-                erase.append((tail, column.col))
+            erase.extend((row, column.col) for row in column.vacated(self.height))
         self._columns = [c for c in self._columns if not c.is_finished(self.height)]
         return Frame(tuple(paint), tuple(erase))
 
