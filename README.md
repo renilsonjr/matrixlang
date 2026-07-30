@@ -16,6 +16,75 @@ Source files use the `.rain` extension.
 
 Stage 5 — runner presentation. The language runs, and it rains.
 
+## Running it locally
+
+Requires **Python 3.11 or newer** and nothing else. There are no third-party
+dependencies — the interpreter is standard library only, and `pytest` is the
+sole development dependency.
+
+```bash
+git clone https://github.com/renilsonjr/matrixlang.git
+cd matrixlang
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+```
+
+Check it works:
+
+```bash
+.venv/bin/python -m pytest
+```
+
+You should see the full suite pass. Then run your first program:
+
+```bash
+.venv/bin/matrixlang run examples/hello.rain
+```
+
+Expected output, after about a second and a half of green rain:
+
+```
+0
+wake up, Neo
+2
+```
+
+To skip the `.venv/bin/` prefix, activate the environment first
+(`source .venv/bin/activate`), after which plain `matrixlang` works.
+
+### Seeing the rain
+
+The rain needs a real terminal. It plays in any interactive shell —
+including the **integrated terminal** in VS Code (`` Ctrl+` ``, or
+`` Cmd+` `` on macOS) — but it deliberately declines whenever output is
+being captured rather than displayed: a pipe, a redirect, a CI job, or
+VS Code's *Output* panel when you use a Run button or task. That is the
+same guarantee that keeps `matrixlang run prog.rain > out.txt` byte-clean,
+so seeing no rain in those contexts is correct behaviour, not a fault.
+
+If you expected rain and got none, this prints the actual decision using
+the same code the runner uses:
+
+```bash
+.venv/bin/python -c "import os,shutil,sys;from matrixlang.ansi import detect_color_mode;from matrixlang.curtain import should_play;m=detect_color_mode(os.environ,sys.stdout.isatty());s=shutil.get_terminal_size();print(f'isatty={sys.stdout.isatty()} TERM={os.environ.get(\"TERM\")!r} size={tuple(s)} mode={m.name} RAIN={should_play(m,s)}')"
+```
+
+`RAIN=False` is explained by whichever condition failed: no TTY, `NO_COLOR`
+set, `TERM=dumb`, or a terminal smaller than 20×8.
+
+### If the import fails
+
+If anything reports `ModuleNotFoundError: No module named 'matrixlang'`
+right after a successful install, run:
+
+```bash
+chflags -R nohidden .venv
+```
+
+Some macOS systems intermittently set a hidden flag on venv files, which
+Python ≥3.14 silently skips when processing `.pth` files. This is a
+platform quirk, not a project one.
+
 ## Usage
 
 ```bash
@@ -90,13 +159,25 @@ and it is the last thing built rather than the first.
 
 ## Development
 
+Setup is the same as [Running it locally](#running-it-locally). To run the
+suite:
+
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
 .venv/bin/python -m pytest
 ```
 
-If `import matrixlang` fails with `ModuleNotFoundError` after setup, run
-`chflags -R nohidden .venv` — some macOS systems intermittently set a hidden
-flag on venv files, which Python ≥3.14 silently skips when processing `.pth`
-files.
+Specs and implementation plans live under `docs/superpowers/`. Each of the
+five stages has a design spec and a plan, written before the code and kept
+as the record of why the thing is shaped the way it is.
+
+### A note on untrusted `.rain` files
+
+The interpreter is deliberately small: a MatrixLang program has no file
+access, no network, no process spawning, and no route into Python — there
+is no `eval`, no `exec`, and no deserialization anywhere in the package.
+
+It does not, however, sanitize terminal control characters. A `.rain` file
+containing raw escape bytes in a string literal or a comment can drive your
+terminal when the file is run *or inspected* with `parse`/`render`. Treat a
+`.rain` file from someone else the way you would treat a shell script: read
+it in an editor before pointing this toolchain at it.

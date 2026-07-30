@@ -14,15 +14,19 @@ GLYPHS: dict[str, str] = {
     # keywords
     "construct": "ｱ",  # the spec's own fragment: ｱ x = 5
     "trace": "ﾄ",
-    "redpill": "ﾚ",
-    "bluepill": "ﾌ",
+    "redpill": "红",
+    "bluepill": "蓝",
+    # "redpill": "ﾚ",
+    # "bluepill": "ﾌ",
     "dejavu": "ﾃ",
     "flatline": "ﾗ",
     "true": "ｼ",
     "false": "ｷ",
     # operators
-    "+": "ﾀ",
-    "-": "ﾋ",
+    "+": "加",
+    "-": "减",
+    # "+": "ﾀ",
+    # "-": "ﾋ",
     "*": "ｶ",
     "/": "ﾜ",
     "=": "ﾅ",
