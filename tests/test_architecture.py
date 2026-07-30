@@ -18,7 +18,7 @@ _ALLOWED: dict[str, set[str]] = {
     "tokens": set(),
     "errors": set(),
     "nodes": {"tokens"},
-    "values": {"errors"},
+    "values": set(),
     "lexer": {"errors", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "treeview": {"nodes", "tokens"},
@@ -78,6 +78,13 @@ def test_the_parser_never_imports_the_lexer():
 @pytest.mark.parametrize("module", sorted(_ALLOWED))
 def test_module_imports_stay_inside_the_planned_graph(module):
     assert _sibling_imports(module) <= _ALLOWED[module]
+
+
+def test_every_module_has_an_entry_in_the_allow_table():
+    # The graph test parametrizes over _ALLOWED, so a module missing from the
+    # table is never checked — it could import anything. Stage 4 adds modules;
+    # this is the assertion that makes the guard hold when it does.
+    assert _MODULES == set(_ALLOWED)
 
 
 @pytest.mark.parametrize(

@@ -129,6 +129,12 @@ class Interpreter:
             return self._comparison(node, left, right)
         if node.op is TokenType.PLUS and is_str(left) and is_str(right):
             return left + right
+        if node.op is TokenType.PLUS and is_str(left) != is_str(right):
+            raise RuntimeErrorML(
+                f"cannot add {type_name(left)} and {type_name(right)}",
+                node.line,
+                node.column,
+            )
         return self._arithmetic(node, left, right)
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
@@ -141,7 +147,9 @@ class Interpreter:
                 return left > right
             if node.op is TokenType.LTE:
                 return left <= right
-            return left >= right
+            if node.op is TokenType.GTE:
+                return left >= right
+            raise AssertionError(f"unhandled ordering operator: {node.op.name}")
 
         # Equality: same type only. type_name is the arbiter, so a bool can
         # never equal an int even though Python says True == 1.
@@ -151,7 +159,11 @@ class Interpreter:
                 node.line,
                 node.column,
             )
-        return left == right if node.op is TokenType.EQ else left != right
+        if node.op is TokenType.EQ:
+            return left == right
+        if node.op is TokenType.NEQ:
+            return left != right
+        raise AssertionError(f"unhandled equality operator: {node.op.name}")
 
     def _arithmetic(self, node: Binary, left: object, right: object) -> object:
         self._require_int(left, node, "left operand")

@@ -265,3 +265,25 @@ def test_the_stage_3_demo_program_runs():
         "flatline\n"
     )
     assert output(source) == "0\nwake up, Neo\n2\n"
+
+
+def test_construct_inside_a_loop_body_fails_on_the_second_iteration():
+    # Falls straight out of spec §5: one flat environment, and re-declaring an
+    # existing name is an error. Pinned because it is a sharp emergent
+    # interaction and because it is a FEATURE — a future "helpful" fix that let
+    # the second iteration re-declare would violate §5.
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output(
+            "construct n = 0\n"
+            "dejavu n < 3\n"
+            "  construct m = n\n"
+            "  n = n + 1\n"
+            "flatline\n"
+        )
+    assert "already declared" in str(excinfo.value)
+    assert excinfo.value.line == 3
+
+
+def test_a_name_declared_inside_a_block_outlives_it():
+    # The positive observable of "blocks do not introduce scope" (spec §5).
+    assert output("redpill true\n  construct inner = 9\nflatline\ntrace inner\n") == "9\n"
