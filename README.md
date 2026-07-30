@@ -176,8 +176,14 @@ The interpreter is deliberately small: a MatrixLang program has no file
 access, no network, no process spawning, and no route into Python — there
 is no `eval`, no `exec`, and no deserialization anywhere in the package.
 
-It does not, however, sanitize terminal control characters. A `.rain` file
-containing raw escape bytes in a string literal or a comment can drive your
-terminal when the file is run *or inspected* with `parse`/`render`. Treat a
-`.rain` file from someone else the way you would treat a shell script: read
-it in an editor before pointing this toolchain at it.
+Raw terminal control characters are refused by the lexer, in string literals
+and comments alike, so a `.rain` file cannot drive your terminal with escape
+sequences — whether you run it or merely inspect it with `parse` or `render`.
+The refusal happens at the lexer rather than by escaping output, because
+`render` has to reproduce source exactly; the reasoning is in the
+language-surface spec §3.4.
+
+That is not a sandbox, and this is not a security product. Two things it
+deliberately does not cover: a program can loop forever, which is what
+Turing-completeness means, and an AST built directly in Python rather than
+parsed from source is not subject to the rule.
