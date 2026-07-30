@@ -8,10 +8,9 @@ from matrixlang.errors import MatrixLangError
 from matrixlang.interpreter import run as run_program
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
+from matrixlang.render import render_ascii, render_glyph
 from matrixlang.repl import repl as run_repl
 from matrixlang.treeview import format_tree
-
-_PENDING: dict[str, str] = {"render": "Stage 4"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,8 +33,15 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("path", help="Path to a .rain source file.")
 
     subcommands.add_parser("repl", help="Start an interactive session.")
-    subcommands.add_parser(
-        "render", help="Convert between the ASCII and glyph faces. (Stage 4)"
+    render_parser = subcommands.add_parser(
+        "render", help="Print a source file in the ASCII or glyph face."
+    )
+    render_parser.add_argument("path", help="Path to a .rain source file.")
+    render_parser.add_argument(
+        "--face",
+        choices=("ascii", "glyph"),
+        required=True,
+        help="Which face to print. Rendering is canonical: whitespace normalizes.",
     )
 
     args = parser.parse_args(argv)
@@ -48,12 +54,9 @@ def main(argv: list[str] | None = None) -> int:
         return _command_run(args.path)
     if args.command == "repl":
         return run_repl()
-
-    stage = _PENDING[args.command]
-    print(
-        f"matrixlang: '{args.command}' arrives in {stage}", file=sys.stderr
-    )
-    return 2
+    if args.command == "render":
+        return _command_render(args.path, args.face)
+    raise AssertionError(f"unhandled command: {args.command}")
 
 
 def _read_source(path: str) -> str | None:
@@ -111,4 +114,18 @@ def _command_run(path: str) -> int:
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _command_render(path: str, face: str) -> int:
+    source = _read_source(path)
+    if source is None:
+        return 2
+    try:
+        tree = parse(lex(source))
+    except MatrixLangError as error:
+        print(f"matrixlang: {error}", file=sys.stderr)
+        return 1
+    text = render_glyph(tree) if face == "glyph" else render_ascii(tree)
+    print(text, end="")
     return 0

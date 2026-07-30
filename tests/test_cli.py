@@ -121,9 +121,56 @@ def test_run_missing_file_exits_two(capsys, tmp_path):
     assert main(["run", str(tmp_path / "nope.rain")]) == 2
 
 
-def test_only_render_remains_unimplemented(capsys):
-    assert main(["render"]) == 2
-    assert "Stage 4" in capsys.readouterr().err
+def test_render_glyph_prints_the_glyph_face(source_file, capsys):
+    exit_code = main(["render", "--face", "glyph", source_file("trace 1 + 2\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "ﾄ ｧ ﾀ ｨ\n"
+
+
+def test_render_ascii_is_a_formatter(source_file, capsys):
+    # Whitespace normalizes (design S4-1): the blank line goes, the
+    # indent becomes canonical. render --face ascii doubles as fmt.
+    exit_code = main(
+        ["render", "--face", "ascii", source_file("\n\ntrace      1\n")]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "trace 1\n"
+
+
+def test_render_round_trips_through_a_file(source_file, capsys, tmp_path):
+    # The toggle demo end-to-end: ascii -> glyph -> ascii, byte-identical.
+    source = 'construct n = 0\ndejavu n < 2\n  trace "go"\nflatline\n'
+    exit_code = main(["render", "--face", "glyph", source_file(source)])
+    glyph_text = capsys.readouterr().out
+    assert exit_code == 0
+
+    glyph_path = tmp_path / "glyph.rain"
+    glyph_path.write_text(glyph_text, encoding="utf-8")
+    exit_code = main(["render", "--face", "ascii", str(glyph_path)])
+    assert exit_code == 0
+    assert capsys.readouterr().out == source
+
+
+def test_render_reports_parse_errors_and_exits_one(source_file, capsys):
+    exit_code = main(["render", "--face", "glyph", source_file("redpill true\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "flatline" in captured.err
+
+
+def test_render_requires_a_face():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["render", "some.rain"])
+    assert excinfo.value.code == 2
+
+
+def test_render_missing_file_exits_two(capsys, tmp_path):
+    exit_code = main(["render", "--face", "ascii", str(tmp_path / "nope.rain")])
+    assert exit_code == 2
+    assert "nope.rain" in capsys.readouterr().err
 
 
 def test_repl_subcommand_reads_until_eof(capsys, monkeypatch):
