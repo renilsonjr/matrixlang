@@ -18,6 +18,7 @@ _ALLOWED: dict[str, set[str]] = {
     "tokens": set(),
     "errors": set(),
     "nodes": {"tokens"},
+    "values": {"errors"},
     "lexer": {"errors", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "treeview": {"nodes", "tokens"},
