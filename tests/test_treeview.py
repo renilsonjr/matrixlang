@@ -106,3 +106,19 @@ def test_every_operator_in_the_table_renders(expression, symbol):
     # wrong entry renders a lie. Ten cases, one per table row.
     text = format_tree(parse(lex(f"trace {expression}\n")))
     assert f"Binary {symbol}" in text
+
+
+def test_an_empty_bluepill_block_still_prints_an_else_header():
+    # else_body=[] (a bluepill with no statements) and else_body=None (no
+    # bluepill at all) are DIFFERENT trees, and treeview's `is not None`
+    # check is what keeps them distinguishable. Under a truthiness check
+    # the empty else would vanish. Stage 4's renderer relies on the same
+    # distinction, so this pins the AST contract behaviourally.
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    with_empty_else = format_tree(parse(lex("redpill true\nbluepill\nflatline\n")))
+    assert "else:" in with_empty_else
+
+    without_else = format_tree(parse(lex("redpill true\nflatline\n")))
+    assert "else:" not in without_else

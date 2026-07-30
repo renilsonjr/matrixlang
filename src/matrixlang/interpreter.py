@@ -43,7 +43,14 @@ class Interpreter:
 
     def run(self, program: Program) -> None:
         for statement in program.statements:
-            self._execute(statement)
+            try:
+                self._execute(statement)
+            except RecursionError:
+                raise RuntimeErrorML(
+                    "expression is nested too deeply",
+                    statement.line,
+                    statement.column,
+                ) from None
 
     # --- statements -------------------------------------------------------
 
@@ -111,12 +118,14 @@ class Interpreter:
         if isinstance(expr, Name):
             if expr.ident not in self.environment:
                 raise RuntimeErrorML(
-                    f"'{expr.ident}' is not declared", expr.line, expr.column
+                    f"'{expr.ident}' is not declared — use 'construct' first",
+                    expr.line,
+                    expr.column,
                 )
             return self.environment[expr.ident]
         if isinstance(expr, Unary):
             operand = self._evaluate(expr.operand)
-            self._require_int(operand, expr, "operand of unary '-'")
+            self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary):
             left = self._evaluate(expr.left)
@@ -139,8 +148,8 @@ class Interpreter:
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
         if node.op in _ORDERING_OPS:
-            self._require_int(left, node, "left operand")
-            self._require_int(right, node, "right operand")
+            self._require_int(left, node.left, "left operand")
+            self._require_int(right, node.right, "right operand")
             if node.op is TokenType.LT:
                 return left < right
             if node.op is TokenType.GT:
@@ -166,8 +175,8 @@ class Interpreter:
         raise AssertionError(f"unhandled equality operator: {node.op.name}")
 
     def _arithmetic(self, node: Binary, left: object, right: object) -> object:
-        self._require_int(left, node, "left operand")
-        self._require_int(right, node, "right operand")
+        self._require_int(left, node.left, "left operand")
+        self._require_int(right, node.right, "right operand")
         if node.op is TokenType.PLUS:
             return left + right
         if node.op is TokenType.MINUS:
