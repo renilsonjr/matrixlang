@@ -6,6 +6,8 @@ from pathlib import Path
 
 from matrixlang.errors import MatrixLangError
 from matrixlang.lexer import lex
+from matrixlang.parser import parse
+from matrixlang.treeview import format_tree
 
 _PENDING: dict[str, str] = {
     "run": "Stage 3",
@@ -25,6 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     lex_parser.add_argument("path", help="Path to a .rain source file.")
 
+    parse_parser = subcommands.add_parser(
+        "parse", help="Print the syntax tree for a source file."
+    )
+    parse_parser.add_argument("path", help="Path to a .rain source file.")
+
     subcommands.add_parser("run", help="Execute a source file. (Stage 3)")
     subcommands.add_parser("repl", help="Start an interactive session. (Stage 3)")
     subcommands.add_parser(
@@ -35,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "lex":
         return _command_lex(args.path)
+    if args.command == "parse":
+        return _command_parse(args.path)
 
     stage = _PENDING[args.command]
     print(
@@ -43,11 +52,30 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-def _command_lex(path: str) -> int:
+def _read_source(path: str) -> str | None:
     try:
-        source = Path(path).read_text(encoding="utf-8")
+        return Path(path).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
         print(f"matrixlang: {error}", file=sys.stderr)
+        return None
+
+
+def _command_parse(path: str) -> int:
+    source = _read_source(path)
+    if source is None:
+        return 2
+    try:
+        tree = parse(lex(source))
+    except MatrixLangError as error:
+        print(f"matrixlang: {error}", file=sys.stderr)
+        return 1
+    print(format_tree(tree), end="")
+    return 0
+
+
+def _command_lex(path: str) -> int:
+    source = _read_source(path)
+    if source is None:
         return 2
 
     try:

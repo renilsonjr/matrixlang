@@ -168,6 +168,9 @@ which contradicts R-02's promise that round-tripping is loss-free.
   `trailing_comment: str` for a same-line comment.
 - The program node carries `trailing_comments` for anything after the last statement.
 - AST equality in §4.3 includes trivia.
+- Source positions (line, column) are carried on nodes for error reporting but are
+  **excluded** from AST equality — a re-rendered face has different columns, and the
+  §4.3 criterion must still hold.
 
 Cheap at Stage 1, expensive to retrofit at Stage 4. It also gives episode 1 a good aside:
 *where do comments live in a compiler, and why is the obvious answer wrong?*
@@ -271,7 +274,8 @@ Out of scope for v1, consistent with the parent spec §6:
 
 ## 10. Amendments to the parent spec
 
-If this addendum is adopted, `SPEC-matrixlang.md` needs two edits:
+Both amendments below were applied to `SPEC-matrixlang.md` during Stage 1 and are
+recorded here for provenance:
 
 1. **§4.3** — state that AST equality includes comment trivia (§6.1 above). As written, the
    criterion passes while the feature it exists to guarantee is broken.
