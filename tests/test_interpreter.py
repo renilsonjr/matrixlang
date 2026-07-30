@@ -191,3 +191,77 @@ def test_ordering_booleans_is_an_error():
     with pytest.raises(RuntimeErrorML) as excinfo:
         output("trace true < false\n")
     assert "must be an integer" in str(excinfo.value)
+
+
+def test_redpill_takes_the_then_branch():
+    assert output("redpill true\n  trace 1\nflatline\n") == "1\n"
+
+
+def test_redpill_skips_an_untaken_branch_with_no_else():
+    assert output("redpill false\n  trace 1\nflatline\n") == ""
+
+
+def test_bluepill_takes_the_else_branch():
+    source = "redpill false\n  trace 1\nbluepill\n  trace 2\nflatline\n"
+    assert output(source) == "2\n"
+
+
+def test_nested_conditionals():
+    source = (
+        "construct x = 2\n"
+        "redpill x > 1\n"
+        "  redpill x > 5\n"
+        "    trace 100\n"
+        "  bluepill\n"
+        "    trace 50\n"
+        "  flatline\n"
+        "flatline\n"
+    )
+    assert output(source) == "50\n"
+
+
+def test_a_non_boolean_condition_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("redpill 1\n  trace 1\nflatline\n")
+    assert "must be a boolean" in str(excinfo.value)
+    assert "integer" in str(excinfo.value)
+
+
+def test_a_string_condition_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output('dejavu "yes"\n  trace 1\nflatline\n')
+    assert "must be a boolean" in str(excinfo.value)
+
+
+def test_a_loop_that_never_runs():
+    assert output("dejavu false\n  trace 1\nflatline\n") == ""
+
+
+def test_counting_loop_runs():
+    # THE parent spec's Stage 3 done-when criterion. At this point the
+    # language exists.
+    source = (
+        "construct n = 1\n"
+        "dejavu n <= 10\n"
+        "  trace n\n"
+        "  n = n + 1\n"
+        "flatline\n"
+    )
+    assert output(source) == "".join(f"{i}\n" for i in range(1, 11))
+
+
+def test_the_stage_3_demo_program_runs():
+    source = (
+        "construct n = 0\n"
+        'construct name = "Neo"\n'
+        "\n"
+        "dejavu n < 3\n"
+        "  redpill n == 1\n"
+        '    trace "wake up, " + name\n'
+        "  bluepill\n"
+        "    trace n\n"
+        "  flatline\n"
+        "  n = n + 1\n"
+        "flatline\n"
+    )
+    assert output(source) == "0\nwake up, Neo\n2\n"

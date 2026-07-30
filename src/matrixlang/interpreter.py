@@ -19,6 +19,7 @@ from matrixlang.nodes import (
     BoolLiteral,
     Declare,
     Expr,
+    If,
     Name,
     NumberLiteral,
     Program,
@@ -26,9 +27,10 @@ from matrixlang.nodes import (
     StringLiteral,
     Trace,
     Unary,
+    While,
 )
 from matrixlang.tokens import TokenType
-from matrixlang.values import is_int, is_str, to_display, type_name
+from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
 
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
@@ -62,8 +64,34 @@ class Interpreter:
                     stmt.column,
                 )
             self.environment[stmt.name] = self._evaluate(stmt.value)
+        elif isinstance(stmt, If):
+            if self._condition(stmt.condition):
+                for child in stmt.then_body:
+                    self._execute(child)
+            elif stmt.else_body is not None:
+                for child in stmt.else_body:
+                    self._execute(child)
+        elif isinstance(stmt, While):
+            while self._condition(stmt.condition):
+                for child in stmt.body:
+                    self._execute(child)
         else:
             raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
+
+    def _condition(self, expr: Expr) -> bool:
+        """Evaluate a condition, requiring a boolean.
+
+        Spec §5: no truthy integers, no truthy strings. `redpill 1` is an
+        error, not a taken branch.
+        """
+        value = self._evaluate(expr)
+        if not is_bool(value):
+            raise RuntimeErrorML(
+                f"condition must be a boolean, got {type_name(value)}",
+                expr.line,
+                expr.column,
+            )
+        return value
 
     # --- expressions ------------------------------------------------------
 
