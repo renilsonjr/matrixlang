@@ -1187,7 +1187,20 @@ def test_run_missing_file_exits_two(capsys, tmp_path):
 def test_only_render_remains_unimplemented(capsys):
     assert main(["render"]) == 2
     assert "Stage 4" in capsys.readouterr().err
+
+
+def test_repl_subcommand_reads_until_eof(capsys, monkeypatch):
+    # The other half of this task's wiring. `repl` takes no path argument and
+    # reads stdin, so drive it with a finite stream — an interactive run
+    # blocks until EOF. Prompts also land on stdout, hence the `in` check.
+    monkeypatch.setattr("sys.stdin", io.StringIO("construct x = 2\ntrace x\n"))
+    assert main(["repl"]) == 0
+    assert "2\n" in capsys.readouterr().out
 ```
+
+`tests/test_cli.py` needs `import io` at the top for that test.
+
+**Delete the pre-existing `test_unimplemented_subcommands_exit_two_naming_the_stage`.** It dates from Stage 1 and looped over `run`, `repl` and `render`, all expecting exit 2. Once `run` and `repl` become real it cannot survive: `main(["run"])` with no path raises `SystemExit(2)` from argparse rather than returning 2, and `main(["repl"])` would block on stdin. `test_only_render_remains_unimplemented` above supersedes it with a strictly stronger assertion (`"Stage 4"` rather than `"Stage"`). Delete it rather than trimming it to `render` — a trimmed version asserts exactly what the new test asserts, from the same call, and its plural name would then describe one subcommand.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
