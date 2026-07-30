@@ -1,9 +1,12 @@
 """Command-line entry point for the MatrixLang toolchain."""
 
 import argparse
+import os
+import shutil
 import sys
 from pathlib import Path
 
+from matrixlang.curtain import play_if_supported
 from matrixlang.errors import MatrixLangError, recursion_guard
 from matrixlang.interpreter import run as run_program
 from matrixlang.lexer import lex
@@ -31,6 +34,11 @@ def main(argv: list[str] | None = None) -> int:
 
     run_parser = subcommands.add_parser("run", help="Execute a source file.")
     run_parser.add_argument("path", help="Path to a .rain source file.")
+    run_parser.add_argument(
+        "--no-rain",
+        action="store_true",
+        help="Skip the digital rain and execute immediately.",
+    )
 
     subcommands.add_parser("repl", help="Start an interactive session.")
     render_parser = subcommands.add_parser(
@@ -51,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "parse":
         return _command_parse(args.path)
     if args.command == "run":
-        return _command_run(args.path)
+        return _command_run(args.path, rain=not args.no_rain)
     if args.command == "repl":
         return run_repl()
     if args.command == "render":
@@ -97,7 +105,7 @@ def _command_lex(path: str) -> int:
     return 0
 
 
-def _command_run(path: str) -> int:
+def _command_run(path: str, rain: bool = True) -> int:
     source = _read_source(path)
     if source is None:
         return 2
@@ -108,6 +116,24 @@ def _command_run(path: str) -> int:
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
+
+    # After the parse, before execution: a program that cannot run should
+    # say so immediately rather than after a second of decoration. The
+    # curtain declines itself on a non-TTY, so redirected output is clean
+    # without this call site knowing anything about terminals.
+    if rain:
+        try:
+            play_if_supported(sys.stdout, os.environ, shutil.get_terminal_size())
+        except KeyboardInterrupt:
+            # play() has already restored the terminal in its finally.
+            # This must stay first: KeyboardInterrupt is a BaseException,
+            # so a later `except Exception` cannot catch it here.
+            return 130
+        except Exception:
+            # Decoration must never be the reason a run fails: an
+            # unencodable glyph or a dropped terminal loses the rain,
+            # not the program.
+            pass
 
     # Execution is deliberately outside the parse try-block: a program that
     # fails partway has already printed real output, and that output stays.

@@ -51,3 +51,10 @@ GLYPHS: dict[str, str] = {
 }
 
 REVERSE: dict[str, str] = {glyph: slot for slot, glyph in GLYPHS.items()}
+
+# The rain alphabet (Stage 5). The whole half-width katakana block, of
+# which the 32 language slots above are a subset: a field built from 32
+# repeating characters reads as a pattern, not as rain. Built from
+# codepoints rather than literals, so the block stays greppable and this
+# file remains the only place a glyph is chosen.
+RAIN_ALPHABET: tuple[str, ...] = tuple(chr(code) for code in range(0xFF66, 0xFF9E))

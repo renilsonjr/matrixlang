@@ -14,7 +14,7 @@ Source files use the `.rain` extension.
 
 ## Status
 
-Stage 4 — bidirectional glyph rendering. One tree, two faces.
+Stage 5 — runner presentation. The language runs, and it rains.
 
 ## Usage
 
@@ -47,8 +47,46 @@ Prints the syntax tree as indented text — the tree's shape is the precedence l
 .venv/bin/matrixlang repl
 ```
 
-`run` executes a program. `repl` starts an interactive session — blocks span
-multiple lines, so a `dejavu` loop can be typed at the prompt.
+`run` executes a program, preceded by a curtain of digital rain. `repl`
+starts an interactive session — blocks span multiple lines, so a `dejavu`
+loop can be typed at the prompt. The REPL never rains: motion and
+legibility are adversaries, so the rain belongs to the runner and not to
+the editing surface.
+
+The curtain draws on the alternate screen buffer, so it leaves nothing in
+your scrollback, and it declines itself whenever it would be unwelcome —
+a redirected or piped stdout, `NO_COLOR`, `TERM=dumb`, or a terminal too
+small to read. `matrixlang run prog.rain > out.txt` writes exactly the
+bytes it always did:
+
+```bash
+.venv/bin/matrixlang run --no-rain examples/hello.rain
+```
+
+`--no-rain` skips it while you are iterating.
+
+## The glyphs
+
+The falling characters are Unicode half-width katakana (U+FF66–FF9D), not
+the film's own glyphs.
+
+The real ones were reverse-engineered by
+[Rezmason/matrix](https://github.com/Rezmason/matrix) from an archived
+promotional asset: mirrored katakana scanned out of a Japanese cookbook,
+plus characters from Susan Kare's Chicago typeface and the expanded set
+from *Resurrections*. That work is the reference for what the film's code
+actually looks like, and this project is indebted to it.
+
+It is not, however, a font. The glyphs live as WebGL vector and texture
+data, so putting them in a terminal would mean building a typeface —
+a separate project, not a stage of this one. Half-width katakana render
+today in any terminal with zero font work, and the mapping table is
+deliberately swappable if that ever changes.
+
+Terminal digital rain is solved work with many good implementations
+(TMatrix, green_rain, RGB-digital-rain). Nothing here tries to improve on
+them; the rain exists because this language earned a presentation layer,
+and it is the last thing built rather than the first.
 
 ## Development
 

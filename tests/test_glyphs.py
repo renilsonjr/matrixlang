@@ -1,6 +1,6 @@
 import string
 
-from matrixlang.glyphs import GLYPHS, REVERSE
+from matrixlang.glyphs import GLYPHS, RAIN_ALPHABET, REVERSE
 from matrixlang.tokens import KEYWORDS
 
 
@@ -49,3 +49,17 @@ def test_glyphs_are_disjoint_from_every_ascii_alphabet():
     # whole architecture would silently break.
     for glyph in GLYPHS.values():
         assert not glyph.isascii()
+
+
+def test_the_rain_alphabet_is_the_whole_katakana_block():
+    # 56 characters, U+FF66-FF9D inclusive. The 32 language slots would
+    # read as a repeating pattern in a full-screen field, not as rain.
+    assert len(RAIN_ALPHABET) == 56
+    assert all(len(glyph) == 1 for glyph in RAIN_ALPHABET)
+    assert all(0xFF66 <= ord(glyph) <= 0xFF9D for glyph in RAIN_ALPHABET)
+
+
+def test_every_language_glyph_is_in_the_rain_alphabet():
+    # The table is a subset of the block the rain draws from, so the rain
+    # and the language cannot drift onto different alphabets.
+    assert set(GLYPHS.values()) <= set(RAIN_ALPHABET)
