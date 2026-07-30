@@ -103,3 +103,23 @@ def test_the_guard_detects_every_import_spelling(statement):
     # A guard is worth exactly what it catches. An earlier version of this
     # helper caught two of these five and looked green on the other three.
     assert "lexer" in _imports_in_source(statement)
+
+
+# I-3: glyphs.py is the ONLY place a katakana literal may appear. D-03
+# calls the glyph set swappable — "if a real film-glyph font ever exists,
+# only this table changes" (glyphs.py's own docstring) — and that promise
+# is only true if no other module carries a second, hidden copy of a
+# glyph assignment. Half-width katakana (U+FF66-FF9D) is the exact block
+# GLYPHS draws from (test_glyphs.py pins every value into it), so a
+# character in that range anywhere else is either a stray glyph literal
+# or a duplicate assignment, either way a violation of "assignments live
+# only in glyphs.py."
+_KATAKANA_LOW = 0xFF66
+_KATAKANA_HIGH = 0xFF9D
+
+
+@pytest.mark.parametrize("module", sorted(_MODULES - {"glyphs"}))
+def test_only_glyphs_contains_a_katakana_character(module):
+    source = (_SRC / f"{module}.py").read_text(encoding="utf-8")
+    offenders = {ch for ch in source if _KATAKANA_LOW <= ord(ch) <= _KATAKANA_HIGH}
+    assert not offenders, f"{module}.py contains katakana glyph(s): {offenders!r}"
