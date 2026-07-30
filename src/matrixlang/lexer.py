@@ -48,6 +48,39 @@ _ID_CONTINUE = frozenset(string.ascii_letters + string.digits + "_")
 
 _ESCAPES: dict[str, str] = {'"': '"', "\\": "\\", "n": "\n"}
 
+# Control characters are refused in source text, inside strings and comments
+# alike. Raw bytes there reach a reader's terminal unescaped through `trace`,
+# `matrixlang parse`, `matrixlang render` and the REPL's glyph echo, so an ESC
+# in a .rain file can drive the terminal of someone merely INSPECTING it.
+#
+# Refusing them here rather than escaping at those output sites is what keeps
+# the round-trip criterion (parent spec §4.3) intact: `render` must reproduce
+# source exactly, and an escaped byte would re-lex as the escape text rather
+# than the byte. Refused at the boundary, such trees cannot be built from
+# source at all, so every output path is closed at once.
+#
+# Two carve-outs. Tab cannot drive a terminal, and refusing it would break
+# working programs for no security gain. Newline inside a string never reaches
+# this check — `_scan_string` reports the better "unterminated string" first.
+_EXEMPT_CONTROLS = frozenset("\t")
+
+
+def _is_control(char: str) -> bool:
+    """C0, DEL and C1, minus the exemptions above."""
+    codepoint = ord(char)
+    return (
+        codepoint < 0x20 or 0x7F <= codepoint <= 0x9F
+    ) and char not in _EXEMPT_CONTROLS
+
+
+def _reject_control(char: str, line: int, column: int, where: str) -> None:
+    if _is_control(char):
+        raise LexError(
+            f"control character U+{ord(char):04X} is not allowed in {where}",
+            line,
+            column,
+        )
+
 
 def lex(source: str) -> list[Token]:
     """Scan `source` into a flat token list terminated by NEWLINE, EOF."""
@@ -76,6 +109,7 @@ def lex(source: str) -> list[Token]:
             start = index
             start_column = column
             while index < length and source[index] != "\n":
+                _reject_control(source[index], line, column, "a comment")
                 index += 1
                 column += 1
             # Canonical trivia (§6.1): a glyph marker is stored as '#', so
@@ -201,6 +235,10 @@ def _scan_string(
             column += 2
             continue
 
+        # Only literal source bytes are screened. A control character that
+        # came from an escape — `\n` decoding to U+000A above — is explicit
+        # and intended, and the round trip depends on it surviving.
+        _reject_control(char, line, column, "a string")
         decoded.append(char)
         index += 1
         column += 1
