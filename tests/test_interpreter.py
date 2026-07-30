@@ -51,3 +51,45 @@ def test_a_fresh_interpreter_starts_with_an_empty_environment():
     # the empty case. Task 3's test_environment_holds_every_declared_name
     # covers a populated environment.
     assert env("trace 1\n") == {}
+
+
+def test_construct_declares_and_name_reads_back():
+    assert output("construct x = 5\ntrace x\n") == "5\n"
+
+
+def test_assignment_updates_an_existing_name():
+    assert output("construct x = 1\nx = 2\ntrace x\n") == "2\n"
+
+
+def test_environment_holds_every_declared_name():
+    assert env('construct a = 1\nconstruct b = "two"\nconstruct c = true\n') == {
+        "a": 1,
+        "b": "two",
+        "c": True,
+    }
+
+
+def test_redeclaring_a_name_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("construct x = 1\nconstruct x = 2\n")
+    assert "already declared" in str(excinfo.value)
+    assert excinfo.value.line == 2
+
+
+def test_assigning_to_an_undeclared_name_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("x = 1\n")
+    assert "not declared" in str(excinfo.value)
+    assert excinfo.value.line == 1
+
+
+def test_reading_an_undeclared_name_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace nope\n")
+    assert "not declared" in str(excinfo.value)
+    assert excinfo.value.column == 7
+
+
+def test_a_name_may_hold_a_different_type_after_assignment():
+    # Dynamic typing, spec §5: no declared types, so this is legal.
+    assert output('construct x = 1\nx = "now a string"\ntrace x\n') == "now a string\n"

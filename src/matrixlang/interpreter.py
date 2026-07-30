@@ -14,8 +14,11 @@ from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
 from matrixlang.nodes import (
+    Assign,
     BoolLiteral,
+    Declare,
     Expr,
+    Name,
     NumberLiteral,
     Program,
     Stmt,
@@ -39,6 +42,20 @@ class Interpreter:
     def _execute(self, stmt: Stmt) -> None:
         if isinstance(stmt, Trace):
             print(to_display(self._evaluate(stmt.value)), file=self._out)
+        elif isinstance(stmt, Declare):
+            if stmt.name in self.environment:
+                raise RuntimeErrorML(
+                    f"'{stmt.name}' is already declared", stmt.line, stmt.column
+                )
+            self.environment[stmt.name] = self._evaluate(stmt.value)
+        elif isinstance(stmt, Assign):
+            if stmt.name not in self.environment:
+                raise RuntimeErrorML(
+                    f"'{stmt.name}' is not declared — use 'construct' first",
+                    stmt.line,
+                    stmt.column,
+                )
+            self.environment[stmt.name] = self._evaluate(stmt.value)
         else:
             raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
@@ -51,6 +68,12 @@ class Interpreter:
             return expr.value
         if isinstance(expr, BoolLiteral):
             return expr.value
+        if isinstance(expr, Name):
+            if expr.ident not in self.environment:
+                raise RuntimeErrorML(
+                    f"'{expr.ident}' is not declared", expr.line, expr.column
+                )
+            return self.environment[expr.ident]
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
 
