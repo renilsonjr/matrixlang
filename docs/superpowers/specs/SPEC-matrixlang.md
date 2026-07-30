@@ -134,7 +134,10 @@ second lossless rendering of the same AST.**
   problem in the project and is routinely underestimated.**
 - **R-02 — Bidirectional rendering, not one-way substitution.** Glyph form and ASCII form
   are two lossless renderings of a single AST. Authoring in either form is valid; a toggle
-  switches views; round-tripping is loss-free. Design precedent: hybrid visual/textual
+  switches views; round-tripping is loss-free. **Loss-free covers semantics and comments;
+  whitespace is not preserved** — blank lines and indentation normalize to the canonical
+  rendering (language-surface addendum §6.1), so the toggle is also a pretty-printer.
+  Design precedent: hybrid visual/textual
   languages preserve pure-text editability so visual constructs remain proper language
   extensions rather than a separate dialect (Andersen). This supersedes any "keyword lookup
   table in the lexer" approach — substitution is one-way and degrades debuggability.
@@ -148,7 +151,8 @@ Together these preserve the visual identity while keeping the language debuggabl
 
 ### 4.3 Acceptance criterion for glyph support
 
-For any valid program `t`:
+For any well-formed AST `t` (the criterion quantifies over trees, not source text —
+`t` is compared against `parse(...)` output):
 
 ```
 parse(render_glyph(t)) == parse(render_ascii(t)) == t

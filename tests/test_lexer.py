@@ -1,6 +1,7 @@
 import pytest
 
 from matrixlang.errors import LexError
+from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
 from matrixlang.tokens import TokenType
 
@@ -182,10 +183,6 @@ def test_identifiers_may_not_start_with_a_digit():
     ]
 
 
-def test_katakana_is_not_an_identifier():
-    # str.isalpha() would accept this. Stage 4 needs glyphs to stay unclaimed.
-    with pytest.raises(LexError):
-        lex("ｱ")
 
 
 def test_assignment_statement_lexes_as_specified():
@@ -290,3 +287,89 @@ def test_whitespace_only_source_yields_only_eof():
     # No tokens were produced, so there is no statement to terminate:
     # the synthesised NEWLINE keys on "produced no tokens", not "source empty".
     assert kinds("   ") == [TokenType.EOF]
+
+
+def test_glyph_keywords_lex_as_keywords():
+    # ｱ x ﾅ ｫ  ==  construct x = 5. One lexer, no mode flag (§6.3).
+    tokens = lex("ｱ x ﾅ ｫ\n")
+    assert [t.type for t in tokens] == [
+        TokenType.CONSTRUCT,
+        TokenType.IDENT,
+        TokenType.ASSIGN,
+        TokenType.NUMBER,
+        TokenType.NEWLINE,
+        TokenType.EOF,
+    ]
+    assert tokens[3].value == 5
+
+
+def test_the_spec_s_own_fragment_means_what_the_spec_says():
+    # Parent spec §1's only code example, mixed-face: glyph keyword, ASCII
+    # everything else. Mixed-face source is legal — D-03's free win.
+    assert [t.type for t in lex("ｱ x = 5\n")] == [
+        t.type for t in lex("construct x = 5\n")
+    ]
+
+
+def test_glyph_operators_lex_as_operators():
+    # ｧ ﾆ ｧ  ==  1 == 1. A glyph operator is ONE char even when its ASCII
+    # spelling is two.
+    tokens = lex("ｧ ﾆ ｧ\n")
+    assert [t.type for t in tokens[:3]] == [
+        TokenType.NUMBER,
+        TokenType.EQ,
+        TokenType.NUMBER,
+    ]
+
+
+def test_glyph_booleans_carry_their_values():
+    # The parser reads token.value for BoolLiteral; a glyph ｼ that lexes
+    # as TRUE with value=None would build BoolLiteral(None).
+    tokens = lex("ｼ ｷ\n")
+    assert tokens[0].type is TokenType.TRUE
+    assert tokens[0].value is True
+    assert tokens[1].type is TokenType.FALSE
+    assert tokens[1].value is False
+
+
+def test_glyph_digit_runs_decode_positionally():
+    # §6.2: digits map per-digit. ｧｦ is 10, not two tokens.
+    tokens = lex("ﾄ ｧｦ\n")
+    assert tokens[1].type is TokenType.NUMBER
+    assert tokens[1].value == 10
+
+
+def test_a_number_may_mix_faces_within_one_run():
+    # 1ｦｦ is 100. Without this, adjacent NUMBER NUMBER tokens would parse
+    # into a baffling error two stages away from the actual cause.
+    tokens = lex("ﾄ 1ｦｦ\n")
+    assert tokens[1].type is TokenType.NUMBER
+    assert tokens[1].value == 100
+
+
+def test_glyph_comments_normalize_to_canonical_trivia():
+    # §6.1 invariant: trivia starts with ASCII '#'. A glyph-marked comment
+    # must store '#…' or parse(render_glyph(t)) carries different trivia
+    # than t and the §4.3 equality fails.
+    tokens = lex("ﾄ x ﾒ note\n")
+    comment = tokens[2]
+    assert comment.type is TokenType.COMMENT
+    assert comment.lexeme == "# note"
+
+
+def test_katakana_outside_the_table_is_still_an_error():
+    # Replaces test_katakana_is_not_an_identifier: the 32 mapped glyphs
+    # are now claimed as tokens, but unmapped katakana (ﾝ, U+FF9D) stays
+    # an unknown-character error — glyphs never become identifiers.
+    with pytest.raises(LexError) as excinfo:
+        lex("construct ﾝ = 1\n")
+    assert excinfo.value.column == 11
+
+
+def test_every_slot_lexes_to_the_same_type_as_its_ascii_spelling():
+    # The whole-table property, so a future glyph-set swap stays honest.
+    # '#' is excluded: a lone '#' opens a comment, checked above.
+    for slot, glyph in GLYPHS.items():
+        if slot == "#":
+            continue
+        assert lex(glyph + "\n")[0].type is lex(slot + "\n")[0].type, slot

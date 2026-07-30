@@ -89,8 +89,9 @@ corrupt `x2` or `trace "trace"` the way naive string substitution would.
 - **R-PAREN-3 (unary operand):** parens around any binary operand of a unary —
   `Unary(-, Binary(2, *, 3))` → `-(2 * 3)`.
 
-The renderer is total over well-formed trees; an unknown op TokenType raises
-`ValueError` (programmer error, not a `MatrixLangError`).
+The renderer is total over well-formed trees; an unhandled node type raises
+`AssertionError`, matching `treeview.py`'s convention (programmer error, not a
+`MatrixLangError`).
 
 ## 4. CLI and REPL surface
 

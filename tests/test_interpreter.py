@@ -148,11 +148,12 @@ def test_booleans_are_not_integers_under_unary_minus():
     assert "boolean" in str(excinfo.value)
 
 
-def test_arithmetic_errors_report_the_operator_position():
+def test_ordering_type_errors_point_at_the_offending_operand():
+    # 'trace true < 1': 'true' is the left operand, at column 7.
     with pytest.raises(RuntimeErrorML) as excinfo:
-        output("trace 1 + true\n")
+        output("trace true < 1\n")
     assert excinfo.value.line == 1
-    assert excinfo.value.column == 9
+    assert excinfo.value.column == 7
 
 
 def test_integer_equality_and_ordering():
@@ -287,3 +288,44 @@ def test_construct_inside_a_loop_body_fails_on_the_second_iteration():
 def test_a_name_declared_inside_a_block_outlives_it():
     # The positive observable of "blocks do not introduce scope" (spec §5).
     assert output("redpill true\n  construct inner = 9\nflatline\ntrace inner\n") == "9\n"
+
+
+def test_a_very_deep_expression_is_a_language_error_not_a_crash():
+    # A ~900-deep chain kills the process with a raw RecursionError today,
+    # which in the REPL ends the session (feed catches MatrixLangError only).
+    # Built programmatically: lex/parse would hit their own recursion first.
+    from matrixlang.nodes import NumberLiteral, Program, Trace, Unary
+    from matrixlang.tokens import TokenType
+
+    expr = NumberLiteral(1)
+    for _ in range(50_000):
+        expr = Unary(TokenType.MINUS, expr)
+    program = Program([Trace(expr, line=3, column=7)])
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        run(program, out=io.StringIO())
+    assert "nested too deeply" in str(excinfo.value)
+    assert excinfo.value.line == 3
+    assert excinfo.value.column == 7
+
+
+def test_type_errors_point_at_the_offending_operand():
+    # 'trace 1 + true': the operator is at column 9, 'true' at column 11.
+    # The operand is what the reader must fix, so that is the position.
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace 1 + true\n")
+    assert excinfo.value.line == 1
+    assert excinfo.value.column == 11
+
+
+def test_unary_type_errors_point_at_the_operand():
+    # 'trace -true': '-' at column 7, 'true' at column 8.
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace -true\n")
+    assert excinfo.value.column == 8
+
+
+def test_reading_an_undeclared_name_suggests_construct():
+    # The Assign error already carries this hint; the Name error did not.
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace nope\n")
+    assert "use 'construct' first" in str(excinfo.value)

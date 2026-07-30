@@ -3,6 +3,7 @@
 import string
 
 from matrixlang.errors import LexError
+from matrixlang.glyphs import GLYPHS, REVERSE
 from matrixlang.tokens import KEYWORDS, Token, TokenType
 
 _SINGLE: dict[str, TokenType] = {
@@ -25,8 +26,23 @@ _DOUBLE: dict[str, TokenType] = {
 }
 
 # Explicit ASCII sets. str.isdigit() and str.isalpha() accept Unicode, which
-# would let Stage 4 glyphs lex as identifiers. See Global Constraints.
+# would let glyphs lex as identifiers. Glyphs enter through REVERSE only.
 _DIGITS = frozenset(string.digits)
+_GLYPH_DIGITS = frozenset(GLYPHS[digit] for digit in string.digits)
+_ANY_DIGIT = _DIGITS | _GLYPH_DIGITS
+_COMMENT_MARKERS = frozenset({"#", GLYPHS["#"]})
+
+# Glyph char -> TokenType for the single-glyph tokens (keywords, operators,
+# parens). Digits and the comment marker are handled by their own branches.
+_GLYPH_TOKENS: dict[str, TokenType] = {}
+for _slot, _glyph in GLYPHS.items():
+    if _slot in KEYWORDS:
+        _GLYPH_TOKENS[_glyph] = KEYWORDS[_slot]
+    elif _slot in _DOUBLE:
+        _GLYPH_TOKENS[_glyph] = _DOUBLE[_slot]
+    elif _slot in _SINGLE:
+        _GLYPH_TOKENS[_glyph] = _SINGLE[_slot]
+
 _ID_START = frozenset(string.ascii_letters + "_")
 _ID_CONTINUE = frozenset(string.ascii_letters + string.digits + "_")
 
@@ -56,15 +72,16 @@ def lex(source: str) -> list[Token]:
             column += 1
             continue
 
-        if char == "#":
+        if char in _COMMENT_MARKERS:
             start = index
             start_column = column
             while index < length and source[index] != "\n":
                 index += 1
                 column += 1
-            tokens.append(
-                Token(TokenType.COMMENT, source[start:index], line, start_column)
-            )
+            # Canonical trivia (§6.1): a glyph marker is stored as '#', so
+            # the same comment re-lexed from either face compares equal.
+            lexeme = "#" + source[start + 1 : index]
+            tokens.append(Token(TokenType.COMMENT, lexeme, line, start_column))
             continue
 
         if char == '"':
@@ -72,15 +89,16 @@ def lex(source: str) -> list[Token]:
             tokens.append(token)
             continue
 
-        if char in _DIGITS:
+        if char in _ANY_DIGIT:
             start = index
             start_column = column
-            while index < length and source[index] in _DIGITS:
+            while index < length and source[index] in _ANY_DIGIT:
                 index += 1
                 column += 1
             lexeme = source[start:index]
+            value = int("".join(REVERSE.get(c, c) for c in lexeme))
             tokens.append(
-                Token(TokenType.NUMBER, lexeme, line, start_column, int(lexeme))
+                Token(TokenType.NUMBER, lexeme, line, start_column, value)
             )
             continue
 
@@ -98,6 +116,18 @@ def lex(source: str) -> list[Token]:
             elif token_type is TokenType.FALSE:
                 value = False
             tokens.append(Token(token_type, lexeme, line, start_column, value))
+            continue
+
+        if char in _GLYPH_TOKENS:
+            token_type = _GLYPH_TOKENS[char]
+            value = None
+            if token_type is TokenType.TRUE:
+                value = True
+            elif token_type is TokenType.FALSE:
+                value = False
+            tokens.append(Token(token_type, char, line, column, value))
+            index += 1
+            column += 1
             continue
 
         two = source[index : index + 2]

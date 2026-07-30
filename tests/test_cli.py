@@ -121,9 +121,104 @@ def test_run_missing_file_exits_two(capsys, tmp_path):
     assert main(["run", str(tmp_path / "nope.rain")]) == 2
 
 
-def test_only_render_remains_unimplemented(capsys):
-    assert main(["render"]) == 2
-    assert "Stage 4" in capsys.readouterr().err
+def test_render_glyph_prints_the_glyph_face(source_file, capsys):
+    exit_code = main(["render", "--face", "glyph", source_file("trace 1 + 2\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "ﾄ ｧ ﾀ ｨ\n"
+
+
+def test_render_ascii_is_a_formatter(source_file, capsys):
+    # Whitespace normalizes (design S4-1): the blank line goes, the
+    # indent becomes canonical. render --face ascii doubles as fmt.
+    exit_code = main(
+        ["render", "--face", "ascii", source_file("\n\ntrace      1\n")]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "trace 1\n"
+
+
+def test_render_round_trips_through_a_file(source_file, capsys, tmp_path):
+    # The toggle demo end-to-end: ascii -> glyph -> ascii, byte-identical.
+    source = 'construct n = 0\ndejavu n < 2\n  trace "go"\nflatline\n'
+    exit_code = main(["render", "--face", "glyph", source_file(source)])
+    glyph_text = capsys.readouterr().out
+    assert exit_code == 0
+
+    glyph_path = tmp_path / "glyph.rain"
+    glyph_path.write_text(glyph_text, encoding="utf-8")
+    exit_code = main(["render", "--face", "ascii", str(glyph_path)])
+    assert exit_code == 0
+    assert capsys.readouterr().out == source
+
+
+def test_render_reports_parse_errors_and_exits_one(source_file, capsys):
+    exit_code = main(["render", "--face", "glyph", source_file("redpill true\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "flatline" in captured.err
+
+
+def test_render_requires_a_face():
+    with pytest.raises(SystemExit) as excinfo:
+        main(["render", "some.rain"])
+    assert excinfo.value.code == 2
+
+
+def test_render_missing_file_exits_two(capsys, tmp_path):
+    exit_code = main(["render", "--face", "ascii", str(tmp_path / "nope.rain")])
+    assert exit_code == 2
+    assert "nope.rain" in capsys.readouterr().err
+
+
+# --- I-1: RecursionError must become a clean CLI error, not a traceback ----
+
+
+def _deeply_nested_source() -> str:
+    # ~90-100 nested parens overflow Python's recursion limit inside the
+    # recursive-descent parser today — a raw RecursionError, uncaught by
+    # `except MatrixLangError`, which dumps a traceback instead of the
+    # `matrixlang: ...` / exit-1 contract every other error follows.
+    return "trace " + "(" * 120 + "1" + ")" * 120 + "\n"
+
+
+def test_parse_reports_deep_nesting_cleanly_and_exits_one(source_file, capsys):
+    exit_code = main(["parse", source_file(_deeply_nested_source())])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("matrixlang:")
+
+
+def test_render_reports_deep_nesting_cleanly_and_exits_one(source_file, capsys):
+    exit_code = main(
+        ["render", "--face", "glyph", source_file(_deeply_nested_source())]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("matrixlang:")
+
+
+def test_render_reports_a_render_only_recursion_limit_cleanly(source_file, capsys):
+    # A long same-precedence chain parses ITERATIVELY (one stack frame per
+    # chain, not per element) but the renderer walks it recursively, so
+    # this stresses render's own guard independently of parse's.
+    source = "trace " + " + ".join(["1"] * 2000) + "\n"
+    exit_code = main(["render", "--face", "ascii", source_file(source)])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("matrixlang:")
+
+
+def test_run_reports_deep_nesting_cleanly_and_exits_one(source_file, capsys):
+    exit_code = main(["run", source_file(_deeply_nested_source())])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err.startswith("matrixlang:")
 
 
 def test_repl_subcommand_reads_until_eof(capsys, monkeypatch):

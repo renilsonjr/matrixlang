@@ -14,7 +14,7 @@ Source files use the `.rain` extension.
 
 ## Status
 
-Stage 3 — interpreter. The language runs.
+Stage 4 — bidirectional glyph rendering. One tree, two faces.
 
 ## Usage
 
@@ -22,8 +22,19 @@ Stage 3 — interpreter. The language runs.
 .venv/bin/matrixlang lex examples/hello.rain
 ```
 
-Prints one `line:column<TAB>TOKEN_TYPE<TAB>lexeme` row per token. `render` is
-reserved for Stage 4 and currently exits 2.
+Prints one `line:column<TAB>TOKEN_TYPE<TAB>lexeme` row per token.
+`render --face glyph` prints the same
+program in half-width katakana; `render --face ascii` converts it back
+(and doubles as a formatter — whitespace normalizes to canonical form).
+
+```bash
+.venv/bin/matrixlang render --face glyph examples/hello.rain
+```
+
+In the REPL, `:glyph` echoes each statement in the operator view as you
+type ASCII; `:ascii` turns it back off. Glyph and mixed-face source are
+accepted everywhere with no mode flag — glyphs and ASCII identifiers
+occupy disjoint alphabets, so one lexer reads both.
 
 ```bash
 .venv/bin/matrixlang parse examples/hello.rain
