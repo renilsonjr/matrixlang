@@ -22,6 +22,7 @@ _ALLOWED: dict[str, set[str]] = {
     "values": set(),
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
+    "render": {"glyphs", "nodes", "tokens"},
     "treeview": {"nodes", "tokens"},
     "cli": {"errors", "interpreter", "lexer", "parser", "repl", "treeview"},
     "interpreter": {"errors", "nodes", "tokens", "values"},

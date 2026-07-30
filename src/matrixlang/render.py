@@ -1,0 +1,206 @@
+"""Canonical source rendering: syntax tree in, source text out.
+
+One emitter serves both faces (design S4-5). The walk is identical; a
+face table maps the 32 glyph slots at emission time, so identifiers,
+string contents, and comment text bypass the table BY CONSTRUCTION —
+the reason this is not textual substitution, which would corrupt the
+digit in `x2` and the keyword inside "trace".
+
+This module owns literal formatting outright. values.to_display is a
+runtime-value formatter (no quotes, raw newlines) and must never be
+used here — a string literal it printed would not re-lex.
+
+Whitespace is canonical, not preserved (design S4-1): 2-space indent
+per block depth, one statement per line, single spaces around binary
+operators, no blank lines, trailing comments after two spaces.
+"""
+
+from matrixlang.glyphs import GLYPHS
+from matrixlang.nodes import (
+    Assign,
+    Binary,
+    BoolLiteral,
+    Declare,
+    Expr,
+    If,
+    Name,
+    NumberLiteral,
+    Program,
+    Stmt,
+    StringLiteral,
+    Trace,
+    Unary,
+    While,
+)
+from matrixlang.tokens import TokenType
+
+Face = dict[str, str]
+
+ASCII_FACE: Face = {}
+GLYPH_FACE: Face = GLYPHS
+
+_OPS: dict[TokenType, str] = {
+    TokenType.PLUS: "+",
+    TokenType.MINUS: "-",
+    TokenType.STAR: "*",
+    TokenType.SLASH: "/",
+    TokenType.EQ: "==",
+    TokenType.NEQ: "!=",
+    TokenType.LT: "<",
+    TokenType.GT: ">",
+    TokenType.LTE: "<=",
+    TokenType.GTE: ">=",
+}
+
+# Precedence levels, loosest to tightest (language spec §4). Parens are
+# reconstructed from these plus associativity — there is no Grouping
+# node, so this table IS the §6.4 contract.
+_LEVEL: dict[TokenType, int] = {
+    TokenType.EQ: 1,
+    TokenType.NEQ: 1,
+    TokenType.LT: 2,
+    TokenType.GT: 2,
+    TokenType.LTE: 2,
+    TokenType.GTE: 2,
+    TokenType.PLUS: 3,
+    TokenType.MINUS: 3,
+    TokenType.STAR: 4,
+    TokenType.SLASH: 4,
+}
+_UNARY_LEVEL = 5
+_ATOM_LEVEL = 6
+
+_STRING_ESCAPES: dict[str, str] = {"\\": "\\\\", '"': '\\"', "\n": "\\n"}
+
+
+def render_ascii(program: Program) -> str:
+    """The authoring view."""
+    return render(program, ASCII_FACE)
+
+
+def render_glyph(program: Program) -> str:
+    """The operator view."""
+    return render(program, GLYPH_FACE)
+
+
+def render(program: Program, face: Face) -> str:
+    """Render a program through a face table (any subset of the slots)."""
+    lines: list[str] = []
+    for statement in program.statements:
+        _statement(statement, 0, face, lines)
+    for comment in program.trailing_comments:
+        lines.append(_comment(comment, face))
+    return "".join(line + "\n" for line in lines)
+
+
+def _map(face: Face, slot: str) -> str:
+    return face.get(slot, slot)
+
+
+def _comment(text: str, face: Face) -> str:
+    # §6.2: the '#' marker maps; the comment text is unchanged. Trivia is
+    # stored canonically (leading ASCII '#', lexer's guarantee).
+    return _map(face, "#") + text[1:]
+
+
+# --- statements ----------------------------------------------------------
+
+
+def _statement(stmt: Stmt, depth: int, face: Face, lines: list[str]) -> None:
+    pad = "  " * depth
+    for comment in stmt.leading_comments:
+        lines.append(pad + _comment(comment, face))
+    if isinstance(stmt, Declare):
+        head = (
+            f"{_map(face, 'construct')} {stmt.name} {_map(face, '=')} "
+            f"{_expression(stmt.value, 0, face)}"
+        )
+        lines.append(pad + head + _trail(stmt, face))
+    elif isinstance(stmt, Assign):
+        head = f"{stmt.name} {_map(face, '=')} {_expression(stmt.value, 0, face)}"
+        lines.append(pad + head + _trail(stmt, face))
+    elif isinstance(stmt, Trace):
+        head = f"{_map(face, 'trace')} {_expression(stmt.value, 0, face)}"
+        lines.append(pad + head + _trail(stmt, face))
+    elif isinstance(stmt, If):
+        lines.append(
+            pad + f"{_map(face, 'redpill')} {_expression(stmt.condition, 0, face)}"
+        )
+        for child in stmt.then_body:
+            _statement(child, depth + 1, face, lines)
+        for comment in stmt.then_trailing:
+            lines.append(pad + "  " + _comment(comment, face))
+        # `is not None`, never truthiness: else_body=[] is a bluepill with
+        # an empty body and must render its header, or the round trip
+        # conflates it with no bluepill at all.
+        if stmt.else_body is not None:
+            lines.append(pad + _map(face, "bluepill"))
+            for child in stmt.else_body:
+                _statement(child, depth + 1, face, lines)
+            for comment in stmt.else_trailing:
+                lines.append(pad + "  " + _comment(comment, face))
+        lines.append(pad + _map(face, "flatline") + _trail(stmt, face))
+    elif isinstance(stmt, While):
+        lines.append(
+            pad + f"{_map(face, 'dejavu')} {_expression(stmt.condition, 0, face)}"
+        )
+        for child in stmt.body:
+            _statement(child, depth + 1, face, lines)
+        for comment in stmt.body_trailing:
+            lines.append(pad + "  " + _comment(comment, face))
+        lines.append(pad + _map(face, "flatline") + _trail(stmt, face))
+    else:
+        raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
+
+
+def _trail(stmt: Stmt, face: Face) -> str:
+    if stmt.trailing_comment is None:
+        return ""
+    return "  " + _comment(stmt.trailing_comment, face)
+
+
+# --- expressions ----------------------------------------------------------
+
+
+def _expression(expr: Expr, minimum: int, face: Face) -> str:
+    """Render `expr`, parenthesized if it binds looser than `minimum`."""
+    text, level = _emit(expr, face)
+    if level < minimum:
+        return _map(face, "(") + text + _map(face, ")")
+    return text
+
+
+def _emit(expr: Expr, face: Face) -> tuple[str, int]:
+    if isinstance(expr, NumberLiteral):
+        return _number(expr.value, face), _ATOM_LEVEL
+    if isinstance(expr, StringLiteral):
+        return _string(expr.value), _ATOM_LEVEL
+    if isinstance(expr, BoolLiteral):
+        return _map(face, "true" if expr.value else "false"), _ATOM_LEVEL
+    if isinstance(expr, Name):
+        return expr.ident, _ATOM_LEVEL
+    if isinstance(expr, Unary):
+        # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
+        # gets parens; atoms and nested unaries do not.
+        operand = _expression(expr.operand, _UNARY_LEVEL, face)
+        return _map(face, "-") + operand, _UNARY_LEVEL
+    if isinstance(expr, Binary):
+        level = _LEVEL[expr.op]
+        # Left-associative grammar: the left child may sit at the same
+        # level (R-PAREN-1); the right child must bind STRICTLY tighter
+        # or the chain re-parses left-first (R-PAREN-2).
+        left = _expression(expr.left, level, face)
+        right = _expression(expr.right, level + 1, face)
+        return f"{left} {_map(face, _OPS[expr.op])} {right}", level
+    raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
+
+
+def _number(value: int, face: Face) -> str:
+    # §6.2: digits map per-digit, positionally. NumberLiteral values are
+    # non-negative — a minus sign is a Unary node, never part of a number.
+    return "".join(_map(face, digit) for digit in str(value))
+
+
+def _string(value: str) -> str:
+    body = "".join(_STRING_ESCAPES.get(char, char) for char in value)
+    return f'"{body}"'
