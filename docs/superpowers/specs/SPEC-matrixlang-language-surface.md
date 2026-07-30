@@ -175,6 +175,19 @@ which contradicts R-02's promise that round-tripping is loss-free.
 Cheap at Stage 1, expensive to retrofit at Stage 4. It also gives episode 1 a good aside:
 *where do comments live in a compiler, and why is the obvious answer wrong?*
 
+**Trivia well-formedness invariant.** Every trivia string starts with `#` and contains
+no newline. Two shapes would otherwise break the round trip: a trailing comment without
+a leading `#` renders as code and re-lexes as tokens; a comment containing a newline
+renders as two lines and re-parses as two comments. The Stage 4 tree generator must
+enforce this invariant; dataclass-level validation is optional.
+
+**Whitespace is outside the loss-free promise.** Blank lines and indentation are not
+trivia and are not preserved: rendering normalizes them to the canonical form (one
+statement per line, fixed indentation, no blank lines — see the Stage 4 design spec).
+Loss-free round-tripping covers semantics and comments. The §4.3 criterion is unaffected
+because it is tree-level; the user-facing consequence is that the view toggle also
+pretty-prints.
+
 ### 6.2 Mapping policy
 
 - A fixed **bijective** table over the 32 slots in §3.1. Glyph assignments are drawn from
@@ -195,6 +208,25 @@ paren; anything Latin is an identifier or string content. Two consequences:
 
 Consequence 2 is a free win from D-03 that is worth demonstrating on camera in Stage 4,
 because it makes the "two renderings of one tree" claim concrete rather than asserted.
+
+### 6.4 Renderer parenthesization duties
+
+There is no Grouping node (deliberate — parens are a parse-time instruction, not
+structure). The renderer must therefore reconstruct parentheses from precedence AND
+associativity, or rendering silently changes meaning:
+
+- **R-PAREN-1 (precedence):** parenthesize a child whose precedence is lower than its
+  context requires.
+- **R-PAREN-2 (associativity):** parenthesize the right child of a left-associative
+  binary when precedences are *equal* — `Binary(1, +, Binary(2, +, 3))` must emit
+  `1 + (2 + 3)`, not `1 + 2 + 3`; likewise for `-` and `/`.
+- **R-PAREN-3 (unary operand):** parenthesize a binary operand of a unary —
+  `Unary(-, Binary(2, *, 3))` naively renders `-2 * 3`, which changes the meaning; it
+  must emit `-(2 * 3)`.
+
+Each is a named requirement with its own directed test. The §4.3 property test only
+catches violations if the tree generator produces these shapes, so the generator must
+produce them deliberately.
 
 ## 7. Example programs
 
@@ -281,3 +313,13 @@ recorded here for provenance:
    criterion passes while the feature it exists to guarantee is broken.
 2. **§8** — the first action is unchanged, but the expected token list from §7.2 above
    should be inlined so the opening commit has a test to write against.
+
+Applied before the Stage 4 plan (2026-07-30, per the Stage 2/3 final reviews and the
+Stage 4 design spec):
+
+3. **§4.3** — quantifies over ASTs, not programs; `t` is compared against `parse(...)`
+   output, so it was always a tree.
+4. **R-02 (§4.2)** — loss-free covers semantics and comments; whitespace normalizes to
+   the canonical rendering. Mirrored in §6.1 above.
+5. **§6.1 above** — trivia well-formedness invariant stated.
+6. **§6.4 above** — renderer parenthesization duties stated as named requirements.
