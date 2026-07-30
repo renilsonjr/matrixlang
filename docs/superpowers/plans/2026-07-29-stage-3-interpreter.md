@@ -281,8 +281,11 @@ def test_comments_do_not_execute():
     assert output("# just a comment\ntrace 1  # and another\n") == "1\n"
 
 
-def test_interpreter_exposes_its_environment():
-    assert env("construct x = 5\n") == {"x": 5}
+def test_a_fresh_interpreter_starts_with_an_empty_environment():
+    # `construct` does not exist until Task 3, so this task can only assert
+    # the empty case. Task 3's test_environment_holds_every_declared_name
+    # covers a populated environment.
+    assert env("trace 1\n") == {}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
