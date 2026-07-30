@@ -173,6 +173,54 @@ def test_render_missing_file_exits_two(capsys, tmp_path):
     assert "nope.rain" in capsys.readouterr().err
 
 
+# --- I-1: RecursionError must become a clean CLI error, not a traceback ----
+
+
+def _deeply_nested_source() -> str:
+    # ~90-100 nested parens overflow Python's recursion limit inside the
+    # recursive-descent parser today — a raw RecursionError, uncaught by
+    # `except MatrixLangError`, which dumps a traceback instead of the
+    # `matrixlang: ...` / exit-1 contract every other error follows.
+    return "trace " + "(" * 120 + "1" + ")" * 120 + "\n"
+
+
+def test_parse_reports_deep_nesting_cleanly_and_exits_one(source_file, capsys):
+    exit_code = main(["parse", source_file(_deeply_nested_source())])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("matrixlang:")
+
+
+def test_render_reports_deep_nesting_cleanly_and_exits_one(source_file, capsys):
+    exit_code = main(
+        ["render", "--face", "glyph", source_file(_deeply_nested_source())]
+    )
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("matrixlang:")
+
+
+def test_render_reports_a_render_only_recursion_limit_cleanly(source_file, capsys):
+    # A long same-precedence chain parses ITERATIVELY (one stack frame per
+    # chain, not per element) but the renderer walks it recursively, so
+    # this stresses render's own guard independently of parse's.
+    source = "trace " + " + ".join(["1"] * 2000) + "\n"
+    exit_code = main(["render", "--face", "ascii", source_file(source)])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("matrixlang:")
+
+
+def test_run_reports_deep_nesting_cleanly_and_exits_one(source_file, capsys):
+    exit_code = main(["run", source_file(_deeply_nested_source())])
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err.startswith("matrixlang:")
+
+
 def test_repl_subcommand_reads_until_eof(capsys, monkeypatch):
     # The other half of this task's wiring. `repl` takes no path argument and
     # reads stdin, so drive it with a finite stream — an interactive run

@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from matrixlang.errors import MatrixLangError
+from matrixlang.errors import MatrixLangError, recursion_guard
 from matrixlang.interpreter import run as run_program
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -72,7 +72,8 @@ def _command_parse(path: str) -> int:
     if source is None:
         return 2
     try:
-        tree = parse(lex(source))
+        with recursion_guard():
+            tree = parse(lex(source))
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
@@ -102,7 +103,8 @@ def _command_run(path: str) -> int:
         return 2
 
     try:
-        tree = parse(lex(source))
+        with recursion_guard():
+            tree = parse(lex(source))
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
@@ -122,10 +124,11 @@ def _command_render(path: str, face: str) -> int:
     if source is None:
         return 2
     try:
-        tree = parse(lex(source))
+        with recursion_guard():
+            tree = parse(lex(source))
+            text = render_glyph(tree) if face == "glyph" else render_ascii(tree)
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
-    text = render_glyph(tree) if face == "glyph" else render_ascii(tree)
     print(text, end="")
     return 0

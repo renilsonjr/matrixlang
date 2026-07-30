@@ -125,3 +125,31 @@ def test_echo_still_prints_when_execution_fails():
     output = feed_all([":glyph", "trace nope"])
     assert output.startswith("ﾄ nope\n")
     assert "not declared" in output
+
+
+# --- I-1: RecursionError must not kill the session -------------------------
+
+
+def test_a_deeply_nested_expression_is_reported_and_the_session_continues():
+    # ~90-100 nested parens overflow Python's recursion limit inside the
+    # recursive-descent parser today — a raw RecursionError, which
+    # `feed`'s `except MatrixLangError` does not catch, ending the whole
+    # REPL session. Built programmatically: the exact threshold is a
+    # measured implementation detail, not something to hand-pick a
+    # literal for.
+    line = "trace " + "(" * 120 + "1" + ")" * 120
+    printed = feed_all([line, "trace 2"])
+    assert "matrixlang:" in printed
+    assert printed.endswith("2\n")
+
+
+def test_a_deeply_nested_render_echo_is_reported_and_the_session_continues():
+    # The glyph echo (render_glyph) is a second, independent recursive
+    # walk over the tree, reachable even when parsing sailed through: a
+    # long same-precedence chain parses ITERATIVELY (one stack frame per
+    # chain, not per element) but renders recursively, so it can blow
+    # render's stack in cases the parser never even notices.
+    line = "trace " + " + ".join(["1"] * 2000)
+    printed = feed_all([":glyph", line, "trace 2"])
+    assert "matrixlang:" in printed
+    assert printed.endswith("2\n")

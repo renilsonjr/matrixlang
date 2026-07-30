@@ -10,7 +10,7 @@ a string containing the word "flatline" must not close a block.
 import sys
 from typing import TextIO
 
-from matrixlang.errors import MatrixLangError
+from matrixlang.errors import MatrixLangError, recursion_guard
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -50,15 +50,25 @@ class Repl:
             return True
 
         try:
-            tree = parse(lex(source))
+            with recursion_guard():
+                tree = parse(lex(source))
         except MatrixLangError as error:
             self._fail(error)
             return False
 
         if self._face == "glyph":
             # The echo precedes execution: it shows what is about to run,
-            # and still appears when execution then fails.
-            print(render_glyph(tree), end="", file=self._out)
+            # and still appears when execution then fails. Guarded
+            # separately from parsing: a long same-precedence chain parses
+            # ITERATIVELY (one frame per chain) but render_glyph walks it
+            # recursively, so this can fail even when parsing did not.
+            try:
+                with recursion_guard():
+                    echo = render_glyph(tree)
+            except MatrixLangError as error:
+                self._fail(error)
+                return False
+            print(echo, end="", file=self._out)
 
         try:
             self.interpreter.run(tree)
