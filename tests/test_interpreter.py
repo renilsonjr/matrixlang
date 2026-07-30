@@ -103,9 +103,14 @@ def test_integer_arithmetic():
 
 def test_division_truncates_toward_zero_not_floor():
     # Python's // floors: -7 // 2 == -4. Spec §5 requires -3.
+    # All four sign combinations. (-,-) matters most: it is the case that
+    # still looks right if someone "simplifies" the sign logic back to //,
+    # because -7 // -2 == 3 agrees with truncation. Assert it anyway, so the
+    # test pins the rule rather than two-thirds of it.
     assert output("trace 7 / 2\n") == "3\n"
     assert output("trace -7 / 2\n") == "-3\n"
     assert output("trace 7 / -2\n") == "-3\n"
+    assert output("trace -7 / -2\n") == "3\n"
 
 
 def test_division_by_zero_is_a_runtime_error():
