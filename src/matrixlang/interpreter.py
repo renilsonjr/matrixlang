@@ -68,6 +68,12 @@ class Interpreter:
             if self._condition(stmt.condition):
                 for child in stmt.then_body:
                     self._execute(child)
+            # `is not None`, not truthiness: Stage 2 distinguishes None (no
+            # `bluepill` at all) from [] (a `bluepill` with an empty body),
+            # and both are falsy. The two behave identically here — an empty
+            # body runs nothing either way — so no test can catch a change to
+            # truthiness. Keep the identity check anyway: it states the AST's
+            # contract, and Stage 4's renderer depends on that distinction.
             elif stmt.else_body is not None:
                 for child in stmt.else_body:
                     self._execute(child)
