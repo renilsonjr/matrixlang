@@ -153,3 +153,41 @@ def test_arithmetic_errors_report_the_operator_position():
         output("trace 1 + true\n")
     assert excinfo.value.line == 1
     assert excinfo.value.column == 9
+
+
+def test_integer_equality_and_ordering():
+    assert output("trace 1 == 1\ntrace 1 != 1\n") == "true\nfalse\n"
+    assert output("trace 1 < 2\ntrace 2 <= 2\ntrace 3 > 4\ntrace 4 >= 4\n") == (
+        "true\ntrue\nfalse\ntrue\n"
+    )
+
+
+def test_string_and_boolean_equality():
+    assert output('trace "a" == "a"\ntrace "a" != "b"\n') == "true\ntrue\n"
+    assert output("trace true == true\ntrace true != false\n") == "true\ntrue\n"
+
+
+def test_comparing_across_types_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output('trace 1 == "1"\n')
+    assert "integer" in str(excinfo.value)
+    assert "string" in str(excinfo.value)
+
+
+def test_true_does_not_equal_one():
+    # Python says True == 1. MatrixLang says these are different types.
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace true == 1\n")
+    assert "boolean" in str(excinfo.value)
+
+
+def test_ordering_strings_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output('trace "a" < "b"\n')
+    assert "must be an integer" in str(excinfo.value)
+
+
+def test_ordering_booleans_is_an_error():
+    with pytest.raises(RuntimeErrorML) as excinfo:
+        output("trace true < false\n")
+    assert "must be an integer" in str(excinfo.value)

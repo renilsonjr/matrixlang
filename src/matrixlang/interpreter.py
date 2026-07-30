@@ -30,6 +30,9 @@ from matrixlang.nodes import (
 from matrixlang.tokens import TokenType
 from matrixlang.values import is_int, is_str, to_display, type_name
 
+_EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
+_ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
+
 
 class Interpreter:
     def __init__(self, out: TextIO | None = None) -> None:
@@ -88,9 +91,33 @@ class Interpreter:
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
     def _binary(self, node: Binary, left: object, right: object) -> object:
+        if node.op in _EQUALITY_OPS or node.op in _ORDERING_OPS:
+            return self._comparison(node, left, right)
         if node.op is TokenType.PLUS and is_str(left) and is_str(right):
             return left + right
         return self._arithmetic(node, left, right)
+
+    def _comparison(self, node: Binary, left: object, right: object) -> object:
+        if node.op in _ORDERING_OPS:
+            self._require_int(left, node, "left operand")
+            self._require_int(right, node, "right operand")
+            if node.op is TokenType.LT:
+                return left < right
+            if node.op is TokenType.GT:
+                return left > right
+            if node.op is TokenType.LTE:
+                return left <= right
+            return left >= right
+
+        # Equality: same type only. type_name is the arbiter, so a bool can
+        # never equal an int even though Python says True == 1.
+        if type_name(left) != type_name(right):
+            raise RuntimeErrorML(
+                f"cannot compare {type_name(left)} with {type_name(right)}",
+                node.line,
+                node.column,
+            )
+        return left == right if node.op is TokenType.EQ else left != right
 
     def _arithmetic(self, node: Binary, left: object, right: object) -> object:
         self._require_int(left, node, "left operand")
