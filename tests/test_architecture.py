@@ -26,6 +26,7 @@ _ALLOWED: dict[str, set[str]] = {
     "render": {"glyphs", "nodes", "tokens"},
     "treeview": {"nodes", "tokens"},
     "rain": {"glyphs"},
+    "curtain": {"ansi", "rain"},
     "cli": {"errors", "interpreter", "lexer", "parser", "render", "repl", "treeview"},
     "interpreter": {"errors", "nodes", "tokens", "values"},
     "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
