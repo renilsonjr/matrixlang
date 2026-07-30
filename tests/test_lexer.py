@@ -373,3 +373,64 @@ def test_every_slot_lexes_to_the_same_type_as_its_ascii_spelling():
         if slot == "#":
             continue
         assert lex(glyph + "\n")[0].type is lex(slot + "\n")[0].type, slot
+
+
+# --- control characters (security: terminal escape injection) -------------
+#
+# The lexer preserves raw source bytes verbatim, which is right for
+# round-tripping and wrong for safety: an ESC byte in a string or a comment
+# reached the terminal unescaped through `trace`, `parse`, `render` and the
+# REPL echo. Escaping at those output sites would break the §4.3 round trip
+# (render would emit '\x1b' as four characters, which re-lexes as four
+# characters), so the byte is refused here instead — where the existing
+# "a newline inside a string is an error" rule already lives.
+
+
+def test_an_escape_byte_in_a_string_is_rejected():
+    with pytest.raises(LexError) as excinfo:
+        lex('trace "\x1b[31mred"\n')
+    assert "control character" in str(excinfo.value)
+    assert "U+001B" in str(excinfo.value)
+    assert excinfo.value.line == 1
+    assert excinfo.value.column == 8
+
+
+def test_an_escape_byte_in_a_comment_is_rejected():
+    # Comments need no quoting, so they are the easier carrier of the two.
+    with pytest.raises(LexError) as excinfo:
+        lex("construct x = 1  #\x1b[8mhidden\n")
+    assert "control character" in str(excinfo.value)
+    assert excinfo.value.line == 1
+    assert excinfo.value.column == 19
+
+
+def test_the_whole_rejected_range_is_refused():
+    # C0, DEL and C1. Tab and newline are carved out and tested separately.
+    for codepoint in (0x00, 0x07, 0x1B, 0x1F, 0x7F, 0x80, 0x9F):
+        with pytest.raises(LexError):
+            lex(f'trace "a{chr(codepoint)}b"\n')
+        with pytest.raises(LexError):
+            lex(f"# a{chr(codepoint)}b\n")
+
+
+def test_a_tab_is_still_legal_inside_a_string():
+    # Carve-out: tab cannot drive a terminal, and refusing it would break
+    # working programs for no security gain.
+    tokens = lex('trace "a\tb"\n')
+    assert tokens[1].value == "a\tb"
+
+
+def test_printable_text_either_side_of_the_range_is_untouched():
+    assert lex('trace " ~"\n')[1].value == " ~"
+    assert lex('trace " ÿ"\n')[1].value == " ÿ"
+
+
+def test_no_output_path_can_emit_a_control_byte_from_source():
+    # THE security property, stated once. Every path that writes source-derived
+    # text to a terminal — trace, parse, render, the REPL echo — is fed from
+    # lex(), so refusing the byte here closes all of them at once. If this ever
+    # fails, one of those paths has grown a way to reach the terminal that does
+    # not go through the lexer.
+    hostile = 'construct x = "\x1b[31m"  #\x1b[8m\ntrace x\n'
+    with pytest.raises(LexError):
+        lex(hostile)

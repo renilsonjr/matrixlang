@@ -80,7 +80,13 @@ the `#` comment marker = **32**. Comfortably inside the 135-glyph *Resurrections
 - **Strings.** Double-quoted. Escapes: `\"`, `\\`, `\n`. A newline inside a string literal
   is an error; an unterminated string at end-of-line is an error reporting line and column.
   **This is the Stage 1 error case.**
-- **Comments.** `#` to end of line. Not discarded — see §6.1.
+  A raw control character inside a string literal is also an error — C0 (U+0000–U+001F),
+  DEL (U+007F) and C1 (U+0080–U+009F), except tab. A control character produced by an
+  escape (`\n` decoding to U+000A) is fine; the rule screens literal source bytes only.
+  See §3.4.
+- **Comments.** `#` to end of line. Not discarded — see §6.1. Raw control characters are
+  refused here too, on the same terms as strings — a comment needs no quoting, so it is the
+  easier carrier of the two. See §3.4.
 - **NEWLINE is a token.** Blocks are keyword-delimited and there are no semicolons, so
   statements terminate at end of line. Consecutive newlines and comment-only lines produce
   no statement; the parser skips empty NEWLINEs.
@@ -94,6 +100,25 @@ Episode 1 has a natural beat here: *why does the lexer care about one whitespace
 and not the others?* NEWLINE is significant, spaces and tabs are not. That question has a
 concrete answer in this grammar, and it is the first place a viewer sees that lexical
 design is a set of choices rather than a set of facts.
+
+### 3.4 Why control characters are refused at the lexer
+
+The lexer preserves raw source bytes verbatim, which is what makes the §4.3 round trip
+possible. It is also how a `.rain` file could drive a reader's terminal: an ESC byte in a
+string or a comment reached the terminal unescaped through `trace`, `matrixlang parse`,
+`matrixlang render` and the REPL's glyph echo. `parse` and `render` are the *inspection*
+commands — the safe thing a cautious reader reaches for before running an unknown file —
+so the exposure survived the obvious precaution.
+
+Escaping at those output sites is the obvious fix and it is wrong: `render` must reproduce
+source exactly, so an escaped byte would re-lex as the escape text rather than the byte,
+and §4.3 would fail. Comments have no escape syntax at all, so nothing could decode them
+back.
+
+Refusing the byte at the lexer closes every output path at once, because such trees can no
+longer be built from source. `values.py`, `treeview.py` and `render.py` need no knowledge
+of the rule. It is also the smaller change conceptually: the lexer already refused a raw
+newline inside a string, and this generalizes that rule rather than inventing one.
 
 ## 4. Grammar
 
