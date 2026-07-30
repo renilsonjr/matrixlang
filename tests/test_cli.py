@@ -2,6 +2,7 @@ import io
 
 import pytest
 
+from matrixlang import cli
 from matrixlang.cli import main
 
 
@@ -228,3 +229,61 @@ def test_repl_subcommand_reads_until_eof(capsys, monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("construct x = 2\ntrace x\n"))
     assert main(["repl"]) == 0
     assert "2\n" in capsys.readouterr().out
+
+
+def test_run_writes_no_escape_bytes_under_capture(source_file, capsys):
+    # THE debuggability contract, end to end. pytest's captured stdout is
+    # not a TTY, which is exactly the situation of `run prog.rain > out`.
+    exit_code = main(["run", source_file("trace 1\ntrace 2\n")])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == "1\n2\n"
+    assert "\x1b" not in captured.out
+    assert "\x1b" not in captured.err
+
+
+def test_run_consults_the_curtain_by_default(source_file, capsys, monkeypatch):
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
+    )
+    assert main(["run", source_file("trace 1\n")]) == 0
+    assert len(calls) == 1
+
+
+def test_no_rain_skips_the_curtain_entirely(source_file, capsys, monkeypatch):
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
+    )
+    assert main(["run", "--no-rain", source_file("trace 1\n")]) == 0
+    assert calls == []
+    assert capsys.readouterr().out == "1\n"
+
+
+def test_a_parse_error_costs_no_animation(source_file, capsys, monkeypatch):
+    # Rain plays after the parse. A program that cannot run must report
+    # that immediately, not after a second and a half of decoration.
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
+    )
+    assert main(["run", source_file("construct = 5\n")]) == 1
+    assert calls == []
+
+
+def test_ctrl_c_during_the_curtain_exits_130(source_file, capsys, monkeypatch):
+    def interrupt(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "play_if_supported", interrupt)
+    assert main(["run", source_file("trace 1\n")]) == 130
+    assert capsys.readouterr().out == ""
+
+
+def test_only_run_takes_the_rain_flag(source_file):
+    # R-03: rain in the runner, never the editor. The flag exists on run
+    # and nowhere else.
+    with pytest.raises(SystemExit) as excinfo:
+        main(["render", "--face", "ascii", "--no-rain", source_file("trace 1\n")])
+    assert excinfo.value.code == 2
