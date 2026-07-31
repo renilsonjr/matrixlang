@@ -102,9 +102,78 @@ job is to work when the reader is lost.
    glyph everything *including* errors, with a documented single keystroke back
    to plain. Sold as an aesthetic mode, not as a working environment.
 
+---
+
+## `live.py` — the cascade *is* the program
+
+The static demo above answered "can you read glyph text." It did not test the
+actual proposal, which is a cascade that **carries the software** rather than
+decorating it.
+
+```bash
+python experiments/glyph_terminal/live.py              # animate (needs a TTY)
+python experiments/glyph_terminal/live.py --frames 30  # dump frames as text
+```
+
+Every falling column carries real material from the program. Nothing is random:
+
+| Column | Content | Rendering |
+| --- | --- | --- |
+| **source** | a line of the program in its glyph face | green, falls faster |
+| **output** | a value the program actually produced, transliterated | brighter, falls slower so results linger |
+
+A frame, mid-run:
+
+```
+                     ｱ                                   "        ｼ
+                        ﾃ                                w        ｦ
+                     n                          ｩ        a        ｰ
+                     a  n                                k        ｪ
+                     m                                   e
+                     e  ｻ                                         ｺ
+                                                         u        ｵ
+ﾌ                    ﾅ  ｪ              n                 p        ,
+```
+
+Read the columns downward: `ｱ name ﾅ` is `construct name =`. Next to it,
+`ﾄ "wake up,` is the `trace` statement. On the right, `ｼｦｰｪ ｺｵ,` is the
+program's actual output — `wake up,` — transliterated and falling brighter.
+
+**This is the readout of state from parent spec §1.1**: Cypher watching the
+Matrix and seeing what it means rather than what it says. It is a categorically
+different thing from the Stage 5 curtain, which is random glyphs played *before*
+execution with no connection to your code.
+
+### Two bugs worth recording, because both were invisible in the decorative rain
+
+1. **Column reuse.** The first version returned a column's x to the free pool as
+   soon as it spawned, so two streams could share a column and overwrite each
+   other. This is the exact defect the Stage 5 review found in `rain.py`. In the
+   decorative rain it was nearly unnoticeable — random glyphs all look alike. Here
+   it silently corrupts a line of your program. Now verified: 0 overlapping cells
+   across 30 seeds × 80 frames.
+2. **Reversed lines.** The obvious layout — first character at the head — renders
+   every line *backwards*. Harmless when nobody reads the glyphs; fatal when the
+   columns *are* the program. Lines now read top-to-bottom in natural order.
+
+Both make the same point: **content-carrying rain has correctness requirements
+that decorative rain does not.** Anything built from this needs its own tests,
+not the existing rain's.
+
+### What it does not do yet
+
+- **Not interactive.** It cascades a program that has already run. "As you type"
+  needs raw-mode input concurrent with the animation loop — genuinely harder, and
+  the next real question.
+- **Not incremental.** Output is collected up front, not streamed as it is
+  produced. Watching a long-running program emit results into the rain live would
+  need the interpreter to yield events as it executes.
+- **Diagnostics still stay plain**, per the finding above.
+
 ## Files
 
 | File | What it is |
 | --- | --- |
 | `translit.py` | Display-only character map. Deliberately **not** the language's glyph face — its output is never lexed, so it owes nothing to bijectivity or the round trip, which is what lets it cover the Latin alphabet at all (the language's 32 slots cannot: 24 free glyphs, 26 letters needed) |
-| `demo.py` | Renders the two programs in all three modes |
+| `demo.py` | Static: the two programs in all three modes |
+| `live.py` | Animated: the cascade carrying the program itself |
