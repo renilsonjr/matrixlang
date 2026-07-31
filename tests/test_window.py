@@ -118,6 +118,81 @@ def test_tkinter_is_not_imported_at_module_scope():
     assert not any(n.split(".")[0] == "tkinter" for n in names)
 
 
+# --- What is on screen after the program ends ---------------------------
+
+
+def test_output_stays_on_screen_after_the_program_finishes():
+    # The defect this replaces: the cascade drained ~3.5s after a program
+    # ended and the window went black permanently. "The window outlives the
+    # program" is worthless if the OUTPUT does not — the whole point is
+    # that a program finishing in 200ms leaves something to read.
+    from matrixlang.translit import untransliterate
+
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Output(text="wake up, Neo", line=1))
+    window.close()
+
+    for _ in range(400):
+        cells = window.step()
+
+    assert cells, "window went black after the program ended"
+    glyphs = "".join(c.glyph for c in sorted(cells, key=lambda c: (c.row, c.col)))
+    assert untransliterate(glyphs).strip() == "wake up, Neo"
+
+
+def test_the_screen_is_never_black_after_the_program_ends():
+    # The handover from falling to settled took one frame, during which
+    # the screen blanked. 33ms is a flicker, but the whole promise here is
+    # that output does not disappear, and "disappears briefly" is a
+    # weaker promise than the one being made.
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Output(text="wake up, Neo", line=1))
+    window.close()
+    blanks = [i for i in range(400) if not window.step()]
+    assert blanks == []
+
+
+def test_settled_output_stops_moving():
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Output(text="Neo", line=1))
+    window.close()
+    for _ in range(400):
+        window.step()
+    assert window.step() == window.step()
+
+
+def test_every_output_line_survives_not_only_the_last():
+    from matrixlang.translit import untransliterate
+
+    window = CascadeWindow(width=40, height=20)
+    for text in ("0", "wake up, Neo", "2"):
+        window.emit(Output(text=text, line=1))
+    window.close()
+    for _ in range(400):
+        cells = window.step()
+    rows = {}
+    for cell in cells:
+        rows.setdefault(cell.row, []).append(cell)
+    lines = [
+        untransliterate("".join(c.glyph for c in sorted(v, key=lambda c: c.col)))
+        for _, v in sorted(rows.items())
+    ]
+    assert lines == ["0", "wake up, Neo", "2"]
+
+
+def test_the_cascade_still_moves_while_the_program_is_running():
+    # Settling must not kick in early, or nothing ever falls.
+    # Compared several frames apart on purpose: output falls at 0.45 rows
+    # per frame, so two CONSECUTIVE frames are legitimately identical and
+    # an adjacent comparison would fail for the wrong reason.
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Output(text="wake up, Neo", line=1))
+    first = window.step()
+    for _ in range(5):
+        later = window.step()
+    assert first != later
+
+
 def test_close_before_open_is_safe():
     # The CLI calls close() in a finally. It must not require that open()
     # succeeded, or a failed window becomes a failed program.

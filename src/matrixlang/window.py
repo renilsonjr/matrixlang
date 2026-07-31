@@ -27,7 +27,7 @@ a missing window into a missing language.
 import queue
 from random import Random
 
-from matrixlang.cascade import CascadeField
+from matrixlang.cascade import CascadeField, Cell, Kind
 from matrixlang.display import Backend  # noqa: F401  (re-exported for callers)
 from matrixlang.events import Error, Event
 
@@ -104,11 +104,56 @@ class CascadeWindow:
         )
         self._status.pack(fill="x")
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Raise it. A Tk process launched from a terminal on macOS opens
+        # behind the frontmost application, so a window that is mapped and
+        # viewable is still, from the operator's side, nothing happening.
+        # The topmost flag is toggled rather than left on: a window that
+        # will not go behind anything is worse than one that opens behind.
+        # Done with Tk alone — §6 records that this package spawns no
+        # processes, and an osascript activation would break that.
+        self._root.lift()
+        self._root.attributes("-topmost", True)
+        self._root.after_idle(self._root.attributes, "-topmost", False)
+
         self._root.after(FRAME_MS, self._tick)
 
     def emit(self, event: Event) -> None:
         """Called from the interpreter's thread. Queue only — never a widget."""
         self._queue.put(event)
+
+    def step(self) -> tuple:
+        """Advance one frame and return the cells to draw.
+
+        Split out of `_tick` so the frame stream is testable without Tk —
+        which is how the settling defect below was caught, and how it stays
+        caught.
+
+        Once execution has ended and everything has fallen, the output
+        **settles**: it stops moving and stays on screen. Draining to black
+        made "the window outlives the program" meaningless, because the
+        thing worth outliving it is the output, not the frame.
+        """
+        drain(self._queue, self._field, self._errors)
+        if self._closed and self._field.is_empty():
+            return self._settled()
+        cells = self._field.advance()
+        # The frame that retires the last stream draws nothing, and the
+        # settled view only takes over on the frame after. Handing over
+        # here instead keeps the screen from blanking in between.
+        if not cells and self._closed:
+            return self._settled()
+        return cells
+
+    def _settled(self) -> tuple:
+        """The transcript at rest: one output line per row, static."""
+        cells = []
+        for row, text in enumerate(self._field.transcript()[: self._height]):
+            for col, glyph in enumerate(text[: self._width]):
+                cells.append(
+                    Cell(row=row, col=col, glyph=glyph, level=1.0, kind=Kind.OUTPUT)
+                )
+        return tuple(cells)
 
     def close(self) -> None:
         """Signal that execution is over. The window itself stays open.
@@ -129,8 +174,7 @@ class CascadeWindow:
     def _tick(self) -> None:
         if self._root is None:
             return
-        drain(self._queue, self._field, self._errors)
-        self._draw(self._field.advance())
+        self._draw(self.step())
         if self._errors and self._status is not None:
             self._status.configure(text=self._errors[-1])
         self._root.after(FRAME_MS, self._tick)

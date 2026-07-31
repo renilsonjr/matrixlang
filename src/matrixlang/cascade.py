@@ -103,6 +103,10 @@ class CascadeField:
         self._rng = rng
         self._streams: list[_Stream] = []
         self._waiting: list[tuple[str, Kind]] = []
+        # Output is remembered, not merely shown. A falling column is gone
+        # once it leaves the screen, and output that cannot be read after
+        # the program ends is output the viewer never got.
+        self._transcript: list[str] = []
 
     # --- input ----------------------------------------------------------
 
@@ -120,9 +124,15 @@ class CascadeField:
         remedy all at once.
         """
         if isinstance(event, Output):
-            self.add(transliterate(event.text), Kind.OUTPUT)
+            glyphs = transliterate(event.text)
+            self._transcript.append(glyphs)
+            self.add(glyphs, Kind.OUTPUT)
         elif isinstance(event, Statement) and event.node is not None:
             self.add(_header(event.node), Kind.SOURCE)
+
+    def transcript(self) -> list[str]:
+        """Every output line the program produced, in glyphs, in order."""
+        return list(self._transcript)
 
     # --- simulation -----------------------------------------------------
 
