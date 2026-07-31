@@ -97,10 +97,17 @@ class _Stream:
 
 
 class CascadeField:
-    def __init__(self, width: int, height: int, rng: Random) -> None:
+    def __init__(
+        self, width: int, height: int, rng: Random, loop: bool = False
+    ) -> None:
         self.width = width
         self.height = height
         self._rng = rng
+        self._loop = loop
+        # Everything ever added, so a looping field can replay it. This is
+        # the only thing that falls: nothing random is ever generated, so
+        # the cascade carries the program and nothing else.
+        self._history: list[tuple[str, Kind]] = []
         self._streams: list[_Stream] = []
         self._waiting: list[tuple[str, Kind]] = []
         # Output is remembered, not merely shown. A falling column is gone
@@ -114,6 +121,7 @@ class CascadeField:
         """Queue a line. It falls as soon as a column frees up."""
         if text:
             self._waiting.append((text, kind))
+            self._history.append((text, kind))
 
     def consume(self, event: Event) -> None:
         """Turn an execution event into falling text.
@@ -137,14 +145,38 @@ class CascadeField:
     # --- simulation -----------------------------------------------------
 
     def advance(self) -> tuple[Cell, ...]:
-        self._retire()
-        self._spawn()
+        # Order matters, and the obvious order is wrong. Retiring first
+        # uses last frame's positions, so the frame on which a stream moves
+        # fully off screen draws nothing and is only retired the frame
+        # after — one blank frame at every handover. Move, then retire on
+        # the positions that just happened, then refill.
         for stream in self._streams:
             stream.advance()
+        self._retire()
+        self._replay()
+        # New streams advance immediately, or they contribute nothing to
+        # the frame that created them and the blank frame comes back.
+        for stream in self._spawn():
+            stream.advance()
+
         cells: list[Cell] = []
         for stream in self._streams:
             cells.extend(stream.cells(self.height))
         return tuple(cells)
+
+    def _replay(self) -> None:
+        """Re-queue the whole program once it has all fallen off.
+
+        A screen that stops is not a cascade, and the alternative — filler
+        glyphs behind static output — puts decoration back in a project
+        whose whole premise is that the cascade carries the program. So the
+        program's own material is what repeats.
+
+        A program that produced nothing has nothing to replay, and must not
+        spin on an empty history.
+        """
+        if self._loop and self._history and not self._streams and not self._waiting:
+            self._waiting.extend(self._history)
 
     def is_empty(self) -> bool:
         return not self._streams and not self._waiting
@@ -152,13 +184,18 @@ class CascadeField:
     def _retire(self) -> None:
         self._streams = [s for s in self._streams if not s.is_finished(self.height)]
 
-    def _spawn(self) -> None:
+    def _spawn(self) -> list[_Stream]:
+        """Start every queued line that has a column free. Returns the new ones."""
         occupied = {stream.col for stream in self._streams}
         free = [col for col in range(self.width) if col not in occupied]
         self._rng.shuffle(free)
+        started: list[_Stream] = []
         while self._waiting and free:
             text, kind = self._waiting.pop(0)
-            self._streams.append(_Stream(free.pop(), text, kind))
+            stream = _Stream(free.pop(), text, kind)
+            self._streams.append(stream)
+            started.append(stream)
+        return started
 
 
 def _header(stmt: Stmt) -> str:

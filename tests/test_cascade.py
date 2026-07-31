@@ -157,6 +157,63 @@ def test_more_lines_than_columns_are_queued_not_dropped():
     assert f.is_empty()
 
 
+# --- Looping: the program's own material never stops falling ----------
+
+
+def test_looping_is_off_by_default():
+    f = field()
+    f.add("ab", Kind.SOURCE)
+    for _ in range(200):
+        f.advance()
+        if f.is_empty():
+            break
+    assert f.is_empty()
+
+
+def test_a_looping_field_never_empties():
+    f = CascadeField(20, 10, Random(7), loop=True)
+    f.add("ab", Kind.SOURCE)
+    for _ in range(500):
+        f.advance()
+    assert not f.is_empty()
+
+
+def test_a_looping_field_always_has_something_on_screen():
+    f = CascadeField(20, 10, Random(7), loop=True)
+    f.add("wake up", Kind.OUTPUT)
+    f.add("construct n", Kind.SOURCE)
+    blanks = [i for i in range(500) if not f.advance()]
+    assert blanks == []
+
+
+def test_looping_replays_every_line_not_only_the_last():
+    f = CascadeField(30, 12, Random(3), loop=True)
+    f.add("aaa", Kind.SOURCE)
+    f.add("bbb", Kind.OUTPUT)
+    seen = set()
+    for _ in range(600):
+        for cell in f.advance():
+            seen.add(cell.glyph)
+    assert {"a", "b"} <= seen
+
+
+def test_looping_still_reserves_one_column_per_stream():
+    f = CascadeField(6, 10, Random(5), loop=True)
+    for i in range(4):
+        f.add(f"line{i}", Kind.SOURCE)
+    for _ in range(400):
+        positions = [(c.row, c.col) for c in f.advance()]
+        assert len(positions) == len(set(positions))
+
+
+def test_a_looping_field_with_no_material_stays_empty():
+    # A program that produced nothing has nothing to replay. Looping must
+    # not spin on an empty history.
+    f = CascadeField(20, 10, Random(7), loop=True)
+    for _ in range(50):
+        assert f.advance() == ()
+
+
 # --- Turning events into falling text -----------------------------------
 
 

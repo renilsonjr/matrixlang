@@ -28,6 +28,7 @@ bind. The second is the harder one, and §4 serves it.
 | CW-4 | When output is emitted | **During execution**, as an event stream. Collecting per statement is what made the spike's cascade non-incremental. |
 | CW-5 | Are diagnostics transliterated | **Never.** Settled empirically by the spike; see §5. |
 | CW-6 | Does the window outlive the program | **Yes**, until dismissed. A program finishing in 200 ms would otherwise flash and vanish with its output unread. |
+| CW-7 | What the window does once the program has finished | **The program's own material keeps falling, on a loop.** Nothing random, nothing static. Added after running it, and after two wrong answers: see §10. |
 
 ## 1. Module boundaries
 
@@ -198,3 +199,52 @@ Every load-bearing guard here gets a teeth-check: inject the bug, watch the test
 - **Tk is a 1990s toolkit**, chosen because it is the only route to a real window that keeps
   the zero-dependency property. That is a genuine constraint of this project rather than a
   preference, and it belongs in the record rather than in a review comment.
+
+---
+
+## 10. CW-7, and three answers before the right one
+
+Everything above was written before the thing existed. Running it produced one
+design decision the spec had no way to anticipate, and it took three attempts.
+
+**Wrong answer one: the cascade drained.** CW-6 said the window outlives the
+program. It did — and the *output* did not. `hello.rain` emits 15 events, the
+field emptied after ~109 frames (3.6s), and the window then sat black forever.
+Every acceptance criterion in §7 passed while the feature did not do its job,
+because none of them asked what is on screen after execution ends.
+
+**Wrong answer two: pin the output and rain behind it.** This fixed the black
+screen by making the transcript static and adding an ambient layer of filler
+glyphs so the screen still moved. It survived review and a full test suite. Seen
+on screen it was obviously wrong: the thing you actually read was frozen, and
+the only motion was decoration. It also quietly reintroduced random glyphs to a
+project whose premise is *the cascade carries the program, not decorates it*.
+
+**CW-7: the program's own material loops.** Once every line has fallen off the
+bottom, the whole program — source lines and output — falls again. Nothing is
+generated to fill space; every glyph on screen came from material the program
+produced, and a test asserts exactly that.
+
+The trade, stated plainly because it is real: **output scrolls past instead of
+staying readable.** You read it on each pass rather than at rest. Wrong answer
+two bought permanent readability and paid for it with a still image, and a still
+image is not what this is for.
+
+Two implementation notes worth keeping:
+
+- **`AMBIENT_ALPHABET` was added and removed twice.** It went out as dead code
+  when the cascade began carrying the program, came back for wrong answer two,
+  and went out again with it. `glyphs.py` is back to declaring only the block
+  bounds, which is what it should have said all along.
+- **Frame ordering was wrong in a way only the loop exposed.** `_retire()` ran
+  before `advance()`, so the frame on which a stream moves fully off screen drew
+  nothing and was retired only on the next frame — one blank frame at every
+  handover, invisible when handovers happened once and obvious when they happen
+  forever. Streams now move, then retire, and newly spawned streams advance in
+  the same frame that created them.
+
+The general lesson, and the reason this section exists: **the spec's testing
+strategy was sound and its acceptance criteria were not.** Criteria that describe
+what the code does can all pass while the feature fails. All three answers here
+were judged by a human opening the window and looking at it, which no part of §5
+or §7 required anyone to do.

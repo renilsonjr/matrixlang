@@ -52,8 +52,6 @@ GLYPHS: dict[str, str] = {
 
 REVERSE: dict[str, str] = {glyph: slot for slot, glyph in GLYPHS.items()}
 
-# The block the language's glyphs are drawn from. Nothing generates random
-# glyphs any more — the cascade carries the program — so this exists to
-# state the containment rule, not to be sampled.
+# The block the language's glyphs are drawn from.
 BLOCK_START = 0xFF66
 BLOCK_END = 0xFF9D

@@ -27,7 +27,7 @@ a missing window into a missing language.
 import queue
 from random import Random
 
-from matrixlang.cascade import CascadeField, Cell, Kind
+from matrixlang.cascade import CascadeField
 from matrixlang.display import Backend  # noqa: F401  (re-exported for callers)
 from matrixlang.events import Error, Event
 
@@ -66,10 +66,16 @@ class CascadeWindow:
     """A `Display` that draws the cascade in a native window."""
 
     def __init__(
-        self, width: int = 80, height: int = 30, rng: Random | None = None
+        self,
+        width: int = 80,
+        height: int = 30,
+        rng: Random | None = None,
     ) -> None:
         self._queue: queue.Queue[Event] = queue.Queue()
-        self._field = CascadeField(width, height, rng or Random())
+        # Looping: once the program's material has all fallen off, it falls
+        # again. Nothing random is ever generated — the cascade carries the
+        # program and only the program.
+        self._field = CascadeField(width, height, rng or Random(), loop=True)
         self._errors: list[str] = []
         self._width = width
         self._height = height
@@ -125,35 +131,17 @@ class CascadeWindow:
     def step(self) -> tuple:
         """Advance one frame and return the cells to draw.
 
-        Split out of `_tick` so the frame stream is testable without Tk —
-        which is how the settling defect below was caught, and how it stays
-        caught.
+        Split out of `_tick` so the frame stream is testable without Tk.
 
-        Once execution has ended and everything has fallen, the output
-        **settles**: it stops moving and stays on screen. Draining to black
-        made "the window outlives the program" meaningless, because the
-        thing worth outliving it is the output, not the frame.
+        There is no settled state and no pinning. The program's own source
+        and output keep falling, on a loop, for as long as the window is
+        open — which means output scrolls past rather than staying put, and
+        is read on each pass. That is the trade: a screen that stops is not
+        a cascade, and filler glyphs behind static text would put back the
+        decoration this project exists to avoid.
         """
         drain(self._queue, self._field, self._errors)
-        if self._closed and self._field.is_empty():
-            return self._settled()
-        cells = self._field.advance()
-        # The frame that retires the last stream draws nothing, and the
-        # settled view only takes over on the frame after. Handing over
-        # here instead keeps the screen from blanking in between.
-        if not cells and self._closed:
-            return self._settled()
-        return cells
-
-    def _settled(self) -> tuple:
-        """The transcript at rest: one output line per row, static."""
-        cells = []
-        for row, text in enumerate(self._field.transcript()[: self._height]):
-            for col, glyph in enumerate(text[: self._width]):
-                cells.append(
-                    Cell(row=row, col=col, glyph=glyph, level=1.0, kind=Kind.OUTPUT)
-                )
-        return tuple(cells)
+        return self._field.advance()
 
     def close(self) -> None:
         """Signal that execution is over. The window itself stays open.
