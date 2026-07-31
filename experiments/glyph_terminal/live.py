@@ -161,8 +161,13 @@ class LiveField:
     def _spawn(self) -> None:
         if not self._free or self._rng.random() > 0.55:
             return
-        if not self._queue:                       # cycle the program forever
-            self._queue = list(self._items)
+        if not self._queue:
+            # Nothing to cascade yet. shell.py starts empty and stays empty
+            # until the first statement is entered, so this is the normal
+            # state at startup, not an edge case.
+            if not self._items:
+                return
+            self._queue = list(self._items)       # otherwise cycle forever
             self._rng.shuffle(self._queue)
         kind, text = self._queue.pop()
         # Output falls slower so it lingers and reads.

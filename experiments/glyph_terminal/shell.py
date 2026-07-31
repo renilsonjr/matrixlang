@@ -215,6 +215,14 @@ def scripted(lines: list[str], frames: int) -> int:
     screen = Screen(width, height, random.Random(11))
     session = Session()
 
+    # Animate the EMPTY field first. shell.py spends its whole startup here,
+    # before a single statement is entered, and an earlier version crashed on
+    # exactly this: every scripted run fed lines before drawing a frame, so
+    # the state the real terminal opens in was never once exercised.
+    for _ in range(40):
+        screen.field.advance()
+    print("empty-field warmup: 40 frames, no crash\n")
+
     for line in lines:
         _run_line(screen, session, line)
         state = "needs more input" if session.needs_more else "ran"
