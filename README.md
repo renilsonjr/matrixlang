@@ -18,7 +18,8 @@ behind the two-face architecture — see
 
 ## Status
 
-Stage 5 — runner presentation. The language runs, and it rains.
+Stage 6 — the cascade is the output device. The language runs, and its
+output falls.
 
 ## Running it locally
 
@@ -45,7 +46,8 @@ You should see the full suite pass. Then run your first program:
 .venv/bin/matrixlang run examples/hello.rain
 ```
 
-Expected output, after about a second and a half of green rain:
+A window opens, and the program's source and its output fall through it as
+glyphs while it runs. Redirect instead and you get plain text:
 
 ```
 0
@@ -56,25 +58,28 @@ wake up, Neo
 To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
-### Seeing the rain
+### Seeing the cascade
 
-The rain needs a real terminal. It plays in any interactive shell —
-including the **integrated terminal** in VS Code (`` Ctrl+` ``, or
-`` Cmd+` `` on macOS) — but it deliberately declines whenever output is
-being captured rather than displayed: a pipe, a redirect, a CI job, or
-VS Code's *Output* panel when you use a Run button or task. That is the
-same guarantee that keeps `matrixlang run prog.rain > out.txt` byte-clean,
-so seeing no rain in those contexts is correct behaviour, not a fault.
+The window opens when you run a program from an interactive shell. It
+deliberately declines whenever output is being captured rather than
+displayed — a pipe, a redirect, a CI job — which is the same guarantee
+that keeps `matrixlang run prog.rain > out.txt` byte-clean. Seeing no
+window in those contexts is correct behaviour, not a fault.
 
-If you expected rain and got none, this prints the actual decision using
-the same code the runner uses:
+What falls is your program: source lines in the glyph face, and the
+values the program actually produced, transliterated. It is decodable,
+not decorative — the table is reversible, so anything on screen can be
+read back exactly.
+
+If you expected a window and got text, this prints the actual decision
+using the same code the runner uses:
 
 ```bash
-.venv/bin/python -c "import os,shutil,sys;from matrixlang.ansi import detect_color_mode;from matrixlang.curtain import should_play;m=detect_color_mode(os.environ,sys.stdout.isatty());s=shutil.get_terminal_size();print(f'isatty={sys.stdout.isatty()} TERM={os.environ.get(\"TERM\")!r} size={tuple(s)} mode={m.name} RAIN={should_play(m,s)}')"
+.venv/bin/python -c "import os,sys;from matrixlang.display import choose_backend,tk_is_available;print(f'isatty={sys.stdout.isatty()} NO_COLOR={\"NO_COLOR\" in os.environ} tk={tk_is_available()} -> {choose_backend(isatty=sys.stdout.isatty(),env=os.environ,want_window=True,tk_available=tk_is_available()).name}')"
 ```
 
-`RAIN=False` is explained by whichever condition failed: no TTY, `NO_COLOR`
-set, `TERM=dumb`, or a terminal smaller than 20×8.
+`TEXT` is explained by whichever condition failed: no TTY, `NO_COLOR`
+set, or no working `tkinter`.
 
 ### If the import fails
 
@@ -120,23 +125,26 @@ Prints the syntax tree as indented text — the tree's shape is the precedence l
 .venv/bin/matrixlang repl
 ```
 
-`run` executes a program, preceded by a curtain of digital rain. `repl`
-starts an interactive session — blocks span multiple lines, so a `dejavu`
-loop can be typed at the prompt. The REPL never rains: motion and
-legibility are adversaries, so the rain belongs to the runner and not to
-the editing surface.
+`run` executes a program into the cascade window. `repl` starts an
+interactive session — blocks span multiple lines, so a `dejavu` loop can
+be typed at the prompt. The REPL never cascades: motion and legibility
+are adversaries, so the display belongs to the runner and not to the
+editing surface.
 
-The curtain draws on the alternate screen buffer, so it leaves nothing in
-your scrollback, and it declines itself whenever it would be unwelcome —
-a redirected or piped stdout, `NO_COLOR`, `TERM=dumb`, or a terminal too
-small to read. `matrixlang run prog.rain > out.txt` writes exactly the
-bytes it always did:
+The window declines itself whenever it would be unwelcome — a redirected
+or piped stdout, `NO_COLOR`, or no working `tkinter`. `matrixlang run
+prog.rain > out.txt` writes exactly the bytes it always did.
+
+Diagnostics are never transliterated. They appear as plain text in the
+window's status strip and on stderr, because an error is the moment a
+reader's fluency has failed and glyphs are the worst possible response
+to that.
 
 ```bash
-.venv/bin/matrixlang run --no-rain examples/hello.rain
+.venv/bin/matrixlang run --no-window examples/hello.rain
 ```
 
-`--no-rain` skips it while you are iterating.
+`--no-window` prints as text instead, which is what you want while iterating.
 
 ## The glyphs
 
@@ -150,16 +158,19 @@ plus characters from Susan Kare's Chicago typeface and the expanded set
 from *Resurrections*. That work is the reference for what the film's code
 actually looks like, and this project is indebted to it.
 
-It is not, however, a font. The glyphs live as WebGL vector and texture
-data, so putting them in a terminal would mean building a typeface —
-a separate project, not a stage of this one. Half-width katakana render
-today in any terminal with zero font work, and the mapping table is
-deliberately swappable if that ever changes.
+That project now ships `Matrix-Code.ttf` and `Matrix-Resurrected.ttf`, so
+the film's glyphs *are* available as fonts — an earlier version of this
+README said they were not, which was true when the glyphs existed only as
+WebGL data and is no longer. Swapping them in is a change to `glyphs.py`
+and nothing else, which is what the swappability guard exists to protect.
+Half-width katakana are kept for now because they render anywhere with
+zero font work.
 
-Terminal digital rain is solved work with many good implementations
-(TMatrix, green_rain, RGB-digital-rain). Nothing here tries to improve on
-them; the rain exists because this language earned a presentation layer,
-and it is the last thing built rather than the first.
+Digital rain is solved work with many good implementations (TMatrix,
+green_rain, RGB-digital-rain, Rezmason's). None of them are what this is:
+those animate noise, and this animates a running program. The cells carry
+your source and your output, and the transliteration is reversible, so
+what falls can be read back rather than merely watched.
 
 ## Development
 

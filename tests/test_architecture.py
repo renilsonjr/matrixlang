@@ -21,17 +21,27 @@ _ALLOWED: dict[str, set[str]] = {
     "glyphs": set(),
     "nodes": {"tokens"},
     "values": set(),
+    "events": {"nodes"},
+    "translit": {"glyphs"},
+    # Not {"events", "ansi"} as the design sketched. Selection deliberately
+    # does not route through detect_color_mode: that vetoes on TERM, and a
+    # window is not a terminal. Dropping the ansi import makes the deviation
+    # visible here rather than only in a comment.
+    "display": {"events"},
+    "cascade": {"events", "nodes", "render", "translit"},
+    # The load-bearing entry: `window` may depend on everything above it,
+    # and nothing may depend on `window`. A backend leaking into the core
+    # would make the language unrunnable without a display.
+    "window": {"cascade", "display", "events"},
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "render": {"glyphs", "nodes", "tokens"},
     "treeview": {"nodes", "tokens"},
-    "rain": {"glyphs"},
-    "curtain": {"ansi", "rain"},
     "cli": {
-        "curtain", "errors", "interpreter", "lexer", "parser", "render",
-        "repl", "treeview",
+        "display", "errors", "events", "interpreter", "lexer", "parser",
+        "render", "repl", "treeview", "window",
     },
-    "interpreter": {"errors", "nodes", "tokens", "values"},
+    "interpreter": {"errors", "events", "nodes", "tokens", "values"},
     "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
 }
 

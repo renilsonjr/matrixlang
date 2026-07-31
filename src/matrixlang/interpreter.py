@@ -13,6 +13,7 @@ import sys
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
+from matrixlang.events import EventSink, Output, Statement, TextSink
 from matrixlang.nodes import (
     Assign,
     Binary,
@@ -37,9 +38,21 @@ _ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
 
 
 class Interpreter:
-    def __init__(self, out: TextIO | None = None) -> None:
+    def __init__(
+        self, out: TextIO | None = None, sink: EventSink | None = None
+    ) -> None:
+        """Execute into a sink. `out` is the shorthand for "a TextSink on this".
+
+        Both parameters exist because printing to a stream is still the common
+        case and `Interpreter(out=buffer)` reads better than wrapping it by
+        hand at every call site. `sink` wins if both are given.
+        """
         self.environment: dict[str, object] = {}
-        self._out = sys.stdout if out is None else out
+        self._sink = (
+            sink
+            if sink is not None
+            else TextSink(sys.stdout if out is None else out)
+        )
 
     def run(self, program: Program) -> None:
         for statement in program.statements:
@@ -55,8 +68,16 @@ class Interpreter:
     # --- statements -------------------------------------------------------
 
     def _execute(self, stmt: Stmt) -> None:
+        # Emitted before the statement runs, and for every statement including
+        # the children of a block. A loop body therefore emits once per
+        # iteration, which is what lets a display show a `dejavu` loop running
+        # rather than reporting it once it has finished.
+        self._sink.emit(Statement(node=stmt, line=stmt.line))
+
         if isinstance(stmt, Trace):
-            print(to_display(self._evaluate(stmt.value)), file=self._out)
+            self._sink.emit(
+                Output(text=to_display(self._evaluate(stmt.value)), line=stmt.line)
+            )
         elif isinstance(stmt, Declare):
             if stmt.name in self.environment:
                 raise RuntimeErrorML(
