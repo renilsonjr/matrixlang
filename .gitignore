@@ -10,3 +10,7 @@ build/
 # Scratch workspace for planning features and next steps. Deliberately
 # outside version control — not part of the language or its toolchain.
 matrixlang.features/
+
+# macOS Finder droppings. Never useful, and once committed they are in
+# history forever and show up in every diff.
+.DS_Store
