@@ -24,7 +24,7 @@ from matrixlang.lexer import lex  # noqa: E402
 from matrixlang.parser import parse  # noqa: E402
 from matrixlang.render import render_glyph  # noqa: E402
 
-from translit import transliterate  # noqa: E402
+from matrixlang.translit import transliterate  # noqa: E402
 
 WORKING = """\
 construct name = "Neo"

@@ -1,9 +1,5 @@
 """A complete, reversible text-to-glyph dictionary.
 
-EXPERIMENT. Not part of the shipped package, not imported by anything in
-src/matrixlang/, and deliberately outside it so the architecture guard and
-the katakana-containment guard do not apply.
-
 This is NOT the language's glyph face. The distinction matters:
 
   glyphs.GLYPHS   the LANGUAGE's face. 32 slots, bijective, round-trips

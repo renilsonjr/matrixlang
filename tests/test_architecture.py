@@ -22,6 +22,7 @@ _ALLOWED: dict[str, set[str]] = {
     "nodes": {"tokens"},
     "values": set(),
     "events": {"nodes"},
+    "translit": {"glyphs"},
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "render": {"glyphs", "nodes", "tokens"},

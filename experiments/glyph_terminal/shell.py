@@ -49,7 +49,7 @@ from matrixlang.ansi import ColorMode  # noqa: E402
 from matrixlang.repl import Repl  # noqa: E402
 
 from live import OUTPUT, SOURCE, FRAME_SECONDS, LiveField, paint  # noqa: E402
-from translit import table_for_readers, transliterate, untransliterate  # noqa: E402
+from matrixlang.translit import table_for_readers, transliterate, untransliterate  # noqa: E402
 
 PROMPT = "> "
 CONTINUATION = "... "
