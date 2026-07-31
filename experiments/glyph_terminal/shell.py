@@ -147,10 +147,43 @@ class Screen:
         return "".join(parts)
 
 
+_LOAD = ":load"
+
+
 def _run_line(screen: Screen, session: Session, line: str) -> None:
+    if line.strip().startswith(_LOAD):
+        _load_file(screen, session, line.strip()[len(_LOAD):].strip())
+        return
     items, diagnostic = session.feed(line)
     screen.add(items)
     screen.status = diagnostic
+
+
+def _load_file(screen: Screen, session: Session, path: str) -> None:
+    """`:load FILE` — pull a .rain file into the session and cascade it.
+
+    Fed line by line through the same Session as typed input, so a file
+    behaves exactly as if you had typed it: blocks buffer, state persists,
+    and diagnostics land in the status line rather than the cascade.
+    """
+    if not path:
+        screen.status = f"usage: {_LOAD} path/to/file.rain"
+        return
+    try:
+        source = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        screen.status = f"matrixlang: {error}"
+        return
+
+    loaded = 0
+    for line in source.splitlines():
+        items, diagnostic = session.feed(line)
+        screen.add(items)
+        loaded += len(items)
+        if diagnostic:                     # stop at the first failure
+            screen.status = diagnostic
+            return
+    screen.status = f"loaded {path} — {loaded} items cascading"
 
 
 def interactive(seconds: float | None) -> int:

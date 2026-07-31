@@ -111,8 +111,9 @@ actual proposal, which is a cascade that **carries the software** rather than
 decorating it.
 
 ```bash
-python experiments/glyph_terminal/live.py              # animate (needs a TTY)
-python experiments/glyph_terminal/live.py --frames 30  # dump frames as text
+python experiments/glyph_terminal/live.py                        # built-in demo
+python experiments/glyph_terminal/live.py examples/hello.rain    # your own file
+python experiments/glyph_terminal/live.py --frames 30            # frames as text
 ```
 
 Every falling column carries real material from the program. Nothing is random:
@@ -169,6 +170,11 @@ python experiments/glyph_terminal/shell.py                 # the terminal
 python experiments/glyph_terminal/shell.py --table         # the dictionary
 python experiments/glyph_terminal/shell.py --script 'a;b'  # headless
 ```
+
+Inside it, `:load path/to/file.rain` pulls a file into the session. The file is
+fed line by line through the same session as typed input, so it behaves exactly
+as if you had typed it — blocks buffer, state persists, and a diagnostic stops
+the load and lands in the status line rather than the cascade.
 
 Type MatrixLang at the prompt. Every statement and every value it produces
 joins the falling cascade in glyphs. The screen is not a log with an animation

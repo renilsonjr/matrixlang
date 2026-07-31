@@ -71,7 +71,14 @@ def content_of(source: str) -> list[tuple[str, str]]:
     Returns (kind, text) pairs. This is the whole idea in one function --
     the cascade draws from here instead of from a random alphabet.
     """
-    tree = parse(lex(source))
+    try:
+        tree = parse(lex(source))
+    except MatrixLangError as error:
+        # A file that will not parse has no cascade material. Say so in plain
+        # text and stop, rather than opening an empty screen with no reason.
+        print(f"matrixlang: {error}", file=sys.stderr)
+        raise SystemExit(1) from None
+
     items = [(SOURCE, line) for line in render_glyph(tree).splitlines() if line.strip()]
 
     buffer = io.StringIO()
@@ -219,13 +226,26 @@ def dump(items, frames: int) -> None:
             print("".join(line).rstrip())
 
 
+def read_program(path: str | None) -> str:
+    """A .rain file, or the built-in demo when no path is given."""
+    if path is None:
+        return PROGRAM
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        print(f"matrixlang: {error}", file=sys.stderr)
+        raise SystemExit(2) from None
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("program", nargs="?",
+                    help="a .rain file to cascade (default: a built-in demo)")
     ap.add_argument("--frames", type=int, help="dump N frames as text and exit")
     ap.add_argument("--seconds", type=float, default=8.0, help="how long to animate")
     args = ap.parse_args()
 
-    items = content_of(PROGRAM)
+    items = content_of(read_program(args.program))
     print(f"{len(items)} lines of program material "
           f"({sum(1 for k, _ in items if k is OUTPUT)} of them output)",
           file=sys.stderr)
