@@ -28,6 +28,11 @@ _ALLOWED: dict[str, set[str]] = {
     # window is not a terminal. Dropping the ansi import makes the deviation
     # visible here rather than only in a comment.
     "display": {"events"},
+    "cascade": {"events", "nodes", "render", "translit"},
+    # The load-bearing entry: `window` may depend on everything above it,
+    # and nothing may depend on `window`. A backend leaking into the core
+    # would make the language unrunnable without a display.
+    "window": {"cascade", "display", "events"},
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "render": {"glyphs", "nodes", "tokens"},
