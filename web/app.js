@@ -4,11 +4,11 @@ import { Lexer, Parser, Interpreter, convertToGlyphs, convertFromGlyphs } from '
 const SAMPLES = {
   hello: `# The Stage 3 demo: hello.rain
 construct n = 0
-construct name = "Neo"
+construct name = "World!"
 
 dejavu n < 3
   redpill n == 1
-    trace "wake up, " + name
+    trace "Hello, " + name
   bluepill
     trace n
   flatline
@@ -21,7 +21,7 @@ construct max = 5
 
 dejavu count <= max
   redpill count == 3
-    trace "Glitch in the Matrix at step 3!"
+    trace "Glitch in the Matrix!"
   bluepill
     trace "Processing frame: " + count
   flatline
@@ -120,8 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
     execStatus.textContent = 'RUNNING...';
     editorStatus.textContent = 'Executing';
 
-    // Pulse digital rain cascade on run
-    rainEngine.pulse(15);
+    // Trigger initial rain burst
+    rainEngine.spawnColumn();
+    rainEngine.spawnColumn();
 
     try {
       const lexer = new Lexer(code);
@@ -135,17 +136,17 @@ document.addEventListener('DOMContentLoaded', () => {
         steps++;
         stepCount.textContent = `Steps: ${steps}`;
 
-        // Trigger rain pulse on output
-        rainEngine.pulse(6);
-
-        // Append output to console line with delay for streaming effect
+        // 1. Output line to bottom-left Terminal Output Stream
         const lineEl = document.createElement('div');
         lineEl.className = 'console-line';
         lineEl.innerHTML = `<span class="console-prompt">&gt;</span><span class="console-text">${escapeHtml(val)}</span>`;
         consoleOutput.appendChild(lineEl);
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
 
-        await new Promise((r) => setTimeout(r, 120)); // smooth step delay
+        // 2. Spawn corresponding Katakana output streams down the right Rain Cascade Screen!
+        rainEngine.spawnOutputStream(val);
+
+        await new Promise((r) => setTimeout(r, 180)); // smooth step delay
       });
 
       await interpreter.run(ast);

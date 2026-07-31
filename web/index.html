@@ -7,8 +7,6 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="matrix-rain-canvas"></canvas>
-
   <div class="app-container">
     <header>
       <div class="logo-group">
@@ -33,34 +31,52 @@
     </header>
 
     <main class="main-content">
-      <section class="panel">
-        <div class="panel-header">
-          <span>// MatrixLang Source (.rain)</span>
-          <span id="char-count">0 chars</span>
-        </div>
-        <div class="editor-container">
-          <textarea id="code-input" spellcheck="false"></textarea>
-        </div>
-        <div class="status-bar">
-          <span id="editor-status">Ready</span>
-          <span>Syntax: MatrixLang ASCII / Katakana</span>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <span>// Live Cascade Output & Rain Stream</span>
-          <span id="exec-status">IDLE</span>
-        </div>
-        <div class="console-output" id="console-output">
-          <div class="console-line">
-            <span class="console-prompt">&gt;</span>
-            <span class="console-text">MatrixLang Web Engine Ready. Press ▶ RUN (.rain) to execute program.</span>
+      <!-- Left Column: Code Editor + Terminal Output underneath -->
+      <div class="left-column">
+        <section class="panel editor-panel">
+          <div class="panel-header">
+            <span>// MATRIXLANG SOURCE (.RAIN)</span>
+            <span id="char-count">0 chars</span>
           </div>
+          <div class="editor-container">
+            <textarea id="code-input" spellcheck="false"></textarea>
+          </div>
+          <div class="status-bar">
+            <span id="editor-status">Ready</span>
+            <span>Syntax: MatrixLang ASCII / Katakana</span>
+          </div>
+        </section>
+
+        <section class="panel terminal-panel">
+          <div class="panel-header">
+            <span>// TERMINAL OUTPUT STREAM</span>
+            <span id="exec-status">IDLE</span>
+          </div>
+          <div class="console-output" id="console-output">
+            <div class="console-line">
+              <span class="console-prompt">&gt;</span>
+              <span class="console-text">MatrixLang Terminal Ready. Press ▶ RUN (.rain) to execute.</span>
+            </div>
+          </div>
+          <div class="status-bar">
+            <span id="step-count">Steps: 0</span>
+            <span>Terminal Connected</span>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Dedicated Matrix Glyph Digital Rain Cascade Display -->
+      <section class="panel cascade-panel">
+        <div class="panel-header">
+          <span>// LIVE GLYPH CASCADE OUTPUT (.RAIN)</span>
+          <span id="cascade-status">CASCADE ACTIVE</span>
+        </div>
+        <div class="cascade-canvas-container">
+          <canvas id="matrix-rain-canvas"></canvas>
         </div>
         <div class="status-bar">
-          <span id="step-count">Steps: 0</span>
-          <span>Matrix Engine Active</span>
+          <span id="glyph-count">Glyphs Stream: Live</span>
+          <span>Matrix Digital Rain Engine</span>
         </div>
       </section>
     </main>

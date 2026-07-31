@@ -1,22 +1,24 @@
 /**
  * Matrix Digital Rain Canvas Engine (.rain)
- * Based on matrixlang.rain & matrixlang.glyphs
+ * Renders Katakana digital rain cascade and custom code output streams.
  */
+import { convertToGlyphs } from './interpreter.js';
 
-// Full half-width Katakana alphabet U+FF66..U+FF9D matching matrixlang RAIN_ALPHABET
 const RAIN_ALPHABET = [];
 for (let code = 0xff66; code <= 0xff9e; code++) {
   RAIN_ALPHABET.push(String.fromCharCode(code));
 }
 
 class Column {
-  constructor(col, speed, length, numRows) {
+  constructor(col, speed, length, numRows, customGlyphs = null) {
     this.col = col;
     this.speed = speed;
     this.length = length;
     this.numRows = numRows;
     this.head = 0;
     this.glyphs = {};
+    this.customGlyphs = customGlyphs; // Optional string of Katakana output glyphs
+    this.isOutput = customGlyphs !== null;
   }
 
   advance() {
@@ -25,11 +27,17 @@ class Column {
     const currRow = Math.floor(this.head);
 
     for (let r = prevRow + 1; r <= currRow; r++) {
-      this.glyphs[r] = RAIN_ALPHABET[Math.floor(Math.random() * RAIN_ALPHABET.length)];
+      if (this.isOutput && this.customGlyphs.length > 0) {
+        // Pick characters sequentially from the custom Katakana output
+        const glyphIdx = (r >= 0 ? r : 0) % this.customGlyphs.length;
+        this.glyphs[r] = this.customGlyphs[glyphIdx];
+      } else {
+        this.glyphs[r] = RAIN_ALPHABET[Math.floor(Math.random() * RAIN_ALPHABET.length)];
+      }
     }
 
-    // Shimmer mutation
-    if (Math.random() < 0.15 && Object.keys(this.glyphs).length > 0) {
+    // Shimmer mutation (background rain only)
+    if (!this.isOutput && Math.random() < 0.15 && Object.keys(this.glyphs).length > 0) {
       const keys = Object.keys(this.glyphs);
       const randomRow = keys[Math.floor(Math.random() * keys.length)];
       this.glyphs[randomRow] = RAIN_ALPHABET[Math.floor(Math.random() * RAIN_ALPHABET.length)];
@@ -45,14 +53,12 @@ export class MatrixRainEngine {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.fontSize = 18;
+    this.fontSize = 20;
     this.cols = 0;
     this.rows = 0;
     this.columns = [];
     this.freeCols = [];
     this.animId = null;
-    this.intensity = 1.0;
-    this.speedMultiplier = 1.0;
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -60,9 +66,15 @@ export class MatrixRainEngine {
 
   resize() {
     const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
+    const rect = this.canvas.parentElement ? this.canvas.parentElement.getBoundingClientRect() : this.canvas.getBoundingClientRect();
+    
+    if (rect.width === 0 || rect.height === 0) return;
+
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
+    this.canvas.style.width = `${rect.width}px`;
+    this.canvas.style.height = `${rect.height}px`;
+    
     this.ctx.scale(dpr, dpr);
 
     this.cols = Math.floor(rect.width / this.fontSize);
@@ -70,7 +82,6 @@ export class MatrixRainEngine {
 
     this.freeCols = Array.from({ length: this.cols }, (_, i) => i);
     this.shuffle(this.freeCols);
-    this.columns = [];
   }
 
   shuffle(arr) {
@@ -80,20 +91,39 @@ export class MatrixRainEngine {
     }
   }
 
-  spawnColumn() {
+  spawnColumn(customText = null) {
+    if (this.cols <= 0 || this.rows <= 0) return;
+
     if (this.freeCols.length === 0) {
       this.freeCols = Array.from({ length: this.cols }, (_, i) => i);
       this.shuffle(this.freeCols);
     }
+
     const colIdx = this.freeCols.pop();
-    const speed = (0.2 + Math.random() * 0.6) * this.speedMultiplier;
-    const length = Math.floor(4 + Math.random() * 12);
-    this.columns.push(new Column(colIdx, speed, length, this.rows));
+    const speed = customText ? 0.45 : 0.25 + Math.random() * 0.45;
+    
+    let katakanaText = null;
+    let length = Math.floor(6 + Math.random() * 12);
+
+    if (customText) {
+      // Convert code output text into Katakana glyphs for the digital cascade
+      katakanaText = convertToGlyphs(customText);
+      if (!katakanaText || katakanaText.length === 0) {
+        katakanaText = customText;
+      }
+      length = Math.max(8, katakanaText.length + 4);
+    }
+
+    this.columns.push(new Column(colIdx, speed, length, this.rows, katakanaText));
   }
 
-  pulse(amount = 5) {
-    for (let i = 0; i < amount; i++) {
-      this.spawnColumn();
+  spawnOutputStream(outputText) {
+    // Spawn multiple adjacent streams carrying the Katakana output
+    const str = String(outputText);
+    const glyphStr = convertToGlyphs(str);
+
+    for (let i = 0; i < 3; i++) {
+      this.spawnColumn(glyphStr);
     }
   }
 
@@ -120,17 +150,19 @@ export class MatrixRainEngine {
   }
 
   tick() {
-    // Spawn new rain drops based on density
-    if (Math.random() < 0.3 * this.intensity) {
+    // Maintain steady ambient digital rain
+    if (this.columns.length < Math.floor(this.cols * 0.6) && Math.random() < 0.4) {
       this.spawnColumn();
     }
 
-    // Clear background with translucent dark fill for motion blur trail
-    const rect = this.canvas.getBoundingClientRect();
-    this.ctx.fillStyle = 'rgba(5, 12, 8, 0.2)';
-    this.ctx.fillRect(0, 0, rect.width, rect.height);
+    const width = this.canvas.width / (window.devicePixelRatio || 1);
+    const height = this.canvas.height / (window.devicePixelRatio || 1);
 
-    this.ctx.font = `${this.fontSize}px 'Courier New', monospace`;
+    // Clear with dark fade
+    this.ctx.fillStyle = 'rgba(4, 10, 6, 0.22)';
+    this.ctx.fillRect(0, 0, width, height);
+
+    this.ctx.font = `bold ${this.fontSize}px 'Courier New', monospace`;
 
     for (let i = this.columns.length - 1; i >= 0; i--) {
       const col = this.columns[i];
@@ -143,16 +175,29 @@ export class MatrixRainEngine {
           const x = col.col * this.fontSize;
           const y = r * this.fontSize;
 
-          if (offset === 0) {
-            // Bright white head glyph
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.shadowColor = '#00ff66';
-            this.ctx.shadowBlur = 10;
+          if (col.isOutput) {
+            // Output Katakana glyphs glow bright cyan/gold-green
+            if (offset === 0) {
+              this.ctx.fillStyle = '#ffffff';
+              this.ctx.shadowColor = '#00ffff';
+              this.ctx.shadowBlur = 12;
+            } else {
+              const alpha = 1.0 - (offset / col.length);
+              this.ctx.fillStyle = `rgba(0, 255, 204, ${alpha})`;
+              this.ctx.shadowColor = '#00ff66';
+              this.ctx.shadowBlur = 6;
+            }
           } else {
-            // Fading neon green trail
-            const alpha = 1.0 - (offset / col.length);
-            this.ctx.fillStyle = `rgba(0, 255, 102, ${alpha * 0.95})`;
-            this.ctx.shadowBlur = 0;
+            // Ambient digital rain
+            if (offset === 0) {
+              this.ctx.fillStyle = '#ffffff';
+              this.ctx.shadowColor = '#00ff66';
+              this.ctx.shadowBlur = 10;
+            } else {
+              const alpha = 1.0 - (offset / col.length);
+              this.ctx.fillStyle = `rgba(0, 255, 102, ${alpha * 0.9})`;
+              this.ctx.shadowBlur = 0;
+            }
           }
 
           this.ctx.fillText(col.glyphs[r], x, y);
