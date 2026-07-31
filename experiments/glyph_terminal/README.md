@@ -160,15 +160,92 @@ Both make the same point: **content-carrying rain has correctness requirements
 that decorative rain does not.** Anything built from this needs its own tests,
 not the existing rain's.
 
-### What it does not do yet
+---
 
-- **Not interactive.** It cascades a program that has already run. "As you type"
-  needs raw-mode input concurrent with the animation loop — genuinely harder, and
-  the next real question.
-- **Not incremental.** Output is collected up front, not streamed as it is
-  produced. Watching a long-running program emit results into the rain live would
-  need the interpreter to yield events as it executes.
-- **Diagnostics still stay plain**, per the finding above.
+## `shell.py` — an interactive terminal, and a decodable dictionary
+
+```bash
+python experiments/glyph_terminal/shell.py                 # the terminal
+python experiments/glyph_terminal/shell.py --table         # the dictionary
+python experiments/glyph_terminal/shell.py --script 'a;b'  # headless
+```
+
+Type MatrixLang at the prompt. Every statement and every value it produces
+joins the falling cascade in glyphs. The screen is not a log with an animation
+behind it — the animation is the session.
+
+```
+┌────────────────────────────────────┐
+│   your statements and their output │  glyphs, falling
+│   falling as glyphs                │
+├────────────────────────────────────┤
+│ matrixlang: [line 1, column 7] …   │  errors, plain text
+│ > construct x = 5                  │  what you are typing, ASCII
+└────────────────────────────────────┘
+```
+
+Two things stay readable, for different reasons. **The input line is ASCII**
+because you cannot touch-type an alphabet you are still learning — that is
+D-03's authoring view, not a compromise. **Diagnostics are plain** because the
+static spike proved transliterated ones are unusable.
+
+### The dictionary is reversible, which is the point
+
+`translit.py` is now a complete text-to-glyph map with a guarantee:
+
+```
+untransliterate(transliterate(text)) == text        for ALL text
+```
+
+Verified over 4,000 fuzzed strings including uppercase, digits, punctuation and
+non-ASCII — zero failures. So the glyph output is **decodable**: a person, a
+program or a model holding the table can read the screen exactly.
+
+```
+$ trace "wake up, " + name
+  source  ﾄ "wake up, " ﾀ name
+  output  ﾁ｡ｵ･ ｿｺﾆ ﾙｸ･ｹ      (decodes to 'wake up, Neo')
+```
+
+Three decisions make reversibility hold, and the first is the one a first
+attempt gets wrong:
+
+1. **Uppercase uses a shift glyph** (`ﾙ`). Case-folding is shorter and is what
+   you reach for first, but `Neo` and `neo` would render identically and no
+   reader could recover which was meant.
+2. **Uncovered characters pass through unchanged, and that is still reversible** —
+   the glyph alphabet is disjoint from ASCII, so a decoder always knows which is
+   which. No escape sequences to get wrong.
+3. **Space stays a space.** Encoding it gains nothing and destroys the word
+   boundaries that make the result legible as structure.
+
+`--table` prints the dictionary for exactly this purpose: hand it to a model with
+a line of glyphs and it can recover the text with no other context.
+
+### A bug worth recording: blocks are not lines
+
+The first version rendered each entered line separately. A `dejavu` body line is
+not a parseable program on its own, so the loop body never reached the cascade at
+all and `flatline` spilled out as raw ASCII. Statements are now buffered and
+rendered **as a complete block**:
+
+```
+$ dejavu n < 3 / trace "wake up" / n = n + 1 / flatline
+  source ﾃ n ｻ ｩ
+  source ﾄ "wake up"
+  source n ﾅ n ﾀ ｧ
+  source ﾗ
+```
+
+### What it still does not do
+
+- **Not incremental.** Output is collected per statement, not streamed as it is
+  produced. Watching a long-running loop emit results into the rain *as it runs*
+  would need the interpreter to yield events during execution.
+- **No external commands.** This is a MatrixLang REPL, not a shell — no process
+  spawning, pipes, redirection or job control. #22 covers why every shipping
+  programmable shell kept an escape hatch to ordinary commands, and why that is
+  the expensive half of the idea.
 
 ## Files
 
@@ -176,4 +253,5 @@ not the existing rain's.
 | --- | --- |
 | `translit.py` | Display-only character map. Deliberately **not** the language's glyph face — its output is never lexed, so it owes nothing to bijectivity or the round trip, which is what lets it cover the Latin alphabet at all (the language's 32 slots cannot: 24 free glyphs, 26 letters needed) |
 | `demo.py` | Static: the two programs in all three modes |
-| `live.py` | Animated: the cascade carrying the program itself |
+| `live.py` | Animated: the cascade carrying a program that has run |
+| `shell.py` | Interactive: type MatrixLang, watch the session cascade |
