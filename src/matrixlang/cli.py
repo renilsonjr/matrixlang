@@ -2,13 +2,15 @@
 
 import argparse
 import os
-import shutil
 import sys
+import threading
 from pathlib import Path
 
-from matrixlang.curtain import play_if_supported
+from matrixlang.display import Backend, TextDisplay, choose_backend, tk_is_available
 from matrixlang.errors import MatrixLangError, recursion_guard
-from matrixlang.interpreter import run as run_program
+from matrixlang.events import Error
+from matrixlang.interpreter import Interpreter
+from matrixlang.window import CascadeWindow
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
 from matrixlang.render import render_ascii, render_glyph
@@ -35,9 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = subcommands.add_parser("run", help="Execute a source file.")
     run_parser.add_argument("path", help="Path to a .rain source file.")
     run_parser.add_argument(
-        "--no-rain",
+        "--no-window",
         action="store_true",
-        help="Skip the digital rain and execute immediately.",
+        help="Print output as text instead of opening the cascade window.",
     )
 
     subcommands.add_parser("repl", help="Start an interactive session.")
@@ -59,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "parse":
         return _command_parse(args.path)
     if args.command == "run":
-        return _command_run(args.path, rain=not args.no_rain)
+        return _command_run(args.path, want_window=not args.no_window)
     if args.command == "repl":
         return run_repl()
     if args.command == "render":
@@ -105,7 +107,7 @@ def _command_lex(path: str) -> int:
     return 0
 
 
-def _command_run(path: str, rain: bool = True) -> int:
+def _command_run(path: str, want_window: bool = True) -> int:
     source = _read_source(path)
     if source is None:
         return 2
@@ -117,32 +119,72 @@ def _command_run(path: str, rain: bool = True) -> int:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
 
-    # After the parse, before execution: a program that cannot run should
-    # say so immediately rather than after a second of decoration. The
-    # curtain declines itself on a non-TTY, so redirected output is clean
-    # without this call site knowing anything about terminals.
-    if rain:
+    # Chosen after the parse: a program that cannot run must say so
+    # immediately, not from behind a window someone has to dismiss first.
+    backend = choose_backend(
+        isatty=sys.stdout.isatty(),
+        env=os.environ,
+        want_window=want_window,
+        tk_available=tk_is_available(),
+    )
+    if backend is Backend.WINDOW:
+        window = CascadeWindow()
         try:
-            play_if_supported(sys.stdout, os.environ, shutil.get_terminal_size())
-        except KeyboardInterrupt:
-            # play() has already restored the terminal in its finally.
-            # This must stay first: KeyboardInterrupt is a BaseException,
-            # so a later `except Exception` cannot catch it here.
-            return 130
-        except Exception:
-            # Decoration must never be the reason a run fails: an
-            # unencodable glyph or a dropped terminal loses the rain,
-            # not the program.
-            pass
+            window.open()
+        except Exception as error:
+            # A failure of the display is never a failure of the program.
+            print(f"matrixlang: could not open a window ({error}); "
+                  f"printing instead", file=sys.stderr)
+        else:
+            return _run_in_window(tree, window)
 
-    # Execution is deliberately outside the parse try-block: a program that
-    # fails partway has already printed real output, and that output stays.
+    return _run_as_text(tree)
+
+
+def _run_as_text(tree) -> int:
+    """Execute to stdout. Byte-identical to every version before displays."""
+    # Outside the parse try-block on purpose: a program that fails partway
+    # has already printed real output, and that output stays.
     try:
-        run_program(tree)
+        Interpreter(sink=TextDisplay(sys.stdout)).run(tree)
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
     return 0
+
+
+def _run_in_window(tree, window) -> int:
+    """Execute on a worker thread, drawing on the UI thread.
+
+    Tk is not thread-safe, so the interpreter never touches it: it emits
+    into the window's queue, and the window drains that queue under
+    `after()`. The mainloop returns when the viewer closes the window,
+    which is deliberately later than when the program finishes — a program
+    that runs in 200ms would otherwise flash and vanish unread.
+    """
+    outcome: list[int] = []
+
+    def execute() -> None:
+        try:
+            Interpreter(sink=window).run(tree)
+        except MatrixLangError as error:
+            message = f"matrixlang: {error}"
+            print(message, file=sys.stderr)
+            window.emit(Error(message=message))
+            outcome.append(1)
+        else:
+            outcome.append(0)
+        finally:
+            window.close()
+
+    worker = threading.Thread(target=execute, daemon=True)
+    worker.start()
+    try:
+        window.mainloop()
+    except KeyboardInterrupt:
+        return 130
+    worker.join(timeout=1.0)
+    return outcome[0] if outcome else 0
 
 
 def _command_render(path: str, face: str) -> int:

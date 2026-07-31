@@ -242,80 +242,139 @@ def test_run_writes_no_escape_bytes_under_capture(source_file, capsys):
     assert "\x1b" not in captured.err
 
 
-def test_run_consults_the_curtain_by_default(source_file, capsys, monkeypatch):
-    calls: list[tuple] = []
-    monkeypatch.setattr(
-        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
-    )
+class _FakeWindow:
+    """Stands in for CascadeWindow so tests never open one."""
+
+    opened = 0
+
+    def __init__(self, *args, **kwargs):
+        self.events: list[object] = []
+        type(self).opened += 1
+
+    def open(self):
+        pass
+
+    def emit(self, event):
+        self.events.append(event)
+
+    def close(self):
+        pass
+
+    def mainloop(self):
+        pass
+
+
+@pytest.fixture
+def no_real_window(monkeypatch):
+    _FakeWindow.opened = 0
+    monkeypatch.setattr(cli, "CascadeWindow", _FakeWindow)
+    return _FakeWindow
+
+
+def test_run_uses_text_when_stdout_is_not_a_tty(source_file, capsys, no_real_window):
+    # capsys makes stdout a non-TTY, which is exactly the redirected case.
+    # This is the property everything else defers to.
     assert main(["run", source_file("trace 1\n")]) == 0
-    assert len(calls) == 1
-
-
-def test_no_rain_skips_the_curtain_entirely(source_file, capsys, monkeypatch):
-    calls: list[tuple] = []
-    monkeypatch.setattr(
-        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
-    )
-    assert main(["run", "--no-rain", source_file("trace 1\n")]) == 0
-    assert calls == []
     assert capsys.readouterr().out == "1\n"
+    assert no_real_window.opened == 0
 
 
-def test_a_parse_error_costs_no_animation(source_file, capsys, monkeypatch):
-    # Rain plays after the parse. A program that cannot run must report
-    # that immediately, not after a second and a half of decoration.
-    calls: list[tuple] = []
-    monkeypatch.setattr(
-        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
-    )
+def test_no_window_skips_the_window_entirely(source_file, capsys, no_real_window):
+    assert main(["run", "--no-window", source_file("trace 1\n")]) == 0
+    assert capsys.readouterr().out == "1\n"
+    assert no_real_window.opened == 0
+
+
+def test_run_opens_a_window_on_a_tty(source_file, capsys, monkeypatch, no_real_window):
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    assert main(["run", source_file("trace 1\n")]) == 0
+    assert no_real_window.opened == 1
+
+
+def test_a_parse_error_never_opens_a_window(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    # A program that cannot run must say so immediately, not behind a
+    # window that has to be dismissed first.
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
     assert main(["run", source_file("construct = 5\n")]) == 1
-    assert calls == []
+    assert no_real_window.opened == 0
 
 
-def test_ctrl_c_during_the_curtain_exits_130(source_file, capsys, monkeypatch):
-    def interrupt(*_args, **_kwargs):
-        raise KeyboardInterrupt
-
-    monkeypatch.setattr(cli, "play_if_supported", interrupt)
-    assert main(["run", source_file("trace 1\n")]) == 130
-    assert capsys.readouterr().out == ""
-
-
-def test_a_broken_curtain_does_not_break_the_run(source_file, capsys, monkeypatch):
-    # Design section 4: a presentation layer must never be the reason a
-    # run fails. The rain is lost; the program is not.
-    def explode(*_args, **_kwargs):
-        raise OSError("terminal went away")
-
-    monkeypatch.setattr(cli, "play_if_supported", explode)
-    assert main(["run", source_file("trace 1\n")]) == 0
-    assert capsys.readouterr().out == "1\n"
+def test_a_runtime_error_in_the_window_still_exits_one(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    assert main(["run", source_file("trace nope\n")]) == 1
+    assert "not declared" in capsys.readouterr().err
 
 
-def test_run_hands_the_curtain_stdout_the_environment_and_the_size(
+def test_a_window_that_fails_to_open_falls_back_to_text(
     source_file, capsys, monkeypatch
 ):
-    # The single seam between the tested half of this feature and the
-    # half no automated test can exercise. Transposing env and size
-    # passes everything else and fails only in front of a user.
-    import os
-    import shutil
-    import sys
+    # A failure of the display must never be the reason a program fails.
+    class Broken(_FakeWindow):
+        def open(self):
+            raise RuntimeError("no display")
 
-    calls: list[tuple] = []
-    monkeypatch.setattr(
-        cli, "play_if_supported", lambda *args, **kwargs: calls.append(args) or False
-    )
-    main(["run", source_file("trace 1\n")])
-    writer, env, size = calls[0]
-    assert writer is sys.stdout
-    assert env is os.environ
-    assert size == shutil.get_terminal_size()
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    monkeypatch.setattr(cli, "CascadeWindow", Broken)
+    assert main(["run", source_file("trace 1\n")]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "1\n"
+    assert "window" in captured.err.lower()
 
 
-def test_only_run_takes_the_rain_flag(source_file):
-    # R-03: rain in the runner, never the editor. The flag exists on run
-    # and nowhere else.
+def test_the_rain_flag_is_gone(source_file):
+    # The curtain is superseded by the window. --no-rain must not linger
+    # as an accepted no-op, which would be worse than removing it.
     with pytest.raises(SystemExit) as excinfo:
-        main(["render", "--face", "ascii", "--no-rain", source_file("trace 1\n")])
+        main(["run", "--no-rain", source_file("trace 1\n")])
+    assert excinfo.value.code == 2
+
+
+def test_ctrl_c_while_the_window_is_open_exits_130(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    class Interrupting(_FakeWindow):
+        def mainloop(self):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    monkeypatch.setattr(cli, "CascadeWindow", Interrupting)
+    assert main(["run", source_file("trace 1\n")]) == 130
+
+
+def test_the_program_output_reaches_the_window_as_events(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    # The seam between the tested half and the half no automated test can
+    # exercise: what a viewer sees is decided by these events.
+    from matrixlang.events import Output
+
+    created: list[_FakeWindow] = []
+
+    class Recording(_FakeWindow):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            created.append(self)
+
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    monkeypatch.setattr(cli, "CascadeWindow", Recording)
+    main(["run", source_file('trace "wake up, Neo"\n')])
+    texts = [e.text for e in created[0].events if isinstance(e, Output)]
+    assert texts == ["wake up, Neo"]
+
+
+def test_only_run_takes_the_window_flag(source_file):
+    # R-03's successor: the display belongs to the runner, never the
+    # editor. The flag exists on run and nowhere else.
+    with pytest.raises(SystemExit) as excinfo:
+        main(["render", "--face", "ascii", "--no-window", source_file("trace 1\n")])
     assert excinfo.value.code == 2

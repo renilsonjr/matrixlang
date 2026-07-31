@@ -3,8 +3,8 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Written against `main` @ v0.5.0 — 2,113 lines of source across 17 modules,
-3,079 lines of tests, 645 tests passing, zero third-party dependencies.
+Written against `feat/cascade-window` — 2,510 lines of source across 20 modules,
+3,514 lines of tests, 743 tests passing, zero third-party dependencies.
 
 ---
 
@@ -48,11 +48,12 @@ thing to be able to say about a design decision.
 ```
                       ┌──────────► treeview.py ──► indented tree (parse)
                       │
-source ──► lexer ──► tokens ──► parser ──► AST ──► interpreter ──► effects
-  ▲                                         │
-  │                                         ▼
-  └──────────────── render.py ◄─────────────┘
-       (ASCII face or glyph face, from one tree)
+source ──► lexer ──► tokens ──► parser ──► AST ──► interpreter ──► events
+  ▲                                         │                        │
+  │                                         ▼                        ▼
+  └──────────────── render.py ◄─────────────┘              display ──┴──► text
+       (ASCII face or glyph face, from one tree)              │
+                                                              └──► cascade ──► window
 ```
 
 The pipeline is the classic front end from Nystrom's *Crafting Interpreters*
@@ -75,10 +76,13 @@ two-face design work, and it is where most of the interesting problems live.
 | `render.py` | 206 | AST → source text, in either face |
 | `treeview.py` | 109 | AST → indented text, for teaching |
 | `repl.py` | 110 | Interactive session with multi-line block buffering |
-| `ansi.py` | 100 | Terminal escape sequences and colour capability |
-| `rain.py` | 186 | The digital-rain field simulation. Pure |
-| `curtain.py` | 96 | The animation player. The only impure module |
-| `cli.py` | 160 | Command-line entry point |
+| `events.py` | 78 | The execution event vocabulary. Pure data |
+| `translit.py` | 112 | The reversible display table. Pure |
+| `display.py` | 96 | The display protocol and backend selection. Pure |
+| `cascade.py` | 163 | The content-carrying field simulation. Pure |
+| `window.py` | 168 | The Tk backend. The only impure module |
+| `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
+| `cli.py` | 202 | Command-line entry point |
 
 ### The dependency graph is a test, not a convention
 
@@ -89,10 +93,10 @@ design decisions rather than style preferences:
 - **`parser` must not import `lexer`.** The parser consumes any `list[Token]`.
   That's what lets one parser serve both source faces. An unused import would
   break no behavioural test, so it is asserted against the import graph directly.
-- **`repl` must not import `curtain`.** The rain belongs to the runner, never the
-  editing surface — motion and legibility are adversaries. Rather than writing
-  that in a comment where it would rot, it is a failing test the moment anyone
-  wires rain into the REPL.
+- **Nothing may import `window`.** A backend leaking into the core would make the
+  language unrunnable on a machine without a display. The dependency table lets
+  `window` depend on everything below it and nothing depend on `window`, so the
+  direction of that edge is a test rather than a convention.
 
 There is also a guard that no module except `glyphs.py` may contain a half-width
 katakana literal, which keeps the glyph set genuinely swappable.
@@ -234,30 +238,45 @@ Every value type check therefore uses `type(v) is int`, centralized in
 twenty branches where a reflexive `isinstance` could creep back in. (`isinstance`
 on *AST node* types is correct and used freely — the ban is on value checks.)
 
-### 5.6 Testing an animation
+### 5.6 Testing an animation, and why content-carrying rain is harder
 
-The digital rain is the kind of feature that normally ships untested. It's
-testable here because the code is split on a **purity gradient**:
+The cascade is the kind of feature that normally ships untested. It's testable
+because the code is split on a **purity gradient**:
 
-- `ansi.py` — pure string builders. `detect_color_mode(env, isatty)` takes the
-  environment as a *parameter* and never reads `os.environ`, which is what makes
-  capability detection table-testable.
-- `rain.py` — the field simulation. Deterministic given a seed, with no time, no
-  terminal, and no ANSI. `RainField(w, h, Random(7))` advanced N times produces
-  identical output on any machine.
-- `curtain.py` — the only impure module. The writer, the clock, the terminal
-  size, the colour mode and the RNG are all injected, so the tests pass a
-  `StringIO`, a no-op sleep, and a seeded `Random`. They run headless and
-  instantly.
+- `events.py` — pure data. The interpreter emits `Statement` / `Output` / `Error`
+  rather than printing, so what the program did is separable from where it goes.
+- `cascade.py` — the field simulation. Deterministic given a seed, with no time,
+  no toolkit and no colour. `CascadeField(w, h, Random(7))` advanced N times
+  produces identical cells on any machine.
+- `display.py` — backend selection as a pure function of `(isatty, env, flags,
+  tk_available)`, which is what makes it table-testable without a terminal.
+- `window.py` — the only impure module. Tk, the clock, and the thread boundary.
 
-Terminal safety is the part that matters most in review: the player draws on the
-**alternate screen buffer** (so nothing lands in scrollback) and restores the
-cursor and screen in a `finally` that runs on every exit path including
-`KeyboardInterrupt`. A presentation layer that can strand someone's terminal is
-worse than no presentation layer.
+**The lesson that only appeared once the rain carried the program.** The Stage 5
+rain was random glyphs, and random glyphs all look alike — so two bugs hid in it
+completely:
 
-And the whole thing is TTY-gated: **piped or redirected output is byte-identical
-to what it was before the animation existed.**
+1. **Column reuse.** A column was returned to the free pool at spawn time, so two
+   streams could share it and overwrite each other. Invisible in noise; in the
+   cascade it silently corrupts a line of your program.
+2. **Reversed lines.** Putting the first character at the head renders every line
+   backwards. Harmless when nobody reads the glyphs; fatal when the columns *are*
+   the program.
+
+Both now have regression tests, and both were **teeth-checked by re-injecting
+them**: the reversed-line bug fails 3 tests, column reuse fails all 30 seeds.
+The general point is that *content-carrying rain has correctness requirements
+decorative rain does not*, and inheriting the old field's tests would not have
+been enough.
+
+**What is still not tested: pixels.** No test opens a window or asserts what it
+looks like. The frame stream, the routing and the degradation path are verified;
+the appearance is a human judgment, which is the same admission the curtain
+carried before it.
+
+And the gate survives unchanged: **piped or redirected output is byte-identical
+to what it was before any of this existed** — verified as bytes, not just as
+strings.
 
 ## 6. Security posture
 
@@ -294,7 +313,7 @@ constraint that revealed it was a property test.
 
 ## 7. Testing philosophy
 
-645 tests, ~1.5× more test code than source code. Three practices are worth
+743 tests, ~1.4× more test code than source code. Three practices are worth
 describing:
 
 **Teeth-checks.** Every load-bearing guard is proven by injecting the bug and
@@ -308,9 +327,10 @@ strict-ordering assertion that ties cannot satisfy.
 would otherwise rot into stale comments fail loudly instead.
 
 **Property tests over examples** where a property exists. The round-trip
-criterion is the obvious one; the rain field's invariants (every painted cell in
-bounds, brightness strictly decreasing down a column, the screen empty when the
-curtain ends) are the less obvious ones.
+criterion is the obvious one; the cascade field's invariants (every painted cell
+in bounds, no two cells sharing a position across 30 seeds, a line reading top to
+bottom, the field empty once every stream has fallen off) are the less obvious
+ones.
 
 The most instructive failure in the project: three tests with "drain" and
 "clears" in their names asserted only that a *list* had emptied, not that the
@@ -350,7 +370,7 @@ isn't there is usually more convincing than a feature list:
 > Japanese katakana glyphs, and the toolchain converts between them losslessly
 > because both are just renderings of one syntax tree. That's enforced by a
 > property test: for any tree, rendering it either way and re-parsing gives back
-> an identical tree, comments included. About 2,000 lines of source, 645 tests,
+> an identical tree, comments included. About 2,500 lines of source, 743 tests,
 > no third-party dependencies.
 
 ## The two-minute version
@@ -448,8 +468,8 @@ Volunteering these lands better than being caught by them:
 ## Appendix: commands to demo it live
 
 ```bash
-matrixlang run examples/hello.rain          # runs, with a rain curtain
-matrixlang run --no-rain examples/hello.rain
+matrixlang run examples/hello.rain          # runs; opens the cascade window
+matrixlang run --no-window examples/hello.rain   # ...or prints as text
 matrixlang lex examples/hello.rain          # token stream
 matrixlang parse examples/hello.rain        # the tree; shape is the lesson
 matrixlang render --face glyph examples/hello.rain   # the operator view
