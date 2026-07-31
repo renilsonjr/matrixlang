@@ -23,6 +23,11 @@ _ALLOWED: dict[str, set[str]] = {
     "values": set(),
     "events": {"nodes"},
     "translit": {"glyphs"},
+    # Not {"events", "ansi"} as the design sketched. Selection deliberately
+    # does not route through detect_color_mode: that vetoes on TERM, and a
+    # window is not a terminal. Dropping the ansi import makes the deviation
+    # visible here rather than only in a comment.
+    "display": {"events"},
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "render": {"glyphs", "nodes", "tokens"},
