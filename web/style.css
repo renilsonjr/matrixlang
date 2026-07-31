@@ -1,0 +1,223 @@
+:root {
+  --bg-color: #040906;
+  --panel-bg: rgba(8, 20, 14, 0.75);
+  --border-color: rgba(0, 255, 102, 0.25);
+  --border-glow: rgba(0, 255, 102, 0.5);
+  --matrix-green: #00ff66;
+  --matrix-dark-green: #008833;
+  --matrix-dim: #00441b;
+  --text-color: #d0ffd8;
+  --font-mono: 'Courier New', 'Fira Code', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#matrix-rain-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.app-container {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  width: 100vw;
+  padding: 16px;
+  gap: 16px;
+  backdrop-filter: blur(2px);
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0, 255, 102, 0.1);
+}
+
+.logo-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  font-size: 24px;
+  color: var(--matrix-green);
+  text-shadow: 0 0 8px var(--matrix-green);
+}
+
+h1 {
+  font-size: 20px;
+  letter-spacing: 2px;
+  color: var(--matrix-green);
+  text-shadow: 0 0 10px rgba(0, 255, 102, 0.6);
+  font-weight: bold;
+}
+
+.sub-tag {
+  font-size: 11px;
+  color: var(--matrix-dark-green);
+  text-transform: uppercase;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+select, button {
+  background: rgba(0, 30, 15, 0.8);
+  color: var(--matrix-green);
+  border: 1px solid var(--border-color);
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+select:hover, button:hover {
+  border-color: var(--matrix-green);
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.3);
+  background: rgba(0, 50, 25, 0.9);
+}
+
+button.btn-primary {
+  background: rgba(0, 255, 102, 0.15);
+  border-color: var(--matrix-green);
+  font-weight: bold;
+  box-shadow: 0 0 12px rgba(0, 255, 102, 0.3);
+}
+
+button.btn-primary:hover {
+  background: rgba(0, 255, 102, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 102, 0.6);
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: rgba(0, 20, 10, 0.6);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--matrix-green);
+}
+
+.editor-container {
+  position: relative;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+textarea#code-input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  color: #00ff66;
+  border: none;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  tab-size: 2;
+  text-shadow: 0 0 3px rgba(0, 255, 102, 0.4);
+}
+
+.console-output {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  color: #a0ffa0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.console-line {
+  display: flex;
+  gap: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+.console-prompt {
+  color: var(--matrix-dark-green);
+}
+
+.console-text {
+  color: #ffffff;
+  text-shadow: 0 0 6px rgba(0, 255, 102, 0.8);
+}
+
+.console-error {
+  color: #ff5555;
+  text-shadow: 0 0 8px rgba(255, 85, 85, 0.6);
+}
+
+.status-bar {
+  padding: 6px 16px;
+  background: rgba(0, 15, 8, 0.8);
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--matrix-dark-green);
+  display: flex;
+  justify-content: space-between;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
