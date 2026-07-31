@@ -1,0 +1,43 @@
+name: tests
+
+# Runs on every pull request, and on main after merge.
+#
+# This exists because of a concrete incident: a change to
+# src/matrixlang/glyphs.py rode in on a documentation pull request, nothing
+# ran the suite against it, and main was left red. A required status check
+# makes that merge impossible rather than merely noticeable afterwards.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every version, not just the first to fail — the point of the
+      # matrix is to learn which versions work, and fail-fast hides that.
+      fail-fast: false
+      matrix:
+        # pyproject.toml declares requires-python = ">=3.11". Until now the
+        # code had only ever run on 3.14, so that floor was a claim rather
+        # than a fact. This matrix is what makes it true.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    name: python ${{ matrix.python-version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # No dependency caching: the package has zero third-party runtime
+      # dependencies and pytest is the only dev dependency, so a cache would
+      # cost more complexity than the seconds it saves.
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest -q
