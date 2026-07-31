@@ -12,6 +12,10 @@ Matrix-style glyphs, with a working interpreter, a REPL, and a test suite.
 
 Source files use the `.rain` extension.
 
+For how it works — the pipeline, the module map, and the design decisions
+behind the two-face architecture — see
+**[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md)**.
+
 ## Status
 
 Stage 5 — runner presentation. The language runs, and it rains.
@@ -165,6 +169,12 @@ suite:
 ```bash
 .venv/bin/python -m pytest
 ```
+
+[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md) is the fastest way
+in: the compilation pipeline, what each module owns, and the six design
+problems that took real work — reconstructing parentheses from a tree that
+does not store them, the round-trip property, and why testing an animation
+required splitting the code on a purity gradient.
 
 Specs and implementation plans live under `docs/superpowers/`. Each of the
 five stages has a design spec and a plan, written before the code and kept
