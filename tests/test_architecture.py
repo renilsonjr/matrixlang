@@ -21,6 +21,7 @@ _ALLOWED: dict[str, set[str]] = {
     "glyphs": set(),
     "nodes": {"tokens"},
     "values": set(),
+    "events": {"nodes"},
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "render": {"glyphs", "nodes", "tokens"},
@@ -31,7 +32,7 @@ _ALLOWED: dict[str, set[str]] = {
         "curtain", "errors", "interpreter", "lexer", "parser", "render",
         "repl", "treeview",
     },
-    "interpreter": {"errors", "nodes", "tokens", "values"},
+    "interpreter": {"errors", "events", "nodes", "tokens", "values"},
     "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
 }
 
