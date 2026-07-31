@@ -121,112 +121,59 @@ def test_tkinter_is_not_imported_at_module_scope():
 # --- What is on screen after the program ends ---------------------------
 
 
-def test_output_stays_on_screen_after_the_program_finishes():
-    # The defect this replaces: the cascade drained ~3.5s after a program
-    # ended and the window went black permanently. "The window outlives the
-    # program" is worthless if the OUTPUT does not — the whole point is
-    # that a program finishing in 200ms leaves something to read.
-    from matrixlang.translit import untransliterate
-
-    window = CascadeWindow(width=40, height=20)
-    window.emit(Output(text="wake up, Neo", line=1))
-    window.close()
-
-    for _ in range(400):
-        cells = window.step()
-
-    assert cells, "window went black after the program ended"
-    pinned = [c for c in cells if c.kind is not Kind.AMBIENT]
-    glyphs = "".join(c.glyph for c in sorted(pinned, key=lambda c: (c.row, c.col)))
-    assert untransliterate(glyphs).strip() == "wake up, Neo"
-
-
 def test_the_screen_is_never_black_after_the_program_ends():
-    # The handover from falling to settled took one frame, during which
-    # the screen blanked. 33ms is a flicker, but the whole promise here is
-    # that output does not disappear, and "disappears briefly" is a
-    # weaker promise than the one being made.
+    # Two earlier answers were wrong here. Draining left the window black
+    # forever; pinning the output left it a still image with filler behind
+    # it. Looping the program's own material is the only arrangement that
+    # is neither blank nor decorative nor stationary.
     window = CascadeWindow(width=40, height=20)
     window.emit(Output(text="wake up, Neo", line=1))
     window.close()
-    blanks = [i for i in range(400) if not window.step()]
+    blanks = [i for i in range(600) if not window.step()]
     assert blanks == []
 
 
-def test_pinned_output_stops_moving_while_ambient_keeps_falling():
+def test_the_program_material_keeps_falling_forever():
     window = CascadeWindow(width=40, height=20)
     window.emit(Output(text="Neo", line=1))
     window.close()
     for _ in range(400):
         window.step()
-
-    def pinned(cells):
-        return tuple(sorted((c.row, c.col, c.glyph) for c in cells
-                            if c.kind is not Kind.AMBIENT))
-
-    frames = [window.step() for _ in range(12)]
-    assert len({pinned(f) for f in frames}) == 1, "pinned output moved"
-    assert len({tuple(sorted((c.row, c.col, c.glyph) for c in f))
-                for f in frames}) > 1, "nothing moved at all"
+    frames = [
+        tuple(sorted((c.row, c.col, c.glyph) for c in window.step()))
+        for _ in range(12)
+    ]
+    assert len(set(frames)) > 1, "the cascade stopped moving"
 
 
-def test_ambient_leaves_the_pinned_rows_clear():
-    # Not just "does not overlap a cell" — nothing ambient may share a ROW
-    # with pinned output. Colour separates the two layers in the window,
-    # but a filler glyph sitting immediately after your last character
-    # makes it impossible to see where the output ends.
-    window = CascadeWindow(width=40, height=20)
-    window.emit(Output(text="wake up, Neo", line=1))
-    window.close()
-    for _ in range(400):
-        cells = window.step()
-    pinned_rows = {c.row for c in cells if c.kind is not Kind.AMBIENT}
-    ambient_rows = {c.row for c in cells if c.kind is Kind.AMBIENT}
-    assert not (pinned_rows & ambient_rows)
+def test_every_output_line_is_replayed_not_only_the_last():
+    from matrixlang.translit import transliterate
 
-
-def test_ambient_never_covers_pinned_output():
-    window = CascadeWindow(width=40, height=20)
-    window.emit(Output(text="wake up, Neo", line=1))
-    window.close()
-    for _ in range(400):
-        cells = window.step()
-    positions = [(c.row, c.col) for c in cells]
-    assert len(positions) == len(set(positions))
-
-
-def test_every_output_line_survives_not_only_the_last():
-    from matrixlang.translit import untransliterate
-
-    window = CascadeWindow(width=40, height=20)
+    window = CascadeWindow(width=60, height=20)
     for text in ("0", "wake up, Neo", "2"):
         window.emit(Output(text=text, line=1))
     window.close()
-    for _ in range(400):
-        cells = window.step()
-    rows = {}
-    for cell in cells:
-        if cell.kind is Kind.AMBIENT:
-            continue
-        rows.setdefault(cell.row, []).append(cell)
-    lines = [
-        untransliterate("".join(c.glyph for c in sorted(v, key=lambda c: c.col)))
-        for _, v in sorted(rows.items())
-    ]
-    assert lines == ["0", "wake up, Neo", "2"]
+    seen = set()
+    for _ in range(900):
+        for cell in window.step():
+            seen.add(cell.glyph)
+    for text in ("0", "wake up, Neo", "2"):
+        assert set(transliterate(text)) <= seen | {" "}
 
 
-def test_the_cascade_still_moves_while_the_program_is_running():
-    # Settling must not kick in early, or nothing ever falls.
-    # Compared several frames apart on purpose: output falls at 0.45 rows
-    # per frame, so two CONSECUTIVE frames are legitimately identical and
-    # an adjacent comparison would fail for the wrong reason.
+def test_nothing_random_ever_enters_the_cascade():
+    # The premise of the project: the cascade carries the program, and
+    # nothing is generated to fill space. Every glyph on screen must come
+    # from material the program actually produced.
+    from matrixlang.translit import transliterate
+
     window = CascadeWindow(width=40, height=20)
-    window.emit(Output(text="wake up, Neo", line=1))
-    first = window.step()
-    for _ in range(5):
-        later = window.step()
-    assert first != later
+    window.emit(Output(text="Neo", line=1))
+    window.close()
+    allowed = set(transliterate("Neo"))
+    for _ in range(400):
+        for cell in window.step():
+            assert cell.glyph in allowed
 
 
 def test_close_before_open_is_safe():

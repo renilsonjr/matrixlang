@@ -18,11 +18,9 @@ decided here, so the window stays a thin edge that can be left untested.
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from math import floor
 from random import Random
 
 from matrixlang.events import Event, Output, Statement
-from matrixlang.glyphs import AMBIENT_ALPHABET
 from matrixlang.nodes import Program, Stmt
 from matrixlang.render import render_glyph
 from matrixlang.translit import transliterate
@@ -31,13 +29,6 @@ from matrixlang.translit import transliterate
 class Kind(Enum):
     SOURCE = auto()
     OUTPUT = auto()
-    AMBIENT = auto()
-
-
-# Ambient never rises above this, so it cannot be mistaken for the head of
-# a stream carrying your program. Legibility of the real material is what
-# the whole two-layer split exists to protect.
-AMBIENT_LEVEL = 0.3
 
 
 # Output falls slower so results linger: a value is the thing a reader
@@ -105,79 +96,18 @@ class _Stream:
         return int(self._head) - (len(self._text) - 1) >= height
 
 
-class _Ambient:
-    """A column of filler glyphs that falls forever.
-
-    Behind the program's material, never in front of it. It exists so the
-    window keeps moving once a program has finished — a screen that stops
-    is not a cascade — and for no other reason, which is why it is opt-in
-    and capped at `AMBIENT_LEVEL`.
-    """
-
-    def __init__(self, col: int, height: int, rng: Random) -> None:
-        self.col = col
-        self._height = height
-        self._rng = rng
-        self._speed = rng.uniform(0.25, 0.7)
-        self._length = rng.randint(3, max(4, height // 2))
-        # Starts already on screen, staggered. Starting above the top means
-        # the window is blank for the first second, which is precisely the
-        # thing ambient exists to prevent.
-        self._head = rng.uniform(0.0, float(height))
-        self._glyphs: dict[int, str] = {}
-        for row in range(floor(self._head) - self._length + 1, floor(self._head) + 1):
-            self._glyphs[row] = rng.choice(AMBIENT_ALPHABET)
-
-    def advance(self) -> None:
-        # floor, not int(): int() truncates toward zero, so a head moving
-        # through negative rows reports the same row twice and skips the
-        # fill. Every row the head crosses must get a glyph or the trail
-        # has holes in it.
-        previous = floor(self._head)
-        self._head += self._speed
-        row = floor(self._head)
-        for crossed in range(previous + 1, row + 1):
-            self._glyphs[crossed] = self._rng.choice(AMBIENT_ALPHABET)
-        if row - self._length >= self._height:
-            # Recycle rather than accumulate: an unbounded glyph dict is a
-            # slow leak in a window that may stay open for hours. Re-enters
-            # from just above the top so the column is never absent for long.
-            self._head = float(-self._length)
-            self._glyphs.clear()
-
-    def cells(self) -> list[Cell]:
-        head = floor(self._head)
-        visible = []
-        for offset in range(self._length):
-            row = head - offset
-            if 0 <= row < self._height and row in self._glyphs:
-                visible.append(
-                    Cell(
-                        row=row,
-                        col=self.col,
-                        glyph=self._glyphs[row],
-                        level=AMBIENT_LEVEL * (1.0 - offset / self._length),
-                        kind=Kind.AMBIENT,
-                    )
-                )
-        return visible
-
-
 class CascadeField:
     def __init__(
-        self, width: int, height: int, rng: Random, ambient: int = 0
+        self, width: int, height: int, rng: Random, loop: bool = False
     ) -> None:
         self.width = width
         self.height = height
         self._rng = rng
-        # Distinct columns, sampled without replacement. Picking each one
-        # independently lets two ambient columns land on the same x and
-        # overwrite each other — the same defect the spike hit with
-        # program streams, and just as invisible in filler glyphs.
-        self._ambient = [
-            _Ambient(col, height, rng)
-            for col in rng.sample(range(width), min(ambient, width))
-        ]
+        self._loop = loop
+        # Everything ever added, so a looping field can replay it. This is
+        # the only thing that falls: nothing random is ever generated, so
+        # the cascade carries the program and nothing else.
+        self._history: list[tuple[str, Kind]] = []
         self._streams: list[_Stream] = []
         self._waiting: list[tuple[str, Kind]] = []
         # Output is remembered, not merely shown. A falling column is gone
@@ -191,6 +121,7 @@ class CascadeField:
         """Queue a line. It falls as soon as a column frees up."""
         if text:
             self._waiting.append((text, kind))
+            self._history.append((text, kind))
 
     def consume(self, event: Event) -> None:
         """Turn an execution event into falling text.
@@ -214,26 +145,38 @@ class CascadeField:
     # --- simulation -----------------------------------------------------
 
     def advance(self) -> tuple[Cell, ...]:
-        self._retire()
-        self._spawn()
+        # Order matters, and the obvious order is wrong. Retiring first
+        # uses last frame's positions, so the frame on which a stream moves
+        # fully off screen draws nothing and is only retired the frame
+        # after — one blank frame at every handover. Move, then retire on
+        # the positions that just happened, then refill.
         for stream in self._streams:
             stream.advance()
+        self._retire()
+        self._replay()
+        # New streams advance immediately, or they contribute nothing to
+        # the frame that created them and the blank frame comes back.
+        for stream in self._spawn():
+            stream.advance()
+
         cells: list[Cell] = []
         for stream in self._streams:
             cells.extend(stream.cells(self.height))
-
-        # Ambient is a layer behind, never a peer. Program material wins
-        # any cell they both want: the whole point of the two layers is
-        # that filler can never obscure a line of your program.
-        taken = {(cell.row, cell.col) for cell in cells}
-        for column in self._ambient:
-            column.advance()
-            cells.extend(
-                cell
-                for cell in column.cells()
-                if (cell.row, cell.col) not in taken
-            )
         return tuple(cells)
+
+    def _replay(self) -> None:
+        """Re-queue the whole program once it has all fallen off.
+
+        A screen that stops is not a cascade, and the alternative — filler
+        glyphs behind static output — puts decoration back in a project
+        whose whole premise is that the cascade carries the program. So the
+        program's own material is what repeats.
+
+        A program that produced nothing has nothing to replay, and must not
+        spin on an empty history.
+        """
+        if self._loop and self._history and not self._streams and not self._waiting:
+            self._waiting.extend(self._history)
 
     def is_empty(self) -> bool:
         return not self._streams and not self._waiting
@@ -241,13 +184,18 @@ class CascadeField:
     def _retire(self) -> None:
         self._streams = [s for s in self._streams if not s.is_finished(self.height)]
 
-    def _spawn(self) -> None:
+    def _spawn(self) -> list[_Stream]:
+        """Start every queued line that has a column free. Returns the new ones."""
         occupied = {stream.col for stream in self._streams}
         free = [col for col in range(self.width) if col not in occupied]
         self._rng.shuffle(free)
+        started: list[_Stream] = []
         while self._waiting and free:
             text, kind = self._waiting.pop(0)
-            self._streams.append(_Stream(free.pop(), text, kind))
+            stream = _Stream(free.pop(), text, kind)
+            self._streams.append(stream)
+            started.append(stream)
+        return started
 
 
 def _header(stmt: Stmt) -> str:

@@ -27,7 +27,7 @@ a missing window into a missing language.
 import queue
 from random import Random
 
-from matrixlang.cascade import CascadeField, Cell, Kind
+from matrixlang.cascade import CascadeField
 from matrixlang.display import Backend  # noqa: F401  (re-exported for callers)
 from matrixlang.events import Error, Event
 
@@ -70,17 +70,12 @@ class CascadeWindow:
         width: int = 80,
         height: int = 30,
         rng: Random | None = None,
-        ambient: int | None = None,
     ) -> None:
         self._queue: queue.Queue[Event] = queue.Queue()
-        # A third of the columns. Dense enough that the screen never stops
-        # moving, sparse enough that program material still stands out.
-        self._field = CascadeField(
-            width,
-            height,
-            rng or Random(),
-            ambient=width // 3 if ambient is None else ambient,
-        )
+        # Looping: once the program's material has all fallen off, it falls
+        # again. Nothing random is ever generated — the cascade carries the
+        # program and only the program.
+        self._field = CascadeField(width, height, rng or Random(), loop=True)
         self._errors: list[str] = []
         self._width = width
         self._height = height
@@ -136,43 +131,17 @@ class CascadeWindow:
     def step(self) -> tuple:
         """Advance one frame and return the cells to draw.
 
-        Split out of `_tick` so the frame stream is testable without Tk —
-        which is how the settling defect below was caught, and how it stays
-        caught.
+        Split out of `_tick` so the frame stream is testable without Tk.
 
-        Once execution has ended and everything has fallen, the output
-        **settles**: it stops moving and stays on screen. Draining to black
-        made "the window outlives the program" meaningless, because the
-        thing worth outliving it is the output, not the frame.
+        There is no settled state and no pinning. The program's own source
+        and output keep falling, on a loop, for as long as the window is
+        open — which means output scrolls past rather than staying put, and
+        is read on each pass. That is the trade: a screen that stops is not
+        a cascade, and filler glyphs behind static text would put back the
+        decoration this project exists to avoid.
         """
         drain(self._queue, self._field, self._errors)
-        cells = self._field.advance()
-        # `or not cells` covers the frame that retires the last stream: it
-        # draws nothing of its own, and without this the screen would blank
-        # for one frame before the settled view took over.
-        if self._closed and (self._field.is_empty() or not cells):
-            return self._pin(cells)
-        return cells
-
-    def _pin(self, background: tuple) -> tuple:
-        """The transcript at rest, with the cascade still falling behind it.
-
-        A screen that stops moving is not a cascade, and output that scrolls
-        away is not output. Pinning the transcript and letting ambient run
-        behind it is the only arrangement that is both.
-        """
-        pinned = [
-            Cell(row=row, col=col, glyph=glyph, level=1.0, kind=Kind.OUTPUT)
-            for row, text in enumerate(self._field.transcript()[: self._height])
-            for col, glyph in enumerate(text[: self._width])
-        ]
-        # Whole rows, not individual cells. Colour separates the layers in
-        # the window, but a filler glyph landing immediately after your
-        # last character makes it impossible to see where the output ends.
-        # The transcript gets a clear band; the cascade runs above and below.
-        occupied = {cell.row for cell in pinned}
-        behind = [c for c in background if c.row not in occupied]
-        return tuple(pinned + behind)
+        return self._field.advance()
 
     def close(self) -> None:
         """Signal that execution is over. The window itself stays open.

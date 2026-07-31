@@ -157,34 +157,11 @@ def test_more_lines_than_columns_are_queued_not_dropped():
     assert f.is_empty()
 
 
-# --- Ambient rain -------------------------------------------------------
+# --- Looping: the program's own material never stops falling ----------
 
 
-def test_ambient_is_off_by_default():
-    # Every test above assumes the field contains only program material.
-    # Ambient is opt-in so those assertions keep meaning what they say.
+def test_looping_is_off_by_default():
     f = field()
-    assert f.advance() == ()
-
-
-def test_ambient_fills_the_field_with_no_program_material_at_all():
-    f = CascadeField(20, 10, Random(7), ambient=6)
-    for _ in range(10):
-        cells = f.advance()
-    assert cells
-
-
-def test_ambient_never_stops():
-    f = CascadeField(20, 10, Random(7), ambient=6)
-    for _ in range(500):
-        assert f.advance()
-
-
-def test_ambient_does_not_make_the_field_look_busy_to_the_settling_check():
-    # is_empty() answers "has the program's material finished falling",
-    # not "is the screen blank". Ambient must not keep it False forever or
-    # the output never settles.
-    f = CascadeField(20, 10, Random(7), ambient=6)
     f.add("ab", Kind.SOURCE)
     for _ in range(200):
         f.advance()
@@ -193,31 +170,48 @@ def test_ambient_does_not_make_the_field_look_busy_to_the_settling_check():
     assert f.is_empty()
 
 
-@pytest.mark.parametrize("seed", range(10))
-def test_no_overlap_between_ambient_and_program_material(seed):
-    f = CascadeField(10, 12, Random(seed), ambient=8)
-    for i in range(20):
-        f.add(f"line{i}", Kind.OUTPUT)
-    for _ in range(80):
+def test_a_looping_field_never_empties():
+    f = CascadeField(20, 10, Random(7), loop=True)
+    f.add("ab", Kind.SOURCE)
+    for _ in range(500):
+        f.advance()
+    assert not f.is_empty()
+
+
+def test_a_looping_field_always_has_something_on_screen():
+    f = CascadeField(20, 10, Random(7), loop=True)
+    f.add("wake up", Kind.OUTPUT)
+    f.add("construct n", Kind.SOURCE)
+    blanks = [i for i in range(500) if not f.advance()]
+    assert blanks == []
+
+
+def test_looping_replays_every_line_not_only_the_last():
+    f = CascadeField(30, 12, Random(3), loop=True)
+    f.add("aaa", Kind.SOURCE)
+    f.add("bbb", Kind.OUTPUT)
+    seen = set()
+    for _ in range(600):
+        for cell in f.advance():
+            seen.add(cell.glyph)
+    assert {"a", "b"} <= seen
+
+
+def test_looping_still_reserves_one_column_per_stream():
+    f = CascadeField(6, 10, Random(5), loop=True)
+    for i in range(4):
+        f.add(f"line{i}", Kind.SOURCE)
+    for _ in range(400):
         positions = [(c.row, c.col) for c in f.advance()]
         assert len(positions) == len(set(positions))
 
 
-def test_program_material_wins_the_cell_it_shares_with_ambient():
-    f = CascadeField(4, 8, Random(1), ambient=4)
-    f.add("abcd", Kind.SOURCE)
-    for _ in range(6):
-        cells = f.advance()
-    program = {(c.row, c.col) for c in cells if c.kind is not Kind.AMBIENT}
-    ambient = {(c.row, c.col) for c in cells if c.kind is Kind.AMBIENT}
-    assert not (program & ambient)
-
-
-def test_ambient_is_dimmer_than_a_stream_head():
-    f = CascadeField(20, 10, Random(7), ambient=6)
-    for _ in range(10):
-        cells = f.advance()
-    assert all(c.level <= 0.4 for c in cells if c.kind is Kind.AMBIENT)
+def test_a_looping_field_with_no_material_stays_empty():
+    # A program that produced nothing has nothing to replay. Looping must
+    # not spin on an empty history.
+    f = CascadeField(20, 10, Random(7), loop=True)
+    for _ in range(50):
+        assert f.advance() == ()
 
 
 # --- Turning events into falling text -----------------------------------
