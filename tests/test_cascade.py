@@ -157,6 +157,69 @@ def test_more_lines_than_columns_are_queued_not_dropped():
     assert f.is_empty()
 
 
+# --- Ambient rain -------------------------------------------------------
+
+
+def test_ambient_is_off_by_default():
+    # Every test above assumes the field contains only program material.
+    # Ambient is opt-in so those assertions keep meaning what they say.
+    f = field()
+    assert f.advance() == ()
+
+
+def test_ambient_fills_the_field_with_no_program_material_at_all():
+    f = CascadeField(20, 10, Random(7), ambient=6)
+    for _ in range(10):
+        cells = f.advance()
+    assert cells
+
+
+def test_ambient_never_stops():
+    f = CascadeField(20, 10, Random(7), ambient=6)
+    for _ in range(500):
+        assert f.advance()
+
+
+def test_ambient_does_not_make_the_field_look_busy_to_the_settling_check():
+    # is_empty() answers "has the program's material finished falling",
+    # not "is the screen blank". Ambient must not keep it False forever or
+    # the output never settles.
+    f = CascadeField(20, 10, Random(7), ambient=6)
+    f.add("ab", Kind.SOURCE)
+    for _ in range(200):
+        f.advance()
+        if f.is_empty():
+            break
+    assert f.is_empty()
+
+
+@pytest.mark.parametrize("seed", range(10))
+def test_no_overlap_between_ambient_and_program_material(seed):
+    f = CascadeField(10, 12, Random(seed), ambient=8)
+    for i in range(20):
+        f.add(f"line{i}", Kind.OUTPUT)
+    for _ in range(80):
+        positions = [(c.row, c.col) for c in f.advance()]
+        assert len(positions) == len(set(positions))
+
+
+def test_program_material_wins_the_cell_it_shares_with_ambient():
+    f = CascadeField(4, 8, Random(1), ambient=4)
+    f.add("abcd", Kind.SOURCE)
+    for _ in range(6):
+        cells = f.advance()
+    program = {(c.row, c.col) for c in cells if c.kind is not Kind.AMBIENT}
+    ambient = {(c.row, c.col) for c in cells if c.kind is Kind.AMBIENT}
+    assert not (program & ambient)
+
+
+def test_ambient_is_dimmer_than_a_stream_head():
+    f = CascadeField(20, 10, Random(7), ambient=6)
+    for _ in range(10):
+        cells = f.advance()
+    assert all(c.level <= 0.4 for c in cells if c.kind is Kind.AMBIENT)
+
+
 # --- Turning events into falling text -----------------------------------
 
 

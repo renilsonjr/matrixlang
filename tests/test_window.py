@@ -14,7 +14,7 @@ import queue
 import threading
 from random import Random
 
-from matrixlang.cascade import CascadeField
+from matrixlang.cascade import CascadeField, Kind
 from matrixlang.events import Error, Output, Statement
 from matrixlang.window import CascadeWindow, drain
 
@@ -136,7 +136,8 @@ def test_output_stays_on_screen_after_the_program_finishes():
         cells = window.step()
 
     assert cells, "window went black after the program ended"
-    glyphs = "".join(c.glyph for c in sorted(cells, key=lambda c: (c.row, c.col)))
+    pinned = [c for c in cells if c.kind is not Kind.AMBIENT]
+    glyphs = "".join(c.glyph for c in sorted(pinned, key=lambda c: (c.row, c.col)))
     assert untransliterate(glyphs).strip() == "wake up, Neo"
 
 
@@ -152,13 +153,46 @@ def test_the_screen_is_never_black_after_the_program_ends():
     assert blanks == []
 
 
-def test_settled_output_stops_moving():
+def test_pinned_output_stops_moving_while_ambient_keeps_falling():
     window = CascadeWindow(width=40, height=20)
     window.emit(Output(text="Neo", line=1))
     window.close()
     for _ in range(400):
         window.step()
-    assert window.step() == window.step()
+
+    def pinned(cells):
+        return tuple(sorted((c.row, c.col, c.glyph) for c in cells
+                            if c.kind is not Kind.AMBIENT))
+
+    frames = [window.step() for _ in range(12)]
+    assert len({pinned(f) for f in frames}) == 1, "pinned output moved"
+    assert len({tuple(sorted((c.row, c.col, c.glyph) for c in f))
+                for f in frames}) > 1, "nothing moved at all"
+
+
+def test_ambient_leaves_the_pinned_rows_clear():
+    # Not just "does not overlap a cell" — nothing ambient may share a ROW
+    # with pinned output. Colour separates the two layers in the window,
+    # but a filler glyph sitting immediately after your last character
+    # makes it impossible to see where the output ends.
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Output(text="wake up, Neo", line=1))
+    window.close()
+    for _ in range(400):
+        cells = window.step()
+    pinned_rows = {c.row for c in cells if c.kind is not Kind.AMBIENT}
+    ambient_rows = {c.row for c in cells if c.kind is Kind.AMBIENT}
+    assert not (pinned_rows & ambient_rows)
+
+
+def test_ambient_never_covers_pinned_output():
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Output(text="wake up, Neo", line=1))
+    window.close()
+    for _ in range(400):
+        cells = window.step()
+    positions = [(c.row, c.col) for c in cells]
+    assert len(positions) == len(set(positions))
 
 
 def test_every_output_line_survives_not_only_the_last():
@@ -172,6 +206,8 @@ def test_every_output_line_survives_not_only_the_last():
         cells = window.step()
     rows = {}
     for cell in cells:
+        if cell.kind is Kind.AMBIENT:
+            continue
         rows.setdefault(cell.row, []).append(cell)
     lines = [
         untransliterate("".join(c.glyph for c in sorted(v, key=lambda c: c.col)))

@@ -28,6 +28,7 @@ bind. The second is the harder one, and §4 serves it.
 | CW-4 | When output is emitted | **During execution**, as an event stream. Collecting per statement is what made the spike's cascade non-incremental. |
 | CW-5 | Are diagnostics transliterated | **Never.** Settled empirically by the spike; see §5. |
 | CW-6 | Does the window outlive the program | **Yes**, until dismissed. A program finishing in 200 ms would otherwise flash and vanish with its output unread. |
+| CW-7 | What the window does once the program has finished | **Output pins, ambient keeps falling.** Added after running it: see §10. |
 
 ## 1. Module boundaries
 
@@ -198,3 +199,49 @@ Every load-bearing guard here gets a teeth-check: inject the bug, watch the test
 - **Tk is a 1990s toolkit**, chosen because it is the only route to a real window that keeps
   the zero-dependency property. That is a genuine constraint of this project rather than a
   preference, and it belongs in the record rather than in a review comment.
+
+---
+
+## 10. CW-7, and two corrections the design earned by being run
+
+Everything above was written before the thing existed. Running it produced
+one design decision the spec had no way to anticipate, and it went through two
+wrong answers first.
+
+**Wrong answer one: the cascade drained.** CW-6 said the window outlives the
+program. It did — and the *output* did not. `hello.rain` emits 15 events, the
+field emptied after ~109 frames (3.6s), and the window then sat black forever.
+Every acceptance criterion in §7 passed while the feature did not do its job,
+because none of them asked what is on screen after execution ends.
+
+**Wrong answer two: the output settled and everything stopped.** Pinning the
+transcript fixed the black screen and replaced it with a still image. A screen
+that stops moving is not a cascade; that trade bought readability by giving up
+the entire point.
+
+**CW-7, the answer that is both.** The transcript pins, bright, and an
+**ambient layer keeps falling behind it** — filler glyphs from the katakana
+block, capped at `AMBIENT_LEVEL = 0.3` so they can never be mistaken for the
+head of a stream carrying real material. Output stays readable; the window
+never stops.
+
+Three consequences worth recording:
+
+- **`AMBIENT_ALPHABET` returns to `glyphs.py`.** It was deleted a commit
+  earlier as dead code, on the reasoning that nothing samples random glyphs
+  once the cascade carries the program. That reasoning was right about the
+  program layer and wrong about there being only one layer. It now has a real
+  consumer.
+- **Ambient clears whole rows, not cells.** A filler glyph landing immediately
+  after your last character makes it impossible to see where the output ends,
+  and colour alone does not fix that. The transcript gets a clear band.
+- **The same column-reuse bug reappeared in the new code.** Ambient columns
+  were sampled independently and two could land on the same x. Third time this
+  defect has appeared in this project; it is now fixed by construction
+  (`rng.sample`) rather than by vigilance.
+
+The general lesson, and the reason this section exists: **the spec's testing
+strategy was sound and its acceptance criteria were not.** Criteria that
+describe what the code does can all pass while the feature fails. The two
+defects here were both found by a human opening the window and looking at it,
+which no part of §5 or §7 required anyone to do.

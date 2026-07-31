@@ -52,8 +52,15 @@ GLYPHS: dict[str, str] = {
 
 REVERSE: dict[str, str] = {glyph: slot for slot, glyph in GLYPHS.items()}
 
-# The block the language's glyphs are drawn from. Nothing generates random
-# glyphs any more — the cascade carries the program — so this exists to
-# state the containment rule, not to be sampled.
+# The block the language's glyphs are drawn from.
 BLOCK_START = 0xFF66
 BLOCK_END = 0xFF9D
+
+# The ambient alphabet: what falls *behind* the program's own material, so
+# the window keeps moving after a program has finished. The 32 language
+# slots alone would read as a repeating pattern rather than as rain, so
+# this is the whole block. Built from codepoints rather than literals, so
+# glyphs.py remains the only place a glyph is chosen by hand.
+AMBIENT_ALPHABET: tuple[str, ...] = tuple(
+    chr(code) for code in range(BLOCK_START, BLOCK_END + 1)
+)

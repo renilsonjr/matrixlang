@@ -66,10 +66,21 @@ class CascadeWindow:
     """A `Display` that draws the cascade in a native window."""
 
     def __init__(
-        self, width: int = 80, height: int = 30, rng: Random | None = None
+        self,
+        width: int = 80,
+        height: int = 30,
+        rng: Random | None = None,
+        ambient: int | None = None,
     ) -> None:
         self._queue: queue.Queue[Event] = queue.Queue()
-        self._field = CascadeField(width, height, rng or Random())
+        # A third of the columns. Dense enough that the screen never stops
+        # moving, sparse enough that program material still stands out.
+        self._field = CascadeField(
+            width,
+            height,
+            rng or Random(),
+            ambient=width // 3 if ambient is None else ambient,
+        )
         self._errors: list[str] = []
         self._width = width
         self._height = height
@@ -135,25 +146,33 @@ class CascadeWindow:
         thing worth outliving it is the output, not the frame.
         """
         drain(self._queue, self._field, self._errors)
-        if self._closed and self._field.is_empty():
-            return self._settled()
         cells = self._field.advance()
-        # The frame that retires the last stream draws nothing, and the
-        # settled view only takes over on the frame after. Handing over
-        # here instead keeps the screen from blanking in between.
-        if not cells and self._closed:
-            return self._settled()
+        # `or not cells` covers the frame that retires the last stream: it
+        # draws nothing of its own, and without this the screen would blank
+        # for one frame before the settled view took over.
+        if self._closed and (self._field.is_empty() or not cells):
+            return self._pin(cells)
         return cells
 
-    def _settled(self) -> tuple:
-        """The transcript at rest: one output line per row, static."""
-        cells = []
-        for row, text in enumerate(self._field.transcript()[: self._height]):
-            for col, glyph in enumerate(text[: self._width]):
-                cells.append(
-                    Cell(row=row, col=col, glyph=glyph, level=1.0, kind=Kind.OUTPUT)
-                )
-        return tuple(cells)
+    def _pin(self, background: tuple) -> tuple:
+        """The transcript at rest, with the cascade still falling behind it.
+
+        A screen that stops moving is not a cascade, and output that scrolls
+        away is not output. Pinning the transcript and letting ambient run
+        behind it is the only arrangement that is both.
+        """
+        pinned = [
+            Cell(row=row, col=col, glyph=glyph, level=1.0, kind=Kind.OUTPUT)
+            for row, text in enumerate(self._field.transcript()[: self._height])
+            for col, glyph in enumerate(text[: self._width])
+        ]
+        # Whole rows, not individual cells. Colour separates the layers in
+        # the window, but a filler glyph landing immediately after your
+        # last character makes it impossible to see where the output ends.
+        # The transcript gets a clear band; the cascade runs above and below.
+        occupied = {cell.row for cell in pinned}
+        behind = [c for c in background if c.row not in occupied]
+        return tuple(pinned + behind)
 
     def close(self) -> None:
         """Signal that execution is over. The window itself stays open.
