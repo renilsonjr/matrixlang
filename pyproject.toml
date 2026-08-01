@@ -26,3 +26,8 @@ dev-mode-exact = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `server/` is deliberately NOT packaged: a top-level `server` on PyPI
+# would collide with half the ecosystem. It runs from the repo root
+# (`python -m server`), which is the clone-and-run model OP-13 chose, and
+# this is what lets the tests import it without a conftest.
+pythonpath = ["."]
