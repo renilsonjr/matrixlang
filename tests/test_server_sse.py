@@ -39,9 +39,18 @@ def test_the_done_sentinel_is_a_frame():
 # --- Encoding execution events -----------------------------------------
 
 
-def test_an_output_event_encodes_its_text():
+def test_an_output_event_encodes_both_the_text_and_the_glyphs():
+    # The cascade draws `glyphs`; `text` is for a status line or a log.
+    # Sending only `text` put Latin in the cascade with the glyph wall
+    # selected, and no test caught it because none asked what the cascade
+    # was handed — only the browser did.
+    from matrixlang.translit import untransliterate
+
     payload = json.loads(encode(Output(text="wake up, Neo", line=2))[6:])
-    assert payload == {"kind": "output", "text": "wake up, Neo", "line": 2}
+    assert payload["text"] == "wake up, Neo"
+    assert payload["line"] == 2
+    assert not any(ch.isascii() and ch.isalnum() for ch in payload["glyphs"])
+    assert untransliterate(payload["glyphs"]) == "wake up, Neo"
 
 
 def test_a_statement_event_encodes_its_glyph_face():
@@ -50,6 +59,18 @@ def test_a_statement_event_encodes_its_glyph_face():
     assert payload["kind"] == "statement"
     assert payload["line"] == 1
     assert payload["source"]
+
+
+def test_a_statement_event_carries_both_faces():
+    # The toggle in layout D switches between a pure glyph wall and the
+    # glyph face with Latin identifiers. Both come from the server:
+    # untransliterating in the browser would need a copy of the table in
+    # JavaScript, which is exactly the duplication that made
+    # web/interpreter.js drift from the language it claimed to implement.
+    program = parse(lex('construct name = "Neo"\n'))
+    payload = json.loads(encode(Statement(node=program.statements[0], line=1))[6:])
+    assert "name" in payload["latin"]
+    assert not any(ch.isascii() and ch.isalnum() for ch in payload["source"])
 
 
 def test_a_statement_event_carries_no_python_repr():

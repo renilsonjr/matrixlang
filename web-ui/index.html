@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator — MatrixLang</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<main class="layout">
+
+  <section class="left">
+
+    <article class="panel">
+      <header class="panel-head">
+        <span>PROGRAM.RAIN</span>
+        <span class="controls"><button id="run" type="button">run</button></span>
+      </header>
+      <div class="panel-body">
+        <textarea id="source" spellcheck="false" aria-label="MatrixLang source"
+>construct n = 3
+dejavu n > 0
+  trace n
+  n = n - 1
+flatline
+trace "wake up, Neo"
+</textarea>
+      </div>
+      <footer class="status" id="program-status">ready</footer>
+    </article>
+
+    <article class="panel">
+      <header class="panel-head">
+        <span>OPERATOR</span>
+        <span class="badge" id="operator-state">idle</span>
+      </header>
+      <div class="panel-body chat" id="chat"></div>
+      <footer class="composer">
+        <form id="ask" autocomplete="off">
+          <span class="prompt">&gt;</span>
+          <input id="request" type="text" placeholder="describe a program…"
+                 aria-label="Describe a program">
+        </form>
+      </footer>
+    </article>
+
+  </section>
+
+  <article class="panel cascade-panel">
+    <header class="panel-head">
+      <span>CASCADE</span>
+      <span class="controls" role="group" aria-label="Source face">
+        <button type="button" id="face-glyph" class="on">glyph wall</button>
+        <button type="button" id="face-latin">latin</button>
+      </span>
+    </header>
+    <div class="cascade"><canvas id="cascade"></canvas></div>
+    <footer class="status" id="cascade-status">idle</footer>
+  </article>
+
+</main>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

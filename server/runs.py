@@ -27,11 +27,13 @@ import time
 import uuid
 
 from matrixlang.errors import MatrixLangError, recursion_guard
-from matrixlang.events import Error, Event, Output, Statement
+from matrixlang.events import Event
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.operator.validate import DRY_RUN_MAX_STEPS
 from matrixlang.parser import parse
+
+from server.sse import payload
 
 # Generous for anything a person runs interactively, short enough that a
 # wedged request cannot hold a connection open indefinitely.
@@ -51,15 +53,13 @@ class Run:
     # --- producer side ---------------------------------------------------
 
     def emit(self, event: Event) -> None:
-        """Called from the interpreter's thread. Queue only."""
-        if isinstance(event, Output):
-            self._queue.put({"kind": "output", "text": event.text, "line": event.line})
-        elif isinstance(event, Statement):
-            self._queue.put(
-                {"kind": "statement", "line": event.line, "node": event.node}
-            )
-        elif isinstance(event, Error):
-            self._queue.put({"kind": "error", "message": event.message})
+        """Called from the interpreter's thread. Queue only.
+
+        The wire shape is built here, once, by `sse.payload` — the same
+        function the HTTP layer would have used. Building it in both
+        places is what let the two drift.
+        """
+        self._queue.put(payload(event))
 
     def fail(self, message: str) -> None:
         self._queue.put({"kind": "error", "message": message})

@@ -17,8 +17,9 @@ channel. That is precisely what Server-Sent Events are for, and why this
 needs no framework: `BaseHTTPRequestHandler` writing `data:` lines is the
 whole implementation.
 
-Serving the UI is deliberately absent — that is OP-E's, and until it
-exists this is a `curl` surface.
+Everything else on `GET` is the UI, served from `web-ui/` on disk. Paths
+are resolved and checked against that directory: the browser supplies
+them, so they are untrusted input like any other.
 
 **Loopback only.** This runs untrusted generated code on the machine's
 own owner's behalf, with no authentication. Binding anything but
@@ -28,10 +29,19 @@ network, which OP-13 explicitly deferred.
 
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from server.runs import Runs
 from server.sse import DONE, frame
+
+UI = Path(__file__).resolve().parent.parent / "web-ui"
+
+_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+}
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8420
@@ -58,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/events":
             self._events(parse_qs(parsed.query).get("run", [""])[0])
         else:
-            self._json(404, {"error": "not found"})
+            self._static(parsed.path)
 
     # --- endpoints -------------------------------------------------------
 
@@ -124,20 +134,38 @@ class Handler(BaseHTTPRequestHandler):
             if event["kind"] == "done":
                 self._write(DONE)
                 return
-            if event["kind"] == "statement":
-                from server.sse import _header
-
-                payload = {
-                    "kind": "statement",
-                    "line": event["line"],
-                    "source": _header(event["node"]),
-                }
-            else:
-                payload = event
-            self._write(frame(json.dumps(payload)))
+            self._write(frame(json.dumps(event)))
             if event["kind"] == "error":
                 self._write(DONE)
                 return
+
+    def _static(self, route: str) -> None:
+        """Serve the UI from disk, refusing anything outside it.
+
+        The path comes from the browser, so it is untrusted. Resolving it
+        and checking containment is the check that matters — a prefix
+        test on the raw string is defeated by `..`, by an encoded `..`,
+        and by a symlink.
+        """
+        name = unquote(route).lstrip("/") or "index.html"
+        try:
+            target = (UI / name).resolve()
+            target.relative_to(UI.resolve())
+        except (ValueError, OSError):
+            self._json(403, {"error": "forbidden"})
+            return
+        if not target.is_file():
+            self._json(404, {"error": "not found"})
+            return
+
+        body = target.read_bytes()
+        self.send_response(200)
+        self.send_header(
+            "Content-Type", _TYPES.get(target.suffix, "application/octet-stream")
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     # --- plumbing --------------------------------------------------------
 

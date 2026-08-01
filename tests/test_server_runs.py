@@ -129,3 +129,24 @@ def test_a_finished_run_replays_nothing_and_says_done():
     run = runs.start("trace 1\n")
     drain(run)
     assert run.next(timeout=0.5)["kind"] == "done"
+
+
+# --- One definition of the wire shape ------------------------------------
+
+
+def test_the_queue_holds_exactly_what_the_wire_carries():
+    # The bug this exists to prevent: `sse.encode` gained a transliterated
+    # `glyphs` field for output and the queue did not, so the browser drew
+    # Latin with the glyph wall selected while every test of `encode`
+    # passed. Both now come from `sse.payload`.
+    import json
+
+    from matrixlang.events import Output
+    from server.sse import encode
+
+    runs = Runs()
+    events = drain(runs.start('trace "wake up, Neo"\n'))
+    queued = next(e for e in events if e["kind"] == "output")
+    encoded = json.loads(encode(Output(text="wake up, Neo", line=1))[6:])
+    assert queued["glyphs"] == encoded["glyphs"]
+    assert not any(ch.isascii() and ch.isalnum() for ch in queued["glyphs"])
