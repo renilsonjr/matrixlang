@@ -6,7 +6,8 @@ a program or a model holding the table can recover the text exactly.
 Not the language's glyph face. This table's output is never lexed, so it
 owes nothing to bijectivity with the lexer or to the round-trip
 criterion — which is precisely what lets it cover the Latin alphabet at
-all. The language's 32 slots cannot: 24 free glyphs, 26 letters needed.
+all. The language's face cannot: it has taken 35 of the block's 56
+glyphs, leaving 21 free where 26 letters are needed.
 """
 
 import random
@@ -16,6 +17,7 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.translit import (
+    ESCAPE,
     REVERSE,
     SHIFT,
     TABLE,
@@ -48,12 +50,49 @@ def test_transliteration_round_trips(text):
 
 
 def test_round_trip_holds_over_fuzzed_strings():
-    # The spike verified 4,000. Seeded so a failure reproduces exactly.
+    # The old alphabet was `string.printable + "áçñ日本語"` — which contains
+    # no glyphs, so the fuzz could not reach the one case that broke the
+    # invariant. A test that cannot fail proves nothing; the glyphs and
+    # the markers are in the alphabet now.
     rng = random.Random(7)
-    alphabet = string.printable + "áçñ日本語"
+    alphabet = (
+        string.printable + "áçñ日本語" + "".join(REVERSE) + SHIFT + ESCAPE
+    )
     for _ in range(4000):
         text = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 40)))
-        assert untransliterate(transliterate(text)) == text
+        assert untransliterate(transliterate(text)) == text, repr(text)
+
+
+# --- The case the old fuzz could not reach ------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ｱ",                      # a language glyph in a string literal
+        "aｱb",
+        "ｱｲｳ",
+        "wake up, ｱ",
+    ],
+)
+def test_a_glyph_in_the_input_still_round_trips(text):
+    # Reachable from a .rain file: `trace "ｱ"` prints a glyph, the cascade
+    # shows it, and before this a reader decoding with the published table
+    # got 'g'. Passthrough characters that are already glyphs decoded as
+    # though they had been encoded.
+    assert untransliterate(transliterate(text)) == text
+
+
+def test_the_markers_themselves_round_trip():
+    # SHIFT decoded to nothing at all: it was consumed as a marker.
+    for marker in (SHIFT, ESCAPE):
+        assert untransliterate(transliterate(marker)) == marker
+    assert untransliterate(transliterate(SHIFT + ESCAPE + "a")) == SHIFT + ESCAPE + "a"
+
+
+def test_the_escape_marker_is_not_also_an_encoded_glyph():
+    assert ESCAPE not in REVERSE
+    assert ESCAPE != SHIFT
 
 
 # --- The three decisions that make reversibility hold -------------------

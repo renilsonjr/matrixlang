@@ -2,7 +2,7 @@
 
 This is NOT the language's glyph face. The distinction matters:
 
-  glyphs.GLYPHS   the LANGUAGE's face. 32 slots, bijective, round-trips
+  glyphs.GLYPHS   the LANGUAGE's face. 35 slots, bijective, round-trips
                   through the lexer. Governed by D-03 and spec section 4.3.
   this module     a DISPLAY dictionary. Its output is never lexed, so it
                   owes nothing to D-03 and may reuse glyphs the language
@@ -21,10 +21,32 @@ Three design decisions make that hold.
    meant. One marker glyph before a letter costs a character and keeps the
    text decodable.
 
-2. UNCOVERED CHARACTERS PASS THROUGH UNCHANGED, AND THAT IS STILL
-   REVERSIBLE. The glyph alphabet is disjoint from ASCII, so a decoder can
-   always tell an encoded character from a passed-through one. There is no
-   ambiguity to resolve and no escape sequence to get wrong.
+2. UNCOVERED CHARACTERS PASS THROUGH UNCHANGED, AND AN ESCAPE MARKER
+   KEEPS THAT REVERSIBLE. The reasoning used to be that the glyph alphabet
+   is disjoint from ASCII, so a decoder can always tell an encoded
+   character from a passed-through one, and no escape was needed.
+
+   That was wrong for one case, and the case is reachable: a string
+   literal may itself contain a glyph. A program that traces a glyph
+   printed it, the glyph passed through unencoded, and a reader decoding
+   with this table got back a letter — because the decoder cannot
+   distinguish a glyph that was ENCODED from one that was merely PASSED
+   THROUGH. The two markers had the same problem: SHIFT decoded to
+   nothing at all.
+
+   A glyph in the input is therefore prefixed with ESCAPE, meaning "the
+   next character is literal". The invariant is total again, and the fuzz
+   that is supposed to prove it now includes glyphs in its alphabet —
+   before, it drew from `string.printable` plus a few accents, so it could
+   not reach the failing case at all.
+
+   `escape_glyphs=False` opts out, and exactly one caller does: the
+   cascade's SOURCE lines. Those are already documented as not decodable
+   — the language's own glyphs and this table overlap, so a naive decode
+   garbles keywords either way — and escaping each of them would double
+   the height of every line on screen for a property that line does not
+   have. OUTPUT keeps the guarantee, and output is the half anyone would
+   want to read back.
 
 3. SPACE STAYS A SPACE. Encoding it would gain nothing and destroy word
    boundaries, which are most of what makes the result legible as
@@ -64,19 +86,38 @@ for _char in _PUNCTUATION:
 # Marks the NEXT glyph as uppercase. This is what makes case survive.
 SHIFT = _available.pop(0)
 
+# Marks the NEXT character as literal — used when the input already
+# contains a glyph or a marker. Without it, such a character decodes as
+# though it had been encoded.
+ESCAPE = _available.pop(0)
+
 TABLE: dict[str, str] = {**_letter_map, **_DIGITS, **_punct_map}
 REVERSE: dict[str, str] = {glyph: char for char, glyph in TABLE.items()}
 
 assert len(REVERSE) == len(TABLE), "glyph collision — the table is not bijective"
 assert SHIFT not in REVERSE, "the shift marker collides with an encoded glyph"
+assert ESCAPE not in REVERSE, "the escape marker collides with an encoded glyph"
+assert ESCAPE != SHIFT, "the two markers must be distinguishable"
+
+_LITERAL = frozenset(REVERSE) | {SHIFT, ESCAPE}
 
 
-def transliterate(text: str) -> str:
-    """Render text in glyphs. Reversible via untransliterate()."""
+def transliterate(text: str, escape_glyphs: bool = True) -> str:
+    """Render text in glyphs. Reversible via untransliterate(), for all text.
+
+    `escape_glyphs=False` drops the guarantee for input that already
+    contains glyphs, in exchange for not growing the line. See the module
+    docstring: only the cascade's source lines use it.
+    """
     out = []
     for char in text:
         lowered = char.lower()
-        if lowered in TABLE:
+        if escape_glyphs and char in _LITERAL:
+            # Already a glyph or a marker: say so, or the decoder will
+            # read it as something this function encoded.
+            out.append(ESCAPE)
+            out.append(char)
+        elif lowered in TABLE:
             if char.isupper():
                 out.append(SHIFT)
             out.append(TABLE[lowered])
@@ -89,7 +130,15 @@ def untransliterate(glyphs: str) -> str:
     """Recover the original text. The inverse of transliterate()."""
     out = []
     shifted = False
+    literal = False
     for char in glyphs:
+        if literal:
+            out.append(char)
+            literal = False
+            continue
+        if char == ESCAPE:
+            literal = True
+            continue
         if char == SHIFT:
             shifted = True
             continue
@@ -108,5 +157,6 @@ def table_for_readers() -> str:
     """
     rows = [f"  {char} {glyph}" for char, glyph in TABLE.items()]
     rows.append(f"  {SHIFT} marks the next glyph as uppercase")
+    rows.append(f"  {ESCAPE} marks the next character as literal")
     rows.append("  space and any unlisted character pass through unchanged")
     return "\n".join(rows)

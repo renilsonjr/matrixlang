@@ -171,6 +171,10 @@ def _run_as_text(tree, max_steps: int | None) -> int:
     return 0
 
 
+# Injectable so the abandoned-run path is testable without a real wait.
+_join_timeout = 1.0
+
+
 def _run_in_window(tree, window, max_steps: int | None) -> int:
     """Execute on a worker thread, drawing on the UI thread.
 
@@ -201,8 +205,14 @@ def _run_in_window(tree, window, max_steps: int | None) -> int:
         window.mainloop()
     except KeyboardInterrupt:
         return 130
-    worker.join(timeout=1.0)
-    return outcome[0] if outcome else 0
+    worker.join(timeout=_join_timeout)
+    if outcome:
+        return outcome[0]
+    # The viewer closed the window before the program finished. Reporting
+    # success would be a lie — the run was abandoned, and a failing
+    # program would have exited 0. Closing the window is the GUI
+    # equivalent of Ctrl-C, so it reports what Ctrl-C reports.
+    return 130
 
 
 def _command_render(path: str, face: str) -> int:

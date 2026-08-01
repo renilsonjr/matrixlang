@@ -250,7 +250,7 @@ def _header(stmt: Stmt, glyph_source: bool = True) -> str:
     the ASCII source, is deliberate. The alternative spells `construct` out
     as nine glyphs: it decodes perfectly but doubles every line, and since a
     line falls vertically, height is length — a 30-row field stops fitting
-    whole statements. It also erases the 32-slot table from the screen, which
+    whole statements. It also erases the 35-slot table from the screen, which
     is the notation that makes this MatrixLang rather than generic rain.
 
     The cost, stated because it is real: a naive decode of a source line
@@ -262,4 +262,10 @@ def _header(stmt: Stmt, glyph_source: bool = True) -> str:
     rendered = render_glyph(Program([stmt]))
     lines = [line.strip() for line in rendered.splitlines() if line.strip()]
     header = lines[0] if lines else ""
-    return transliterate(header) if glyph_source else header
+    # escape_glyphs=False: this line is already full of the language's own
+    # glyphs, and escaping each one would double its height on screen —
+    # the exact cost that decided against spelling `construct` out. The
+    # line is documented as not decodable anyway (the two tables overlap),
+    # so the escape would buy a property it does not have. Output, which
+    # does have it, is transliterated with the guarantee intact.
+    return transliterate(header, escape_glyphs=False) if glyph_source else header

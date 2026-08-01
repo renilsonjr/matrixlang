@@ -372,6 +372,24 @@ def test_the_program_output_reaches_the_window_as_events(
     assert texts == ["wake up, Neo"]
 
 
+def test_a_run_abandoned_by_closing_the_window_does_not_report_success(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    # `return outcome[0] if outcome else 0` reported success for a run the
+    # viewer walked away from — including one that would have failed. A
+    # closed window is the GUI equivalent of Ctrl-C, so it exits 130.
+    class ClosedEarly(_FakeWindow):
+        def mainloop(self):
+            pass  # viewer closed it; the worker never recorded an outcome
+
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    monkeypatch.setattr(cli, "CascadeWindow", ClosedEarly)
+    monkeypatch.setattr(cli, "_join_timeout", 0.0)
+    path = source_file("construct n = 0\ndejavu true\n  n = n + 1\nflatline\n")
+    assert main(["run", path]) == 130
+
+
 def test_only_run_takes_the_window_flag(source_file):
     # R-03's successor: the display belongs to the runner, never the
     # editor. The flag exists on run and nowhere else.
