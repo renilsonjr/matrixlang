@@ -3,8 +3,8 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Written against `feat/cascade-window` — 2,510 lines of source across 20 modules,
-3,514 lines of tests, 743 tests passing, zero third-party dependencies.
+Written against `feat/stage-6-functions-impl` — 3,107 lines of source across 20
+modules, 4,554 lines of tests, 878 tests passing, zero third-party dependencies.
 
 ---
 
@@ -66,15 +66,15 @@ two-face design work, and it is where most of the interesting problems live.
 | Module | Lines | Responsibility |
 | --- | --- | --- |
 | `tokens.py` | 75 | Token vocabulary. Pure data |
-| `nodes.py` | 114 | AST node definitions. Pure data |
+| `nodes.py` | 151 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 48 | Runtime value type rules |
-| `glyphs.py` | 60 | The 32-slot bijective glyph table |
+| `values.py` | 118 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `glyphs.py` | 66 | The 35-slot bijective glyph table. 21 slots left of the block |
 | `lexer.py` | 244 | Source text → token list. Handles both faces |
-| `parser.py` | 313 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 206 | Tree walker. Executes the AST |
-| `render.py` | 206 | AST → source text, in either face |
-| `treeview.py` | 109 | AST → indented text, for teaching |
+| `parser.py` | 396 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 355 | Tree walker. Executes the AST |
+| `render.py` | 232 | AST → source text, in either face |
+| `treeview.py` | 133 | AST → indented text, for teaching |
 | `repl.py` | 110 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
 | `translit.py` | 112 | The reversible display table. Pure |
@@ -103,8 +103,14 @@ katakana literal, which keeps the glyph set genuinely swappable.
 
 ## 4. The language
 
-**Keywords (8):** `construct` (declare), `trace` (print), `redpill` / `bluepill`
-(if / else), `dejavu` (while), `flatline` (end block), `true` / `false`.
+**Keywords (10):** `construct` (declare), `trace` (print), `redpill` / `bluepill`
+(if / else), `dejavu` (while), `flatline` (end block), `true` / `false`, and from
+Stage 6 `agent` (define) / `jackout` (return).
+
+An Agent is a callable, reusable program in the films; `jackout` is leaving the
+construct and coming back with something. Both had to pass D-05's test — does it
+read as vocabulary, or as a joke that gets tiring — which is why `true`/`false`
+stayed English.
 
 Blocks are keyword-delimited rather than braced, so every block boundary is a
 glyph in the glyph face rather than untranslated Latin punctuation.
@@ -128,8 +134,17 @@ flatline
 - **Types:** integer, boolean, string. No floats — they buy nothing pedagogically
   and cost `.` disambiguation, a second numeric type, and a division-semantics
   tangent.
-- **Dynamic typing, one flat environment.** A single dict. With no functions,
-  there is nothing for lexical scoping to do yet.
+- **Dynamic typing, a chain of environments.** Stage 6 replaced the flat dict:
+  `construct` defines in the current scope, assignment and reads walk outward to
+  the nearest binding. That walk is the whole of what lexical scoping is, and
+  functions are what gave the language a reason to have it.
+- **Closures capture where an agent was *defined*,** not where it is called. A
+  returned inner agent still sees the scope that made it, after that call has
+  finished.
+- **`NOTHING` is a sentinel, not a value.** An agent that never jacks out
+  produces it; a call in statement position may, and a call in expression
+  position that does is a runtime error. The language still has three types, and
+  no program can hold or compare a null.
 - **`construct` declares; `=` requires a prior declaration.** Re-declaring is an
   error; assigning to an undeclared name is an error. This is what makes
   `construct` carry meaning rather than being decoration.
@@ -343,8 +358,6 @@ ended. The lesson is that a test's name is not its assertion.
 Scope discipline is part of the design, and being able to say *why* something
 isn't there is usually more convincing than a feature list:
 
-- **Functions, closures, lexical scope, return values.** With no functions there
-  is nothing for scoping to do, which is what justifies the flat-dict environment.
 - **Collections** of any kind.
 - **Floats** — see §4.
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.

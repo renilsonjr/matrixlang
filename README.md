@@ -26,12 +26,28 @@ from material the program produced.
 
 Working today: lexer, parser, tree-walking interpreter, REPL, CLI, the
 two interchangeable source faces with a lossless round trip, the cascade
-window, and a step limit that stops runaway loops.
+window, a step limit that stops runaway loops, and **functions with
+closures**.
 
-Designed and approved but **not implemented**: functions with closures
-([#21](https://github.com/renilsonjr/matrixlang/issues/21)), and
-Operator, an assistive companion that writes MatrixLang from plain
-language (`docs/superpowers/specs/2026-08-01-operator-design.md`).
+```
+agent adder(n)
+  agent add(m)
+    jackout n + m
+  flatline
+  jackout add
+flatline
+
+construct add5 = adder(5)
+trace add5(37)          # 42
+```
+
+`agent` defines, `jackout` returns. An agent captures the scope it was
+*defined* in, so `add5` still knows what `n` was long after `adder`
+finished.
+
+Designed and approved but **not implemented**: Operator, an assistive
+companion that writes MatrixLang from plain language
+(`docs/superpowers/specs/2026-08-01-operator-design.md`).
 
 ## Clone it and run it
 

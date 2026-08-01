@@ -11,7 +11,11 @@ from matrixlang.nodes import (
     BoolLiteral,
     Declare,
     Expr,
+    Call,
+    ExprStmt,
+    FunctionDef,
     If,
+    Return,
     Name,
     NumberLiteral,
     Program,
@@ -84,6 +88,21 @@ def _statement(stmt: Stmt, depth: int, lines: list[str]) -> None:
             _statement(child, depth + 2, lines)
         for comment in stmt.body_trailing:
             lines.append(f"{pad}    {comment}")
+    elif isinstance(stmt, FunctionDef):
+        params = ", ".join(stmt.params)
+        lines.append(f"{pad}FunctionDef '{stmt.name}' ({params}){tail}")
+        lines.append(f"{pad}  body:")
+        for child in stmt.body:
+            _statement(child, depth + 2, lines)
+        for comment in stmt.body_trailing:
+            lines.append(f"{pad}    {comment}")
+    elif isinstance(stmt, Return):
+        lines.append(f"{pad}Return{tail}")
+        if stmt.value is not None:
+            _expression(stmt.value, depth + 1, lines)
+    elif isinstance(stmt, ExprStmt):
+        lines.append(f"{pad}ExprStmt{tail}")
+        _expression(stmt.value, depth + 1, lines)
     else:
         raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
@@ -98,6 +117,15 @@ def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
         lines.append(f"{pad}BoolLiteral {str(expr.value).lower()}")
     elif isinstance(expr, Name):
         lines.append(f"{pad}Name '{expr.ident}'")
+    elif isinstance(expr, Call):
+        lines.append(f"{pad}Call")
+        lines.append(f"{pad}  callee:")
+        _expression(expr.callee, depth + 2, lines)
+        # Printed even when empty: "no arguments" is a fact about the tree
+        # and the shape is the lesson.
+        lines.append(f"{pad}  args:")
+        for arg in expr.args:
+            _expression(arg, depth + 2, lines)
     elif isinstance(expr, Unary):
         lines.append(f"{pad}Unary {_OPS[expr.op]}")
         _expression(expr.operand, depth + 1, lines)
