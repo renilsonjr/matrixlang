@@ -18,29 +18,52 @@ behind the two-face architecture — see
 
 ## Status
 
-Stage 6 — the cascade is the output device. The language runs, and its
-output falls.
+**The language runs, and its output falls.** The cascade is the output
+device: running a program opens a window in which the program's own
+source and output fall as glyphs, on a loop, for as long as the window
+is open. Nothing random is ever generated — every glyph on screen came
+from material the program produced.
 
-## Running it locally
+Working today: lexer, parser, tree-walking interpreter, REPL, CLI, the
+two interchangeable source faces with a lossless round trip, the cascade
+window, and a step limit that stops runaway loops.
 
-Requires **Python 3.11 or newer** and nothing else. There are no third-party
-dependencies — the interpreter is standard library only, and `pytest` is the
-sole development dependency.
+Designed and approved but **not implemented**: functions with closures
+([#21](https://github.com/renilsonjr/matrixlang/issues/21)), and
+Operator, an assistive companion that writes MatrixLang from plain
+language (`docs/superpowers/specs/2026-08-01-operator-design.md`).
+
+## Clone it and run it
+
+Anyone can clone this and run it on their own machine. It is not hosted
+anywhere and does not need to be.
+
+**Requirements:** Python 3.11 or newer, and nothing else. There are no
+third-party dependencies — the interpreter is standard library only, and
+`pytest` is the sole development dependency. The cascade window uses
+`tkinter`, which ships with Python; if it is missing, everything still
+works and output prints as text.
 
 ```bash
 git clone https://github.com/renilsonjr/matrixlang.git
 cd matrixlang
+```
+
+```bash
 python3 -m venv .venv
+```
+
+```bash
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Check it works:
+Check it works — you should see the full suite pass:
 
 ```bash
 .venv/bin/python -m pytest
 ```
 
-You should see the full suite pass. Then run your first program:
+Then run your first program:
 
 ```bash
 .venv/bin/matrixlang run examples/hello.rain
@@ -66,10 +89,17 @@ displayed — a pipe, a redirect, a CI job — which is the same guarantee
 that keeps `matrixlang run prog.rain > out.txt` byte-clean. Seeing no
 window in those contexts is correct behaviour, not a fault.
 
-What falls is your program: source lines in the glyph face, and the
-values the program actually produced, transliterated. It is decodable,
-not decorative — the table is reversible, so anything on screen can be
-read back exactly.
+What falls is your program, and nothing else. Source lines and output
+are both transliterated, so the cascade is a **pure glyph wall** with no
+Latin in it. It is decodable rather than decorative: the table is
+reversible, so `ﾁ｡ｵ･ ｿｺﾆ ﾙｸ･ｹ` reads back as `wake up, Neo`.
+
+Source falls faster; output falls slower and brighter, so results linger.
+When everything has fallen off the bottom it starts again — a screen that
+stops is not a cascade.
+
+`glyph_source=False` on `CascadeField` or `CascadeWindow` puts Latin
+identifiers back, if you would rather read the source as you wrote it.
 
 If you expected a window and got text, this prints the actual decision
 using the same code the runner uses:
@@ -146,6 +176,25 @@ to that.
 
 `--no-window` prints as text instead, which is what you want while iterating.
 
+### Runaway programs
+
+`run` stops after 200,000 statements and reports it as an ordinary
+diagnostic with a line and column:
+
+```
+matrixlang: [line 3, column 3] program exceeded the step limit — likely an infinite loop
+```
+
+The limit counts **statements executed**, not stack depth, so a
+`dejavu true` loop is caught even though it never grows the stack. Raise
+it, lower it, or remove it entirely:
+
+```bash
+.venv/bin/matrixlang run --max-steps 0 examples/hello.rain
+```
+
+`0` means no limit.
+
 ## The glyphs
 
 The falling characters are Unicode half-width katakana (U+FF66–FF9D), not
@@ -187,9 +236,12 @@ problems that took real work — reconstructing parentheses from a tree that
 does not store them, the round-trip property, and why testing an animation
 required splitting the code on a purity gradient.
 
-Specs and implementation plans live under `docs/superpowers/`. Each of the
-five stages has a design spec and a plan, written before the code and kept
-as the record of why the thing is shaped the way it is.
+Specs and implementation plans live under `docs/superpowers/`, written
+before the code and kept as the record of why the thing is shaped the way
+it is. Stages 1–5 each have a design spec and a plan; the cascade window,
+Stage 6 and Operator have specs. The cascade window's spec has a §10
+worth reading on its own — it records two wrong answers that passed a
+full test suite and were only caught by a human opening the window.
 
 ### A note on untrusted `.rain` files
 
@@ -205,6 +257,10 @@ The refusal happens at the lexer rather than by escaping output, because
 language-surface spec §3.4.
 
 That is not a sandbox, and this is not a security product. Two things it
-deliberately does not cover: a program can loop forever, which is what
-Turing-completeness means, and an AST built directly in Python rather than
-parsed from source is not subject to the rule.
+deliberately does not cover: an AST built directly in Python rather than
+parsed from source is not subject to the control-character rule, and
+`--max-steps 0` removes the runaway-loop guard on request.
+
+A program **can** still express an unbounded loop — that is what
+Turing-completeness means — but by default it will be stopped after
+200,000 statements rather than running until you kill it.

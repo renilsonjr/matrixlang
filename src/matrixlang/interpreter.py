@@ -33,13 +33,22 @@ from matrixlang.nodes import (
 from matrixlang.tokens import TokenType
 from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
 
+# Generous enough that no program a person writes on purpose will reach it,
+# small enough that a runaway loop stops in well under a second. A guess,
+# not a measurement — it will want raising once collections make loops over
+# real data possible.
+DEFAULT_MAX_STEPS = 200_000
+
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
 
 
 class Interpreter:
     def __init__(
-        self, out: TextIO | None = None, sink: EventSink | None = None
+        self,
+        out: TextIO | None = None,
+        sink: EventSink | None = None,
+        max_steps: int | None = DEFAULT_MAX_STEPS,
     ) -> None:
         """Execute into a sink. `out` is the shorthand for "a TextSink on this".
 
@@ -48,6 +57,19 @@ class Interpreter:
         hand at every call site. `sink` wins if both are given.
         """
         self.environment: dict[str, object] = {}
+        # Breadth, not depth. Python's recursion limit already bounds how
+        # deep a call stack goes; nothing bounded how many statements ran.
+        # A `dejavu true` loop never grows the stack, so a depth limit
+        # would never catch it — this is what does.
+        #
+        # A step count rather than a wall-clock timeout because a clock is
+        # not pure: enforcing a deadline needs a thread, and a test for it
+        # needs sleep() and flakes in CI. A counter is exact — a test can
+        # assert it raises at max_steps + 1 and not at max_steps.
+        #
+        # None disables it, which is what preserves every prior behaviour.
+        self._max_steps = max_steps
+        self._steps = 0
         self._sink = (
             sink
             if sink is not None
@@ -68,6 +90,17 @@ class Interpreter:
     # --- statements -------------------------------------------------------
 
     def _execute(self, stmt: Stmt) -> None:
+        # Counted before anything else happens, so a statement that trips the
+        # limit does not also emit an event or produce output.
+        if self._max_steps is not None:
+            self._steps += 1
+            if self._steps > self._max_steps:
+                raise RuntimeErrorML(
+                    "program exceeded the step limit — likely an infinite loop",
+                    stmt.line,
+                    stmt.column,
+                )
+
         # Emitted before the statement runs, and for every statement including
         # the children of a block. A loop body therefore emits once per
         # iteration, which is what lets a display show a `dejavu` loop running
