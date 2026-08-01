@@ -168,3 +168,21 @@ def test_a_client_that_raises_does_not_take_the_process_with_it():
     outcome = run("say hello", Broken())
     assert not outcome.succeeded
     assert "network went away" in outcome.failure.message
+
+
+def test_a_client_failure_is_not_retried():
+    # Retrying exists to fix the model's OUTPUT with a diagnostic. A
+    # client exception means there was no output — the next attempt sends
+    # an identical prompt and fails identically. Found by curling the
+    # server with no SDK installed and watching it burn three attempts.
+    calls = []
+
+    class Broken:
+        def generate(self, prompt):
+            calls.append(prompt)
+            raise RuntimeError("no API key configured")
+
+    outcome = run("say hello", Broken())
+    assert len(calls) == 1
+    assert len(outcome.attempts) == 1
+    assert outcome.calls == 1

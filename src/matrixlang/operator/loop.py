@@ -71,12 +71,18 @@ def run(
         try:
             candidate = _unfence(client.generate(context))
         except Exception as error:
-            # The client is the only impure thing here, and it can fail in
-            # ways this loop cannot enumerate — network, auth, a refusal.
+            # A client failure ends the loop rather than retrying it.
+            #
+            # The retry exists to fix the MODEL'S OUTPUT using a
+            # diagnostic. A client exception means there was no output to
+            # fix, so the next attempt would send an identical prompt and
+            # get an identical failure — three paid calls on a missing
+            # key, a missing SDK, or a refusal. The SDK already retries
+            # genuinely transient failures internally, so an exception
+            # reaching here means those were exhausted.
             failure = Invalid(Stage.RUN, str(error), 0, 0)
             attempts.append(Attempt(number, "", failure))
-            previous = None
-            continue
+            return Outcome(attempts, None, None, failure)
 
         if not candidate.strip():
             # An empty program is *valid* MatrixLang — zero statements
