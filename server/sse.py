@@ -63,14 +63,22 @@ def payload(event: Event) -> dict:
             # browser must not own a copy of the transliteration table.
             # A second copy is how web/interpreter.js drifted from the
             # language it claimed to implement.
-            "source": transliterate(glyph),
+            #
+            # `escape_glyphs=False` for the same reason cascade.py uses it
+            # on source lines, and it has to be said in both places or the
+            # two backends draw different text: this line is already made
+            # of the language's own glyphs, escaping each one would double
+            # its height on screen, and a source line is documented as not
+            # decodable anyway because the two tables overlap. Output
+            # above keeps the guarantee, and output is the half anyone
+            # would want to read back.
+            "source": transliterate(glyph, escape_glyphs=False),
             "latin": glyph,
         }
     elif isinstance(event, Error):
         return {"kind": "error", "message": event.message}
     else:
         return {"kind": "unknown"}
-    return data
 
 
 def _face(node) -> str:
@@ -88,4 +96,4 @@ def _face(node) -> str:
 
 def header(node) -> str:
     """The pure glyph wall form, for callers that only want one face."""
-    return transliterate(_face(node))
+    return transliterate(_face(node), escape_glyphs=False)
