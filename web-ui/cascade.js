@@ -13,7 +13,36 @@
    column reads downward in natural order (the obvious layout renders
    every line backwards). */
 
-const SPEED = { source: 0.9, output: 0.45 };
+/* Halved from the original pair, which crossed the field in well under a
+   second and read as a wipe rather than as rain. */
+const SPEED = { source: 0.45, output: 0.22 };
+
+/* Every stream draws its own multiplier. Without it the field held
+   exactly two speeds, so every source line sat on the identical row as
+   every other one and the whole thing read as a block of plain text
+   sliding down. The range is chosen so the source and output bands do not
+   overlap: "output falls slower than source" stays a guarantee. */
+const JITTER = [0.7, 1.3];
+
+/* How many lines may start falling on one frame. Releasing every queued
+   line at once was the other half of the lockstep. */
+const SPAWNS_PER_FRAME = 2;
+
+/* A fixed ramp, not a fraction of the line: scaling it to the line meant
+   a 3-glyph line faded over 3 cells and a 20-glyph line over 20, so the
+   head falloff depended on the content. FLOOR keeps the oldest glyphs
+   readable, because the cascade is carrying the program. */
+const TRAIL = 6;
+const FLOOR = 0.28;
+
+/* The simulation's tick, in milliseconds. requestAnimationFrame fires at
+   the display's refresh rate, so stepping once per callback ran the
+   cascade at 60 rows/second on a 60Hz panel and 108 on a 120Hz one —
+   twice the Tk window's speed, and different on different machines.
+   Accumulating real time and stepping at a fixed rate makes the two
+   backends agree and makes the speed a property of the design rather
+   than of the monitor. */
+const TICK_MS = 33;
 
 /* Two screens' worth, matching cascade.MAX_HISTORY. The server's stream is
    faithful — one statement event per executed statement — so a recursive
@@ -26,11 +55,11 @@ const CELL_W = 12;
 const CELL_H = 17;
 
 class Stream {
-  constructor(col, text, kind) {
+  constructor(col, text, kind, speed) {
     this.col = col;
     this.text = text;
     this.kind = kind;
-    this.speed = SPEED[kind];
+    this.speed = speed;
     this.head = -1;
   }
 
@@ -49,7 +78,7 @@ class Stream {
           row,
           col: this.col,
           glyph: this.text[i],
-          level: 1 - offset / this.text.length,
+          level: Math.max(FLOOR, 1 - offset / TRAIL),
           kind: this.kind,
         });
       }
@@ -72,9 +101,12 @@ export class Cascade {
     this.cols = 0;
     this.rows = 0;
 
+    this.carry = 0;
+    this.last = performance.now();
+
     new ResizeObserver(() => this.resize()).observe(canvas);
     this.resize();
-    requestAnimationFrame(() => this.frame());
+    requestAnimationFrame((now) => this.frame(now));
   }
 
   resize() {
@@ -118,9 +150,12 @@ export class Cascade {
     const free = [];
     for (let c = 0; c < this.cols; c++) if (!taken.has(c)) free.push(c);
     shuffle(free);
-    while (this.waiting.length && free.length) {
+    let started = 0;
+    while (this.waiting.length && free.length && started < SPAWNS_PER_FRAME) {
+      started += 1;
       const { text, kind } = this.waiting.shift();
-      const stream = new Stream(free.pop(), text, kind);
+      const speed = SPEED[kind] * (JITTER[0] + Math.random() * (JITTER[1] - JITTER[0]));
+      const stream = new Stream(free.pop(), text, kind, speed);
       // New streams advance immediately, or they contribute nothing to the
       // frame that created them and the blank frame comes back.
       stream.advance();
@@ -130,8 +165,17 @@ export class Cascade {
     return this.streams.flatMap((s) => s.cells(this.rows));
   }
 
-  frame() {
-    const cells = this.step();
+  frame(now) {
+    /* Fixed timestep. Catch up at most a few ticks so a backgrounded tab
+       does not fast-forward the whole program when it returns. */
+    this.carry += Math.min(now - this.last, TICK_MS * 4);
+    this.last = now;
+    while (this.carry >= TICK_MS) {
+      this.carry -= TICK_MS;
+      this.cells = this.step();
+    }
+
+    const cells = this.cells || [];
     const { ctx } = this;
     const rect = this.canvas.getBoundingClientRect();
     ctx.fillStyle = "#000";
@@ -142,7 +186,7 @@ export class Cascade {
       ctx.fillStyle = colour(cell);
       ctx.fillText(cell.glyph, cell.col * CELL_W, cell.row * CELL_H);
     }
-    requestAnimationFrame(() => this.frame());
+    requestAnimationFrame((next) => this.frame(next));
   }
 }
 

@@ -39,8 +39,34 @@ MAX_HISTORY = 200
 
 
 # Output falls slower so results linger: a value is the thing a reader
-# came for, and source scrolls past constantly.
-_SPEED = {Kind.SOURCE: 0.9, Kind.OUTPUT: 0.45}
+# came for, and source scrolls past constantly. Halved from the original
+# pair, which crossed the field in well under a second and read as a wipe
+# rather than as rain.
+_SPEED = {Kind.SOURCE: 0.45, Kind.OUTPUT: 0.22}
+
+# Every stream draws its own multiplier. Without it the field held exactly
+# two speeds, so every source line sat on the identical row as every other
+# one and the whole thing read as a block of plain text sliding down.
+#
+# The range is chosen so `SOURCE * JITTER[0] > OUTPUT * JITTER[1]` — the
+# two bands do not overlap, so "output falls slower than source" stays a
+# guarantee rather than becoming a tendency.
+JITTER = (0.7, 1.3)
+
+# How many lines may start falling on one frame. Releasing every queued
+# line at once was the other half of the lockstep: they all began at the
+# same row on the same frame. A trickle desynchronises them immediately,
+# and the jitter widens the gap from there.
+SPAWNS_PER_FRAME = 2
+
+# The brightness ramp is a fixed number of cells, not a fraction of the
+# line. Scaling it to the line meant a 3-glyph line faded over 3 cells and
+# a 20-glyph line over 20, so the head falloff depended on the content.
+TRAIL = 6
+
+# ...and it bottoms out here rather than at zero. A long line must stay
+# readable all the way up, or the cascade stops carrying the program.
+FLOOR = 0.28
 
 
 @dataclass(frozen=True)
@@ -62,11 +88,11 @@ class _Stream:
     streams share a column and overwrite each other.
     """
 
-    def __init__(self, col: int, text: str, kind: Kind) -> None:
+    def __init__(self, col: int, text: str, kind: Kind, speed: float) -> None:
         self.col = col
         self.kind = kind
         self._text = text
-        self._speed = _SPEED[kind]
+        self._speed = speed
         self._head = -1.0
 
     def advance(self) -> None:
@@ -81,10 +107,9 @@ class _Stream:
         backwards.
         """
         head = int(self._head)
-        length = len(self._text)
         visible: list[Cell] = []
         for index, char in enumerate(self._text):
-            offset = length - 1 - index
+            offset = len(self._text) - 1 - index
             row = head - offset
             if 0 <= row < height:
                 visible.append(
@@ -92,7 +117,7 @@ class _Stream:
                         row=row,
                         col=self.col,
                         glyph=char,
-                        level=1.0 - offset / length,
+                        level=max(FLOOR, 1.0 - offset / TRAIL),
                         kind=self.kind,
                     )
                 )
@@ -201,9 +226,10 @@ class CascadeField:
         free = [col for col in range(self.width) if col not in occupied]
         self._rng.shuffle(free)
         started: list[_Stream] = []
-        while self._waiting and free:
+        while self._waiting and free and len(started) < SPAWNS_PER_FRAME:
             text, kind = self._waiting.pop(0)
-            stream = _Stream(free.pop(), text, kind)
+            speed = _SPEED[kind] * self._rng.uniform(*JITTER)
+            stream = _Stream(free.pop(), text, kind, speed)
             self._streams.append(stream)
             started.append(stream)
         return started

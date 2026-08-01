@@ -158,6 +158,99 @@ def test_more_lines_than_columns_are_queued_not_dropped():
     assert f.is_empty()
 
 
+# --- Motion: columns must not march in lockstep -------------------------
+
+
+def test_streams_do_not_all_fall_at_the_same_speed():
+    # The defect this exists to prevent: two speeds in the whole field, so
+    # every source line sat on the identical row as every other one and
+    # the cascade read as a block of plain text sliding down.
+    f = field(width=40, height=40)
+    for i in range(12):
+        f.add(f"line{i}", Kind.SOURCE)
+    for _ in range(6):
+        f.advance()
+    assert len({s._speed for s in f._streams}) > 1
+
+
+def test_streams_do_not_all_sit_on_the_same_row():
+    f = field(width=40, height=40)
+    for i in range(12):
+        f.add(f"line{i}", Kind.SOURCE)
+    for _ in range(12):
+        cells = f.advance()
+    heads = {max(c.row for c in cells if c.col == col)
+             for col in {c.col for c in cells}}
+    assert len(heads) > 1
+
+
+def test_output_still_always_falls_slower_than_any_source():
+    # Jitter must not let a fast output overtake a slow source: the speed
+    # ranges are deliberately non-overlapping, so this is a guarantee
+    # rather than a tendency.
+    from matrixlang.cascade import _SPEED, JITTER
+
+    assert _SPEED[Kind.SOURCE] * JITTER[0] > _SPEED[Kind.OUTPUT] * JITTER[1]
+
+
+def test_queued_lines_are_released_over_several_frames():
+    # Spawning everything on one frame is half of why they moved
+    # together. Releasing a few per frame desynchronises them from the
+    # start, and jitter widens the gap from there.
+    f = field(width=60, height=40)
+    for i in range(12):
+        f.add(f"l{i}", Kind.SOURCE)
+    f.advance()
+    assert 0 < len(f._streams) < 12
+
+
+def test_a_staggered_field_still_never_goes_blank():
+    # The stagger must not reintroduce the blank frames that looping was
+    # added to remove.
+    f = CascadeField(30, 20, Random(4), loop=True)
+    for i in range(10):
+        f.add(f"l{i}", Kind.SOURCE)
+    assert [i for i in range(400) if not f.advance()] == []
+
+
+def test_the_brightness_ramp_is_a_fixed_length_not_the_lines_length():
+    # A 3-glyph line faded over 3 cells and a 20-glyph line over 20, so
+    # the head falloff depended on the content. Film rain does not.
+    from matrixlang.cascade import TRAIL
+
+    short = field(height=40)
+    short.add("abc", Kind.SOURCE)
+    long_ = field(height=40)
+    long_.add("abcdefghijklmnopqrst", Kind.SOURCE)
+    for _ in range(30):
+        short_cells, long_cells = short.advance(), long_.advance()
+
+    def falloff(cells):
+        ordered = sorted(cells, key=lambda c: c.row)
+        return round(ordered[-1].level - ordered[-2].level, 4)
+
+    assert falloff(short_cells) == falloff(long_cells) == round(1 / TRAIL, 4)
+
+
+def test_the_oldest_glyphs_stay_visible_rather_than_fading_to_nothing():
+    # The ramp bottoms out at a floor: a long line must stay readable all
+    # the way up, or the cascade stops carrying the program.
+    from matrixlang.cascade import FLOOR
+
+    f = field(height=40)
+    f.add("abcdefghijklmnopqrst", Kind.SOURCE)
+    for _ in range(30):
+        cells = f.advance()
+    assert min(c.level for c in cells) >= FLOOR
+
+
+def test_the_cascade_is_slower_than_it_was():
+    # It crossed the field in well under a second and read as a wipe.
+    from matrixlang.cascade import _SPEED
+
+    assert _SPEED[Kind.SOURCE] < 0.6
+
+
 # --- Looping: the program's own material never stops falling ----------
 
 
