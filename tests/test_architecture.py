@@ -42,11 +42,30 @@ _ALLOWED: dict[str, set[str]] = {
         "render", "repl", "treeview", "window",
     },
     "interpreter": {"errors", "events", "nodes", "tokens", "values"},
+    # The operator subpackage. Not {} as the design's table sketched for
+    # prompt: the keyword list is read from tokens rather than retyped,
+    # because a hardcoded grammar is how web/interpreter.js drifted from
+    # the language it claimed to implement.
+    "operator.prompt": {"tokens", "operator.validate"},
+    "operator.validate": {"errors", "interpreter", "lexer", "nodes", "parser"},
     "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
 }
 
 
 _MODULES = {path.stem for path in _SRC.glob("*.py")} - {"__init__", "__main__"}
+
+# Subpackages, as dotted names. The glob above only sees top-level files,
+# so without this a whole subpackage would be invisible to every guard in
+# here — which is exactly how web/ escaped the katakana rule before it was
+# deleted.
+_SUBPACKAGES = {
+    f"{package.name}.{path.stem}"
+    for package in _SRC.iterdir()
+    if package.is_dir() and (package / "__init__.py").exists()
+    for path in package.glob("*.py")
+    if path.stem != "__init__"
+}
+_MODULES |= _SUBPACKAGES
 
 
 def _imports_in_source(source: str) -> set[str]:
@@ -65,7 +84,7 @@ def _imports_in_source(source: str) -> set[str]:
             for alias in node.names:
                 parts = alias.name.split(".")
                 if parts[0] == "matrixlang" and len(parts) > 1:
-                    found.add(parts[1])
+                    found.add(_name(parts))
         elif isinstance(node, ast.ImportFrom):
             head = (node.module or "").split(".")[0]
             if node.level and not node.module:
@@ -76,14 +95,26 @@ def _imports_in_source(source: str) -> set[str]:
             elif head == "matrixlang":
                 parts = node.module.split(".")
                 if len(parts) > 1:
-                    found.add(parts[1])
+                    found.add(_name(parts))
                 else:
                     found.update(a.name for a in node.names if a.name in _MODULES)
     return found
 
 
+def _name(parts: list[str]) -> str:
+    """`matrixlang.operator.validate` names a module, not the package.
+
+    Flattening to the first segment would let anything inside a subpackage
+    import anything else and still look compliant, because every edge would
+    read as the same name.
+    """
+    dotted = ".".join(parts[1:3])
+    return dotted if dotted in _MODULES else parts[1]
+
+
 def _sibling_imports(module: str) -> set[str]:
-    return _imports_in_source((_SRC / f"{module}.py").read_text(encoding="utf-8"))
+    path = _SRC / (module.replace(".", "/") + ".py")
+    return _imports_in_source(path.read_text(encoding="utf-8"))
 
 
 def test_the_parser_never_imports_the_lexer():
@@ -136,6 +167,45 @@ _KATAKANA_HIGH = 0xFF9D
 
 @pytest.mark.parametrize("module", sorted(_MODULES - {"glyphs"}))
 def test_only_glyphs_contains_a_katakana_character(module):
-    source = (_SRC / f"{module}.py").read_text(encoding="utf-8")
+    source = (_SRC / (module.replace(".", "/") + ".py")).read_text(encoding="utf-8")
     offenders = {ch for ch in source if _KATAKANA_LOW <= ord(ch) <= _KATAKANA_HIGH}
     assert not offenders, f"{module}.py contains katakana glyph(s): {offenders!r}"
+
+
+# --- The operator must stay optional -------------------------------------
+
+_CORE = sorted(m for m in _MODULES if not m.startswith("operator."))
+
+
+@pytest.mark.parametrize("module", _CORE)
+def test_no_core_module_imports_the_operator(module):
+    """The load-bearing rule, the same shape as the window's.
+
+    The interpreter and the parser must stay runnable with no SDK
+    installed, no key configured and no network reachable. A core module
+    importing `operator` would make the language depend on the assistant
+    that was built on top of it.
+    """
+    source = (_SRC / (module.replace(".", "/") + ".py")).read_text(encoding="utf-8")
+    leaked = {i for i in _imports_in_source(source) if i.startswith("operator")}
+    assert not leaked, f"{module} imports {leaked}"
+
+
+def test_the_subpackage_guard_actually_sees_the_subpackage():
+    # A guard is worth exactly what it catches. The module glob only looks
+    # at top-level files, so this pins that the subpackage is enumerated —
+    # otherwise every assertion above would pass by not looking.
+    assert "operator.prompt" in _MODULES
+    assert "operator.validate" in _MODULES
+
+
+def test_importing_the_operator_does_not_shadow_the_standard_library():
+    # The package is named after the role in the films and collides with
+    # Python's own `operator`. Absolute imports make that harmless, and
+    # this is the test that says so out loud.
+    import operator as stdlib_operator
+
+    import matrixlang.operator  # noqa: F401
+
+    assert stdlib_operator.add(1, 2) == 3
+    assert not hasattr(stdlib_operator, "build")
