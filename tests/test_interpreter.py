@@ -16,10 +16,15 @@ def output(source: str) -> str:
 
 
 def env(source: str) -> dict:
-    """Run a program and return its final environment."""
+    """Run a program and return its final global scope.
+
+    Stage 6 replaced the flat dict with a chain of Environments, so this
+    reaches for the globals rather than the whole of scope — which is now
+    a tree rather than a dictionary.
+    """
     interpreter = Interpreter(out=io.StringIO())
     interpreter.run(parse(lex(source)))
-    return interpreter.environment
+    return interpreter.globals.values
 
 
 def test_trace_prints_an_integer_with_a_newline():
@@ -46,7 +51,7 @@ def test_comments_do_not_execute():
     assert output("# just a comment\ntrace 1  # and another\n") == "1\n"
 
 
-def test_a_fresh_interpreter_starts_with_an_empty_environment():
+def test_a_fresh_interpreter_starts_with_an_empty_global_scope():
     # `construct` does not exist until Task 3, so this task can only assert
     # the empty case. Task 3's test_environment_holds_every_declared_name
     # covers a populated environment.
@@ -61,7 +66,7 @@ def test_assignment_updates_an_existing_name():
     assert output("construct x = 1\nx = 2\ntrace x\n") == "2\n"
 
 
-def test_environment_holds_every_declared_name():
+def test_the_global_scope_holds_every_declared_name():
     assert env('construct a = 1\nconstruct b = "two"\nconstruct c = true\n') == {
         "a": 1,
         "b": "two",
