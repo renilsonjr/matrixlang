@@ -9,7 +9,7 @@ from pathlib import Path
 from matrixlang.display import Backend, TextDisplay, choose_backend, tk_is_available
 from matrixlang.errors import MatrixLangError, recursion_guard
 from matrixlang.events import Error
-from matrixlang.interpreter import Interpreter
+from matrixlang.interpreter import DEFAULT_MAX_STEPS, Interpreter
 from matrixlang.window import CascadeWindow
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -37,6 +37,16 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = subcommands.add_parser("run", help="Execute a source file.")
     run_parser.add_argument("path", help="Path to a .rain source file.")
     run_parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=DEFAULT_MAX_STEPS,
+        metavar="N",
+        help=(
+            "Stop after N statements, to catch runaway loops. "
+            "0 removes the limit entirely."
+        ),
+    )
+    run_parser.add_argument(
         "--no-window",
         action="store_true",
         help="Print output as text instead of opening the cascade window.",
@@ -61,7 +71,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "parse":
         return _command_parse(args.path)
     if args.command == "run":
-        return _command_run(args.path, want_window=not args.no_window)
+        return _command_run(
+            args.path,
+            want_window=not args.no_window,
+            max_steps=args.max_steps or None,
+        )
     if args.command == "repl":
         return run_repl()
     if args.command == "render":
@@ -107,7 +121,11 @@ def _command_lex(path: str) -> int:
     return 0
 
 
-def _command_run(path: str, want_window: bool = True) -> int:
+def _command_run(
+    path: str,
+    want_window: bool = True,
+    max_steps: int | None = DEFAULT_MAX_STEPS,
+) -> int:
     source = _read_source(path)
     if source is None:
         return 2
@@ -136,24 +154,24 @@ def _command_run(path: str, want_window: bool = True) -> int:
             print(f"matrixlang: could not open a window ({error}); "
                   f"printing instead", file=sys.stderr)
         else:
-            return _run_in_window(tree, window)
+            return _run_in_window(tree, window, max_steps)
 
-    return _run_as_text(tree)
+    return _run_as_text(tree, max_steps)
 
 
-def _run_as_text(tree) -> int:
+def _run_as_text(tree, max_steps: int | None) -> int:
     """Execute to stdout. Byte-identical to every version before displays."""
     # Outside the parse try-block on purpose: a program that fails partway
     # has already printed real output, and that output stays.
     try:
-        Interpreter(sink=TextDisplay(sys.stdout)).run(tree)
+        Interpreter(sink=TextDisplay(sys.stdout), max_steps=max_steps).run(tree)
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
     return 0
 
 
-def _run_in_window(tree, window) -> int:
+def _run_in_window(tree, window, max_steps: int | None) -> int:
     """Execute on a worker thread, drawing on the UI thread.
 
     Tk is not thread-safe, so the interpreter never touches it: it emits
@@ -166,7 +184,7 @@ def _run_in_window(tree, window) -> int:
 
     def execute() -> None:
         try:
-            Interpreter(sink=window).run(tree)
+            Interpreter(sink=window, max_steps=max_steps).run(tree)
         except MatrixLangError as error:
             message = f"matrixlang: {error}"
             print(message, file=sys.stderr)
