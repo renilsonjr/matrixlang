@@ -7,6 +7,11 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# OP-5. Operator's only dependency, and it is optional: `pip install
+# matrixlang` stays dependency-free, and `import matrixlang.operator`
+# works without it because client.py imports the SDK inside the function
+# that calls it.
+bot = ["anthropic>=0.40"]
 
 [project.scripts]
 matrixlang = "matrixlang.cli:main"
