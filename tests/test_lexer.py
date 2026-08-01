@@ -434,3 +434,45 @@ def test_no_output_path_can_emit_a_control_byte_from_source():
     hostile = 'construct x = "\x1b[31m"  #\x1b[8m\ntrace x\n'
     with pytest.raises(LexError):
         lex(hostile)
+
+
+# --- Stage 6: agent, jackout, comma -------------------------------------
+
+
+def test_agent_lexes_as_a_keyword():
+    from matrixlang.tokens import TokenType
+
+    types = [t.type for t in lex("agent f\n")]
+    assert types[0] is TokenType.AGENT
+
+
+def test_jackout_lexes_as_a_keyword():
+    from matrixlang.tokens import TokenType
+
+    types = [t.type for t in lex("jackout 1\n")]
+    assert types[0] is TokenType.JACKOUT
+
+
+def test_a_comma_lexes():
+    from matrixlang.tokens import TokenType
+
+    types = [t.type for t in lex("f(a, b)\n")]
+    assert TokenType.COMMA in types
+
+
+def test_the_new_slots_lex_in_the_glyph_face_too():
+    from matrixlang.glyphs import GLYPHS
+    from matrixlang.tokens import TokenType
+
+    source = f"{GLYPHS['agent']} f{GLYPHS['(']}a{GLYPHS[',']}b{GLYPHS[')']}\n"
+    types = [t.type for t in lex(source)]
+    assert types[0] is TokenType.AGENT
+    assert TokenType.COMMA in types
+
+
+def test_jackout_lexes_in_the_glyph_face():
+    from matrixlang.glyphs import GLYPHS
+    from matrixlang.tokens import TokenType
+
+    types = [t.type for t in lex(f"{GLYPHS['jackout']} 1\n")]
+    assert types[0] is TokenType.JACKOUT

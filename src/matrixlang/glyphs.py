@@ -20,6 +20,10 @@ GLYPHS: dict[str, str] = {
     "flatline": "ﾗ",
     "true": "ｼ",
     "false": "ｷ",
+    # Stage 6. An Agent is a callable, reusable program in the films;
+    # jackout is leaving the construct and coming back with something.
+    "agent": "ｴ",
+    "jackout": "ﾖ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
@@ -35,6 +39,7 @@ GLYPHS: dict[str, str] = {
     # punctuation
     "(": "ｸ",
     ")": "ｹ",
+    ",": "ﾈ",
     # digits, per-digit (§6.2: 10 renders as two glyphs)
     "0": "ｦ",
     "1": "ｧ",
