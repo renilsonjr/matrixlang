@@ -144,3 +144,40 @@ def test_the_server_binds_loopback_only():
     from server.app import HOST
 
     assert HOST in ("127.0.0.1", "localhost")
+
+
+# --- Serving the UI (OP-E) ----------------------------------------------
+
+
+def test_the_root_serves_the_page(base_url):
+    with urllib.request.urlopen(f"{base_url}/", timeout=5) as r:
+        assert r.status == 200
+        assert r.headers["Content-Type"].startswith("text/html")
+        body = r.read().decode()
+    assert "<title>" in body
+
+
+def test_static_assets_are_served_with_their_own_type(base_url):
+    for path, expected in (("/style.css", "text/css"), ("/app.js", "javascript")):
+        with urllib.request.urlopen(base_url + path, timeout=5) as r:
+            assert r.status == 200
+            assert expected in r.headers["Content-Type"]
+
+
+def test_a_path_outside_the_ui_directory_is_refused(base_url):
+    # The UI directory is served from disk; a traversal must not escape it.
+    for attempt in ("/../pyproject.toml", "/..%2Fpyproject.toml", "//etc/passwd"):
+        try:
+            with urllib.request.urlopen(base_url + attempt, timeout=5) as r:
+                assert "hatchling" not in r.read().decode()
+        except urllib.error.HTTPError as error:
+            assert error.code in (400, 403, 404)
+
+
+def test_the_page_talks_only_to_this_server(base_url):
+    # OP-1: local. A UI that reaches an external origin would quietly
+    # undo the whole reason this is not hosted.
+    with urllib.request.urlopen(f"{base_url}/app.js", timeout=5) as r:
+        source = r.read().decode()
+    assert "http://" not in source.replace("http://127.0.0.1", "")
+    assert "https://" not in source
