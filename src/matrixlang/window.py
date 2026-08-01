@@ -70,12 +70,15 @@ class CascadeWindow:
         width: int = 80,
         height: int = 30,
         rng: Random | None = None,
+        glyph_source: bool = True,
     ) -> None:
         self._queue: queue.Queue[Event] = queue.Queue()
         # Looping: once the program's material has all fallen off, it falls
         # again. Nothing random is ever generated — the cascade carries the
         # program and only the program.
-        self._field = CascadeField(width, height, rng or Random(), loop=True)
+        self._field = CascadeField(
+            width, height, rng or Random(), loop=True, glyph_source=glyph_source
+        )
         self._errors: list[str] = []
         self._width = width
         self._height = height

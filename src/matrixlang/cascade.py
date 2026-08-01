@@ -98,12 +98,23 @@ class _Stream:
 
 class CascadeField:
     def __init__(
-        self, width: int, height: int, rng: Random, loop: bool = False
+        self,
+        width: int,
+        height: int,
+        rng: Random,
+        loop: bool = False,
+        glyph_source: bool = True,
     ) -> None:
         self.width = width
         self.height = height
         self._rng = rng
         self._loop = loop
+        # A pure glyph wall. D-03 keeps identifiers Latin in the glyph
+        # *face* because in the editor "the only Latin text is the thing
+        # you need to find" — but the cascade is not the editor, and the
+        # editing surface shows the real source alongside it. Set False to
+        # get the plain glyph face back, Latin identifiers and all.
+        self._glyph_source = glyph_source
         # Everything ever added, so a looping field can replay it. This is
         # the only thing that falls: nothing random is ever generated, so
         # the cascade carries the program and nothing else.
@@ -136,7 +147,7 @@ class CascadeField:
             self._transcript.append(glyphs)
             self.add(glyphs, Kind.OUTPUT)
         elif isinstance(event, Statement) and event.node is not None:
-            self.add(_header(event.node), Kind.SOURCE)
+            self.add(_header(event.node, self._glyph_source), Kind.SOURCE)
 
     def transcript(self) -> list[str]:
         """Every output line the program produced, in glyphs, in order."""
@@ -198,13 +209,31 @@ class CascadeField:
         return started
 
 
-def _header(stmt: Stmt) -> str:
+def _header(stmt: Stmt, glyph_source: bool = True) -> str:
     """A statement's own first line, in the glyph face.
 
     Rendering a block statement yields its entire body, and every body
     statement emits its own event. Taking the header alone is what stops
     each line of a loop from appearing twice.
+
+    With `glyph_source`, the Latin left over in that face — identifiers and
+    string contents — is transliterated too, giving a wall with no Latin in
+    it at all.
+
+    Transliterating **on top of the glyph face**, rather than transliterating
+    the ASCII source, is deliberate. The alternative spells `construct` out
+    as nine glyphs: it decodes perfectly but doubles every line, and since a
+    line falls vertically, height is length — a 30-row field stops fitting
+    whole statements. It also erases the 32-slot table from the screen, which
+    is the notation that makes this MatrixLang rather than generic rain.
+
+    The cost, stated because it is real: a naive decode of a source line
+    recovers identifiers and strings but garbles keywords, because the two
+    tables overlap — the glyph the language assigns to `construct` means a
+    letter in the display table. Output carries no language glyphs and stays
+    exactly decodable, and output is the half anyone would want to read back.
     """
     rendered = render_glyph(Program([stmt]))
     lines = [line.strip() for line in rendered.splitlines() if line.strip()]
-    return lines[0] if lines else ""
+    header = lines[0] if lines else ""
+    return transliterate(header) if glyph_source else header

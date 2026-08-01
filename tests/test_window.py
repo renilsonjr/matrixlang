@@ -176,6 +176,32 @@ def test_nothing_random_ever_enters_the_cascade():
             assert cell.glyph in allowed
 
 
+def test_the_window_defaults_to_a_pure_glyph_wall():
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    program = parse(lex('construct name = "Neo"\n'))
+    window = CascadeWindow(width=40, height=20)
+    window.emit(Statement(node=program.statements[0], line=1))
+    window.step()
+    assert not any(
+        ch.isascii() and ch.isalnum()
+        for text, _ in window._field._history
+        for ch in text
+    )
+
+
+def test_the_window_can_show_latin_identifiers_instead():
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    program = parse(lex('construct name = "Neo"\n'))
+    window = CascadeWindow(width=40, height=20, glyph_source=False)
+    window.emit(Statement(node=program.statements[0], line=1))
+    window.step()
+    assert any("name" in text for text, _ in window._field._history)
+
+
 def test_close_before_open_is_safe():
     # The CLI calls close() in a finally. It must not require that open()
     # succeeded, or a failed window becomes a failed program.
