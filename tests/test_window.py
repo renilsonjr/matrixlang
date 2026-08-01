@@ -66,6 +66,32 @@ def test_draining_empties_the_queue():
     assert q.empty()
 
 
+def test_draining_is_bounded_per_frame():
+    # drain() consumed the whole queue however long that took. The
+    # interpreter outruns it, so on a long program the frame callback
+    # could not return and the window stopped repainting. Measured: 200k
+    # queued events took 0.17s against a 33ms budget.
+    from matrixlang.window import DRAIN_BUDGET
+
+    q, field, errors = queue.Queue(), a_field(), []
+    for i in range(DRAIN_BUDGET * 3):
+        q.put(Output(text=str(i), line=1))
+    drain(q, field, errors)
+    assert q.qsize() >= DRAIN_BUDGET, "drain() emptied the whole queue in one frame"
+
+
+def test_a_bounded_drain_still_makes_progress_every_frame():
+    from matrixlang.window import DRAIN_BUDGET
+
+    q, field, errors = queue.Queue(), a_field(), []
+    for i in range(DRAIN_BUDGET * 3):
+        q.put(Output(text=str(i), line=1))
+    before = q.qsize()
+    for _ in range(3):
+        drain(q, field, errors)
+    assert q.qsize() < before
+
+
 def test_errors_go_to_the_status_strip_and_never_into_the_cascade():
     # The one rule the spike proved empirically: a transliterated
     # diagnostic hides the line number, the misspelled name and the

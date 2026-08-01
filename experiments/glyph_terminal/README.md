@@ -257,7 +257,7 @@ $ dejavu n < 3 / trace "wake up" / n = n + 1 / flatline
 
 | File | What it is |
 | --- | --- |
-| `translit.py` | Display-only character map. Deliberately **not** the language's glyph face — its output is never lexed, so it owes nothing to bijectivity or the round trip, which is what lets it cover the Latin alphabet at all (the language's 32 slots cannot: 24 free glyphs, 26 letters needed) |
+| `translit.py` | Display-only character map. Deliberately **not** the language's glyph face — its output is never lexed, so it owes nothing to bijectivity or the round trip, which is what lets it cover the Latin alphabet at all (the language's face cannot: 35 of the block's 56 glyphs are taken, leaving 21 where 26 letters are needed) |
 | `demo.py` | Static: the two programs in all three modes |
 | `live.py` | Animated: the cascade carrying a program that has run |
 | `shell.py` | Interactive: type MatrixLang, watch the session cascade |

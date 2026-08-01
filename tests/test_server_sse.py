@@ -6,6 +6,7 @@ testable without a socket. Only `test_server_http.py` starts a server.
 
 import json
 
+from matrixlang.cascade import _header
 from matrixlang.events import Error, Output, Statement
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -71,6 +72,28 @@ def test_a_statement_event_carries_both_faces():
     payload = json.loads(encode(Statement(node=program.statements[0], line=1))[6:])
     assert "name" in payload["latin"]
     assert not any(ch.isascii() and ch.isalnum() for ch in payload["source"])
+
+
+def test_the_two_backends_draw_the_same_source_text():
+    # The Tk cascade and the browser build their source lines through
+    # different code (`cascade._header` and `sse.payload`), and the two
+    # have drifted once already — `encode` grew a transliterated output
+    # field and the queue did not, so the browser drew Latin while every
+    # test of `encode` passed.
+    #
+    # This nearly happened a second time in the opposite direction. The
+    # escape marker was added to `transliterate` for reversibility, and
+    # `cascade._header` opted out with `escape_glyphs=False` because a
+    # source line is already full of the language's glyphs and escaping
+    # each one doubles its height. `sse.payload` did not opt out, so the
+    # browser drew an escape marker before every glyph — twice the height
+    # of the same line in the window. Asserting the two agree is cheaper
+    # than remembering to change both.
+    for text in ('construct name = "Neo"\n', "dejavu n > 0\n  trace n\nflatline\n"):
+        program = parse(lex(text))
+        node = program.statements[0]
+        payload = json.loads(encode(Statement(node=node, line=1))[6:])
+        assert payload["source"] == _header(node), text
 
 
 def test_a_statement_event_carries_no_python_repr():

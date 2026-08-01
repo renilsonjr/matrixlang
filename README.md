@@ -12,9 +12,13 @@ Matrix-style glyphs, with a working interpreter, a REPL, and a test suite.
 
 Source files use the `.rain` extension.
 
-For how it works — the pipeline, the module map, and the design decisions
-behind the two-face architecture — see
-**[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md)**.
+**Three ways in, depending on what you want:**
+
+| | |
+| --- | --- |
+| **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)** | Learn to read and write the language. Start here if you want to *use* it |
+| **[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md)** | How the implementation works — the pipeline, the module map, the problems that took real effort |
+| **[Clone it and run it](#clone-it-and-run-it)** | A handful of commands and a window full of falling glyphs |
 
 ## Status
 
@@ -26,8 +30,12 @@ from material the program produced.
 
 Working today: lexer, parser, tree-walking interpreter, REPL, CLI, the
 two interchangeable source faces with a lossless round trip, the cascade
-window, a step limit that stops runaway loops, and **functions with
-closures**.
+window, a step limit that stops runaway loops, **functions with
+closures**, and **Operator** — an assistive companion that writes
+MatrixLang from plain language, in the terminal or in a browser.
+
+1,023 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+runtime dependencies.
 
 ```
 agent adder(n)
@@ -45,20 +53,17 @@ trace add5(37)          # 42
 *defined* in, so `add5` still knows what `n` was long after `adder`
 finished.
 
-Designed and approved but **not implemented**: Operator, an assistive
-companion that writes MatrixLang from plain language
-(`docs/superpowers/specs/2026-08-01-operator-design.md`).
-
 ## Clone it and run it
 
 Anyone can clone this and run it on their own machine. It is not hosted
 anywhere and does not need to be.
 
 **Requirements:** Python 3.11 or newer, and nothing else. There are no
-third-party dependencies — the interpreter is standard library only, and
-`pytest` is the sole development dependency. The cascade window uses
-`tkinter`, which ships with Python; if it is missing, everything still
-works and output prints as text.
+third-party runtime dependencies — the interpreter, the CLI and the local
+server are standard library only. `pytest` is the development dependency,
+and the Anthropic SDK is an optional extra that only [Operator](#operator)
+needs. The cascade window uses `tkinter`, which ships with Python; if it is
+missing, everything still works and output prints as text.
 
 ```bash
 git clone https://github.com/renilsonjr/matrixlang.git
@@ -96,6 +101,10 @@ wake up, Neo
 
 To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
+
+Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
+teaches the whole language — ten keywords, three types, and both faces —
+and every example in it was executed before it shipped.
 
 ### Seeing the cascade
 
@@ -211,6 +220,49 @@ it, lower it, or remove it entirely:
 
 `0` means no limit.
 
+## Operator
+
+Operator writes MatrixLang from plain language. It is optional, it is the
+only part of the project with a dependency, and it costs money to use —
+everything above runs on the standard library alone.
+
+```bash
+.venv/bin/pip install -e ".[bot]"
+```
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**Operator is never the authority on whether its own output is valid.**
+Every candidate program is parsed and dry-run before you see it. If
+either fails, the real diagnostic — line, column and all — goes back to
+the model and it tries again, at most three times. Nothing unvalidated
+reaches your editor, and the attempts it took are shown rather than
+hidden, because that gate is the whole design.
+
+### In a browser
+
+```bash
+.venv/bin/python -m server
+```
+
+Then open <http://127.0.0.1:8420>. The program is top-left, Operator is
+bottom-left, and the cascade fills the right-hand side at full height —
+the same cascade as the native window, carrying the same material, with
+a button to switch the falling source between glyphs and Latin.
+
+The server is `http.server` and Server-Sent Events, no framework and no
+build step, for the same reason the package has no dependencies. It
+binds `127.0.0.1` and nothing else. It has no accounts, no rate limits
+and no abuse handling, so **do not expose it to a network** — hosting
+this as a product would mean designing all of that first, and that is
+deliberately out of scope.
+
+`server/` is not part of the installed package on purpose: a top-level
+`server` module would collide with half of PyPI. It runs from a clone,
+which is the model this project chose.
+
 ## The glyphs
 
 The falling characters are Unicode half-width katakana (U+FF66–FF9D), not
@@ -239,18 +291,21 @@ what falls can be read back rather than merely watched.
 
 ## Development
 
-Setup is the same as [Running it locally](#running-it-locally). To run the
-suite:
+Setup is the same as [Clone it and run it](#clone-it-and-run-it). To run
+the suite:
 
 ```bash
 .venv/bin/python -m pytest
 ```
 
+It runs on every pull request against Python 3.11, 3.12, 3.13 and 3.14.
+
 [docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md) is the fastest way
-in: the compilation pipeline, what each module owns, and the six design
+in: the compilation pipeline, what each module owns, and the seven design
 problems that took real work — reconstructing parentheses from a tree that
-does not store them, the round-trip property, and why testing an animation
-required splitting the code on a purity gradient.
+does not store them, the round-trip property, why testing an animation
+required splitting the code on a purity gradient, and how the browser gets
+the same cascade without a second implementation of the language.
 
 Specs and implementation plans live under `docs/superpowers/`, written
 before the code and kept as the record of why the thing is shaped the way

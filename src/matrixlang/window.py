@@ -33,6 +33,13 @@ from matrixlang.events import Error, Event
 
 FRAME_MS = 33  # ~30fps
 
+# How many events one frame may take off the queue. The interpreter
+# outruns the display, so an unbounded drain never returned while a long
+# program ran and the window stopped repainting — 200,000 queued events
+# took 0.17s against a 33ms budget. Bounding the work per frame keeps the
+# callback short; the backlog simply arrives over the following frames.
+DRAIN_BUDGET = 500
+
 # A cell grid, not pixels. The canvas is sized from these.
 CELL_WIDTH = 12
 CELL_HEIGHT = 18
@@ -51,7 +58,7 @@ def drain(q: "queue.Queue[Event]", field: CascadeField, errors: list[str]) -> No
     breaks D-03's guarantee that the only Latin text in a wall of green is
     the thing you need to find.
     """
-    while True:
+    for _ in range(DRAIN_BUDGET):
         try:
             event = q.get_nowait()
         except queue.Empty:

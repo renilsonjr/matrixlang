@@ -443,3 +443,36 @@ def test_an_error_event_never_reaches_the_cascade():
     f = field()
     f.consume(Error(message="boom"))
     assert f.is_empty()
+
+
+def test_source_lines_stay_compact_while_output_stays_decodable():
+    # The tension the escape marker created: escaping every language glyph
+    # in a source line would double its height on screen, which is the
+    # exact cost that decided against spelling `construct` out. Source
+    # opts out (it was never decodable — the two tables overlap); output
+    # keeps the guarantee, and output is the half worth reading back.
+    from matrixlang.translit import transliterate, untransliterate
+
+    program = parse(lex('construct name = "Neo"\n'))
+    f = field()
+    f.consume(Statement(node=program.statements[0], line=1))
+    source_line = f._waiting[0][0]
+    plain = field()
+    plain._glyph_source = False
+    plain.consume(Statement(node=program.statements[0], line=1))
+    assert len(source_line) <= len(plain._waiting[0][0]) + 2
+
+    g = field()
+    g.consume(Output(text="wake up, Neo", line=1))
+    assert untransliterate(g._waiting[0][0]) == "wake up, Neo"
+
+
+def test_output_containing_a_glyph_still_decodes_exactly():
+    # The reachable case from the audit: a program that traces a glyph.
+    from matrixlang.glyphs import GLYPHS
+    from matrixlang.translit import untransliterate
+
+    printed = GLYPHS["construct"]
+    f = field()
+    f.consume(Output(text=printed, line=1))
+    assert untransliterate(f._waiting[0][0]) == printed
