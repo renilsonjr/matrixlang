@@ -48,6 +48,10 @@ _ALLOWED: dict[str, set[str]] = {
     # the language it claimed to implement.
     "operator.prompt": {"tokens", "operator.validate"},
     "operator.validate": {"errors", "interpreter", "lexer", "nodes", "parser"},
+    # The impure edge. Imports no matrixlang sibling and no SDK at module
+    # scope — `anthropic` is imported inside the calling function.
+    "operator.client": set(),
+    "operator.loop": {"nodes", "operator.prompt", "operator.validate"},
     "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
 }
 
@@ -95,7 +99,16 @@ def _imports_in_source(source: str) -> set[str]:
             elif head == "matrixlang":
                 parts = node.module.split(".")
                 if len(parts) > 1:
-                    found.add(_name(parts))
+                    # `from matrixlang.operator import prompt` names a
+                    # MODULE in the imported list, not in node.module.
+                    # Resolving only node.module would report the package
+                    # and hide which submodule was actually pulled in.
+                    submodules = {
+                        f"{parts[1]}.{a.name}"
+                        for a in node.names
+                        if f"{parts[1]}.{a.name}" in _MODULES
+                    }
+                    found.update(submodules or {_name(parts)})
                 else:
                     found.update(a.name for a in node.names if a.name in _MODULES)
     return found
@@ -209,3 +222,12 @@ def test_importing_the_operator_does_not_shadow_the_standard_library():
 
     assert stdlib_operator.add(1, 2) == 3
     assert not hasattr(stdlib_operator, "build")
+
+
+def test_the_guard_resolves_a_submodule_imported_from_its_package():
+    # `from matrixlang.operator import prompt` must report
+    # "operator.prompt", not the bare package — otherwise every import
+    # inside a subpackage reads as the same name and the allow-table
+    # stops distinguishing them.
+    found = _imports_in_source("from matrixlang.operator import prompt")
+    assert "operator.prompt" in found
