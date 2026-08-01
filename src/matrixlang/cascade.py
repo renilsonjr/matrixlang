@@ -31,6 +31,13 @@ class Kind(Enum):
     OUTPUT = auto()
 
 
+# Two screens' worth. A line falls vertically and takes seconds to do it,
+# so more than this can never be read before it is replaced -- a larger cap
+# would buy memory pressure and nothing else. Recursion is what makes this
+# necessary: fib(10) alone emits 366 lines.
+MAX_HISTORY = 200
+
+
 # Output falls slower so results linger: a value is the thing a reader
 # came for, and source scrolls past constantly.
 _SPEED = {Kind.SOURCE: 0.9, Kind.OUTPUT: 0.45}
@@ -121,10 +128,7 @@ class CascadeField:
         self._history: list[tuple[str, Kind]] = []
         self._streams: list[_Stream] = []
         self._waiting: list[tuple[str, Kind]] = []
-        # Output is remembered, not merely shown. A falling column is gone
-        # once it leaves the screen, and output that cannot be read after
-        # the program ends is output the viewer never got.
-        self._transcript: list[str] = []
+
 
     # --- input ----------------------------------------------------------
 
@@ -133,6 +137,8 @@ class CascadeField:
         if text:
             self._waiting.append((text, kind))
             self._history.append((text, kind))
+            if len(self._history) > MAX_HISTORY:
+                del self._history[: len(self._history) - MAX_HISTORY]
 
     def consume(self, event: Event) -> None:
         """Turn an execution event into falling text.
@@ -143,15 +149,9 @@ class CascadeField:
         remedy all at once.
         """
         if isinstance(event, Output):
-            glyphs = transliterate(event.text)
-            self._transcript.append(glyphs)
-            self.add(glyphs, Kind.OUTPUT)
+            self.add(transliterate(event.text), Kind.OUTPUT)
         elif isinstance(event, Statement) and event.node is not None:
             self.add(_header(event.node, self._glyph_source), Kind.SOURCE)
-
-    def transcript(self) -> list[str]:
-        """Every output line the program produced, in glyphs, in order."""
-        return list(self._transcript)
 
     # --- simulation -----------------------------------------------------
 

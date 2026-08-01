@@ -95,3 +95,74 @@ def test_the_generator_produces_the_shapes_the_parens_rules_need():
     assert unary_over_binary, "no R-PAREN-3 shape in 300 seeds"
     assert empty_else, "no empty-else If in 300 seeds"
     assert absent_else, "no else-less If in 300 seeds"
+
+
+def test_the_generator_produces_the_stage_6_shapes_too():
+    # Same reasoning as the test above, extended to the four new nodes.
+    # A generator that never emits a call with a binary argument would let
+    # the f(a + b) / f(a) + b bug through while looking green.
+    from matrixlang.nodes import Call, ExprStmt, FunctionDef, Return
+
+    call_with_binary_arg = False
+    call_on_a_call = False
+    bare_jackout = False
+    jackout_with_value = False
+    agent_with_params = False
+    agent_without_params = False
+    expression_statement = False
+
+    def walk_expr(expr):
+        nonlocal call_with_binary_arg, call_on_a_call
+        if isinstance(expr, Call):
+            if any(isinstance(a, Binary) for a in expr.args):
+                call_with_binary_arg = True
+            if isinstance(expr.callee, Call):
+                call_on_a_call = True
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+        elif isinstance(expr, Binary):
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, Unary):
+            walk_expr(expr.operand)
+
+    def walk_stmt(stmt):
+        nonlocal bare_jackout, jackout_with_value
+        nonlocal agent_with_params, agent_without_params, expression_statement
+        if isinstance(stmt, Return):
+            if stmt.value is None:
+                bare_jackout = True
+            else:
+                jackout_with_value = True
+                walk_expr(stmt.value)
+        elif isinstance(stmt, ExprStmt):
+            expression_statement = True
+            walk_expr(stmt.value)
+        elif isinstance(stmt, FunctionDef):
+            if stmt.params:
+                agent_with_params = True
+            else:
+                agent_without_params = True
+            for child in stmt.body:
+                walk_stmt(child)
+        else:
+            for attr in ("value", "condition"):
+                node = getattr(stmt, attr, None)
+                if node is not None:
+                    walk_expr(node)
+            for attr in ("body", "then_body", "else_body"):
+                for child in getattr(stmt, attr, None) or []:
+                    walk_stmt(child)
+
+    for seed in range(300):
+        for stmt in gen_program(random.Random(seed)).statements:
+            walk_stmt(stmt)
+
+    assert call_with_binary_arg, "no call with a binary argument was generated"
+    assert call_on_a_call, "no call on a call was generated"
+    assert bare_jackout, "no bare jackout was generated"
+    assert jackout_with_value, "no jackout with a value was generated"
+    assert agent_with_params, "no agent with parameters was generated"
+    assert agent_without_params, "no agent without parameters was generated"
+    assert expression_statement, "no expression statement was generated"

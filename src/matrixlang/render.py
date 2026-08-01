@@ -17,6 +17,10 @@ operators, no blank lines, trailing comments after two spaces.
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.nodes import (
+    Call,
+    ExprStmt,
+    FunctionDef,
+    Return,
     Assign,
     Binary,
     BoolLiteral,
@@ -69,6 +73,11 @@ _LEVEL: dict[TokenType, int] = {
 }
 _UNARY_LEVEL = 5
 _ATOM_LEVEL = 6
+# A call is postfix and binds tighter than every operator, including unary
+# minus: -f(1) is -(f(1)), never (-f)(1). That makes it an atom for
+# parenthesisation purposes, and saying so is better than the two constants
+# happening to be equal.
+_CALL_LEVEL = _ATOM_LEVEL
 
 _STRING_ESCAPES: dict[str, str] = {"\\": "\\\\", '"': '\\"', "\n": "\\n"}
 
@@ -149,6 +158,27 @@ def _statement(stmt: Stmt, depth: int, face: Face, lines: list[str]) -> None:
         for comment in stmt.body_trailing:
             lines.append(pad + "  " + _comment(comment, face))
         lines.append(pad + _map(face, "flatline") + _trail(stmt, face))
+    elif isinstance(stmt, FunctionDef):
+        params = f"{_map(face, ',')} ".join(stmt.params)
+        lines.append(
+            pad
+            + f"{_map(face, 'agent')} {stmt.name}"
+            + f"{_map(face, '(')}{params}{_map(face, ')')}"
+        )
+        for child in stmt.body:
+            _statement(child, depth + 1, face, lines)
+        for comment in stmt.body_trailing:
+            lines.append(pad + "  " + _comment(comment, face))
+        lines.append(pad + _map(face, "flatline") + _trail(stmt, face))
+    elif isinstance(stmt, Return):
+        # A bare jackout renders bare, or the round trip turns an early
+        # exit into a returned value.
+        head = _map(face, "jackout")
+        if stmt.value is not None:
+            head += f" {_expression(stmt.value, 0, face)}"
+        lines.append(pad + head + _trail(stmt, face))
+    elif isinstance(stmt, ExprStmt):
+        lines.append(pad + _expression(stmt.value, 0, face) + _trail(stmt, face))
     else:
         raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
@@ -184,6 +214,20 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)
         return _map(face, "-") + operand, _UNARY_LEVEL
+    if isinstance(expr, Call):
+        # A call binds tighter than every operator, so the callee needs
+        # parens unless it is already an atom or another call.
+        callee = _expression(expr.callee, _CALL_LEVEL, face)
+        # Each argument is its OWN precedence context, reset to 0. Reusing
+        # the enclosing level would render f(a + b) as f(a) + b -- a
+        # different tree with a different meaning.
+        args = f"{_map(face, ',')} ".join(
+            _expression(arg, 0, face) for arg in expr.args
+        )
+        return (
+            f"{callee}{_map(face, '(')}{args}{_map(face, ')')}",
+            _CALL_LEVEL,
+        )
     if isinstance(expr, Binary):
         level = _LEVEL[expr.op]
         # Left-associative grammar: the left child may sit at the same

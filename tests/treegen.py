@@ -28,6 +28,10 @@ from matrixlang.nodes import (
     Program,
     Stmt,
     StringLiteral,
+    Call,
+    ExprStmt,
+    FunctionDef,
+    Return,
     Trace,
     Unary,
     While,
@@ -70,12 +74,28 @@ def gen_comments(rng: random.Random) -> list[str]:
 
 
 def gen_statement(rng: random.Random, depth: int) -> Stmt:
-    kinds = ["declare", "assign", "trace"]
+    kinds = ["declare", "assign", "trace", "return", "exprstmt"]
     if depth > 0:
-        kinds += ["if", "while"]
+        kinds += ["if", "while", "agent"]
     kind = rng.choice(kinds)
     stmt: Stmt
-    if kind == "declare":
+    if kind == "return":
+        # Both shapes: a bare jackout is an early exit and must not
+        # round-trip into a returned value.
+        stmt = Return(
+            None if rng.random() < 0.3 else gen_expression(rng, 3)
+        )
+    elif kind == "exprstmt":
+        stmt = ExprStmt(gen_call(rng, 2))
+    elif kind == "agent":
+        body = [gen_statement(rng, depth - 1) for _ in range(rng.randint(1, 2))]
+        stmt = FunctionDef(
+            rng.choice(_IDENTS),
+            [rng.choice(_IDENTS) for _ in range(rng.randint(0, 3))],
+            body,
+            body_trailing=gen_comments(rng),
+        )
+    elif kind == "declare":
         stmt = Declare(rng.choice(_IDENTS), gen_expression(rng, 3))
     elif kind == "assign":
         stmt = Assign(rng.choice(_IDENTS), gen_expression(rng, 3))
@@ -123,7 +143,22 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
     if roll < 0.55:
         # Unary over a full subexpression: the R-PAREN-3 shape.
         return Unary(TokenType.MINUS, gen_expression(rng, depth - 1))
+    if roll < 0.70:
+        # Calls, with arguments drawn from the full space so f(a + b)
+        # occurs constantly rather than by luck. That shape is the one an
+        # emitter that reuses the enclosing precedence renders as
+        # f(a) + b -- a different tree with a different meaning.
+        return gen_call(rng, depth - 1)
     return gen_atom(rng)
+
+
+def gen_call(rng: random.Random, depth: int) -> Call:
+    """A call whose callee may itself be a call, so f()() occurs."""
+    callee: Expr = Name(rng.choice(_IDENTS))
+    if depth > 0 and rng.random() < 0.25:
+        callee = gen_call(rng, depth - 1)
+    args = [gen_expression(rng, max(0, depth)) for _ in range(rng.randint(0, 2))]
+    return Call(callee, args)
 
 
 def gen_atom(rng: random.Random) -> Expr:

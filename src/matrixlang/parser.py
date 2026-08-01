@@ -10,6 +10,10 @@ from collections.abc import Callable
 
 from matrixlang.errors import ParseError
 from matrixlang.nodes import (
+    Call,
+    ExprStmt,
+    FunctionDef,
+    Return,
     Assign,
     Binary,
     BoolLiteral,
@@ -147,8 +151,23 @@ class _Parser:
             return self._if()
         if token.type is TokenType.DEJAVU:
             return self._while()
+        if token.type is TokenType.AGENT:
+            return self._agent()
+        if token.type is TokenType.JACKOUT:
+            return self._return()
         if token.type is TokenType.IDENT:
+            # One token of lookahead decides, and it is the '(' rather
+            # than the '='. Dispatching on the paren means `x + 1` still
+            # reaches _assign and still reports "expected '='", which is
+            # the more useful message for what that mistake usually is.
+            if self._tokens[self._pos + 1].type is TokenType.LPAREN:
+                return self._expression_statement()
             return self._assign()
+        raise ParseError(
+            f"expected a statement, found {_describe(token)}",
+            token.line,
+            token.column,
+        )
         raise ParseError(
             f"expected a statement, found {_describe(token)}",
             token.line,
@@ -224,6 +243,70 @@ class _Parser:
         self._end_statement(node)
         return node
 
+    def _agent(self) -> FunctionDef:
+        keyword = self.advance()
+        name = self.expect(TokenType.IDENT, "expected a name after 'agent'")
+        self.expect(TokenType.LPAREN, "expected '(' after the agent's name")
+        params: list[str] = []
+        if not self.check(TokenType.RPAREN):
+            while True:
+                param = self.expect(
+                    TokenType.IDENT, "expected a parameter name"
+                )
+                params.append(param.lexeme)
+                if not self.check(TokenType.COMMA):
+                    break
+                self.advance()
+        self.expect(TokenType.RPAREN, "expected ')' to close the parameter list")
+
+        header_comment = self._end_header()
+        body, body_trailing = self._body(TokenType.FLATLINE)
+        _adopt_header_comment(header_comment, body, body_trailing)
+        self.expect(TokenType.FLATLINE, "expected 'flatline' to close 'agent'")
+        node = FunctionDef(
+            name.lexeme,
+            params,
+            body,
+            line=keyword.line,
+            column=keyword.column,
+            body_trailing=body_trailing,
+        )
+        self._end_statement(node)
+        return node
+
+    def _return(self) -> Return:
+        keyword = self.advance()
+        # A bare `jackout` is an early exit from a procedure. Anything that
+        # can begin an expression means a value is coming.
+        value = None
+        if not self.check(TokenType.NEWLINE) and not self.check(TokenType.EOF):
+            if not self.check(TokenType.COMMENT):
+                value = self.expression()
+        node = Return(value, line=keyword.line, column=keyword.column)
+        self._end_statement(node)
+        return node
+
+    def _expression_statement(self) -> ExprStmt:
+        """A call, evaluated for its effect.
+
+        Only a call. `1 + 1` and a bare name compute something and throw it
+        away, which is a mistake rather than a statement — the grammar said
+        so before Stage 6 and still does. What changed is that a call may
+        now legitimately be run for what it does rather than what it
+        returns.
+        """
+        token = self.peek()
+        value = self.expression()
+        if not isinstance(value, Call):
+            raise ParseError(
+                f"expected a statement, found {_describe(token)}",
+                token.line,
+                token.column,
+            )
+        node = ExprStmt(value, line=token.line, column=token.column)
+        self._end_statement(node)
+        return node
+
     def _end_header(self) -> str | None:
         """Line ending after a block header; returns its trailing comment."""
         comment = None
@@ -285,7 +368,28 @@ class _Parser:
             op = self.advance()
             operand = self._unary()
             return Unary(TokenType.MINUS, operand, line=op.line, column=op.column)
-        return self._primary()
+        return self._call()
+
+    def _call(self) -> Expr:
+        """Postfix application, so a call binds tighter than any operator.
+
+        Loops rather than recurses so `f()()` is a call on a call. Nothing
+        reaches across a NEWLINE: the lexer emits one between statements,
+        and `check` sees it before it sees a '('.
+        """
+        expr = self._primary()
+        while self.check(TokenType.LPAREN):
+            paren = self.advance()
+            args: list[Expr] = []
+            if not self.check(TokenType.RPAREN):
+                while True:
+                    args.append(self.expression())
+                    if not self.check(TokenType.COMMA):
+                        break
+                    self.advance()
+            self.expect(TokenType.RPAREN, "expected ')' to close the arguments")
+            expr = Call(expr, args, line=paren.line, column=paren.column)
+        return expr
 
     def _primary(self) -> Expr:
         token = self.peek()

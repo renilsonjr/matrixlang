@@ -18,12 +18,16 @@ from matrixlang.nodes import (
     Assign,
     Binary,
     BoolLiteral,
+    Call,
     Declare,
     Expr,
+    ExprStmt,
+    FunctionDef,
     If,
     Name,
     NumberLiteral,
     Program,
+    Return,
     Stmt,
     StringLiteral,
     Trace,
@@ -31,7 +35,16 @@ from matrixlang.nodes import (
     While,
 )
 from matrixlang.tokens import TokenType
-from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
+from matrixlang.values import (
+    NOTHING,
+    Function,
+    is_bool,
+    is_function,
+    is_int,
+    is_str,
+    to_display,
+    type_name,
+)
 
 # Generous enough that no program a person writes on purpose will reach it,
 # small enough that a runaway loop stops in well under a second. A guess,
@@ -41,6 +54,64 @@ DEFAULT_MAX_STEPS = 200_000
 
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
+
+
+class Environment:
+    """One scope, linked to the one that encloses it.
+
+    Replaces Stage 3's flat dict. `construct` defines here; `=` and a read
+    walk outward to the nearest binding. That walk is the only thing
+    lexical scoping is, and it is what functions gave the language a
+    reason to have.
+    """
+
+    __slots__ = ("values", "parent")
+
+    def __init__(self, parent: "Environment | None" = None) -> None:
+        self.values: dict[str, object] = {}
+        self.parent = parent
+
+    def declare(self, name: str, value: object) -> bool:
+        """Define in THIS scope. False if it is already declared here.
+
+        Shadowing an outer binding is fine; redeclaring in the same scope
+        is the error, exactly as it was when there was only one scope.
+        """
+        if name in self.values:
+            return False
+        self.values[name] = value
+        return True
+
+    def assign(self, name: str, value: object) -> bool:
+        scope: Environment | None = self
+        while scope is not None:
+            if name in scope.values:
+                scope.values[name] = value
+                return True
+            scope = scope.parent
+        return False
+
+    def lookup(self, name: str) -> tuple[bool, object]:
+        scope: Environment | None = self
+        while scope is not None:
+            if name in scope.values:
+                return True, scope.values[name]
+            scope = scope.parent
+        return False, None
+
+
+class _Jackout(Exception):
+    """A `jackout`, unwinding to the call site.
+
+    Deliberately not a MatrixLangError. A jackout is not a diagnostic, and
+    a stray `except MatrixLangError` must never swallow a return.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: object) -> None:
+        super().__init__()
+        self.value = value
 
 
 class Interpreter:
@@ -56,7 +127,8 @@ class Interpreter:
         case and `Interpreter(out=buffer)` reads better than wrapping it by
         hand at every call site. `sink` wins if both are given.
         """
-        self.environment: dict[str, object] = {}
+        self.globals = Environment()
+        self._env = self.globals
         # Breadth, not depth. Python's recursion limit already bounds how
         # deep a call stack goes; nothing bounded how many statements ran.
         # A `dejavu true` loop never grows the stack, so a depth limit
@@ -80,6 +152,12 @@ class Interpreter:
         for statement in program.statements:
             try:
                 self._execute(statement)
+            except _Jackout:
+                raise RuntimeErrorML(
+                    "'jackout' outside an agent",
+                    statement.line,
+                    statement.column,
+                ) from None
             except RecursionError:
                 raise RuntimeErrorML(
                     "expression is nested too deeply",
@@ -109,22 +187,37 @@ class Interpreter:
 
         if isinstance(stmt, Trace):
             self._sink.emit(
-                Output(text=to_display(self._evaluate(stmt.value)), line=stmt.line)
+                Output(
+                    text=to_display(self._value_of(stmt.value, stmt)), line=stmt.line
+                )
             )
         elif isinstance(stmt, Declare):
-            if stmt.name in self.environment:
+            value = self._value_of(stmt.value, stmt)
+            if not self._env.declare(stmt.name, value):
                 raise RuntimeErrorML(
                     f"'{stmt.name}' is already declared", stmt.line, stmt.column
                 )
-            self.environment[stmt.name] = self._evaluate(stmt.value)
         elif isinstance(stmt, Assign):
-            if stmt.name not in self.environment:
+            value = self._value_of(stmt.value, stmt)
+            if not self._env.assign(stmt.name, value):
                 raise RuntimeErrorML(
                     f"'{stmt.name}' is not declared — use 'construct' first",
                     stmt.line,
                     stmt.column,
                 )
-            self.environment[stmt.name] = self._evaluate(stmt.value)
+        elif isinstance(stmt, FunctionDef):
+            agent = Function(stmt.name, stmt.params, stmt.body, self._env)
+            if not self._env.declare(stmt.name, agent):
+                raise RuntimeErrorML(
+                    f"'{stmt.name}' is already declared", stmt.line, stmt.column
+                )
+        elif isinstance(stmt, Return):
+            value = NOTHING if stmt.value is None else self._evaluate(stmt.value)
+            raise _Jackout(value)
+        elif isinstance(stmt, ExprStmt):
+            # NOTHING is legal here and nowhere else: this is the position
+            # that makes a procedure a legal thing to write.
+            self._evaluate(stmt.value)
         elif isinstance(stmt, If):
             if self._condition(stmt.condition):
                 for child in stmt.then_body:
@@ -170,22 +263,78 @@ class Interpreter:
         if isinstance(expr, BoolLiteral):
             return expr.value
         if isinstance(expr, Name):
-            if expr.ident not in self.environment:
+            found, value = self._env.lookup(expr.ident)
+            if not found:
                 raise RuntimeErrorML(
                     f"'{expr.ident}' is not declared — use 'construct' first",
                     expr.line,
                     expr.column,
                 )
-            return self.environment[expr.ident]
+            return value
         if isinstance(expr, Unary):
             operand = self._evaluate(expr.operand)
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary):
-            left = self._evaluate(expr.left)
-            right = self._evaluate(expr.right)
+            left = self._value_of(expr.left, expr)
+            right = self._value_of(expr.right, expr)
             return self._binary(expr, left, right)
+        if isinstance(expr, Call):
+            return self._call(expr)
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
+
+    def _call(self, expr: Call) -> object:
+        callee = self._value_of(expr.callee, expr)
+        if not is_function(callee):
+            raise RuntimeErrorML(
+                f"{type_name(callee)} is not an agent", expr.line, expr.column
+            )
+        args = [self._value_of(arg, expr) for arg in expr.args]
+        if len(args) != len(callee.params):
+            raise RuntimeErrorML(
+                f"agent '{callee.name}' takes {len(callee.params)} "
+                f"argument{'' if len(callee.params) == 1 else 's'}, "
+                f"got {len(args)}",
+                expr.line,
+                expr.column,
+            )
+
+        # The closure, not the caller. This is the whole of what closures
+        # are: the body sees where it was DEFINED.
+        frame = Environment(callee.closure)
+        for name, value in zip(callee.params, args):
+            frame.values[name] = value
+
+        previous = self._env
+        self._env = frame
+        try:
+            for statement in callee.body:
+                self._execute(statement)
+        except _Jackout as jackout:
+            return jackout.value
+        finally:
+            self._env = previous
+        # Fell off the end without jacking out.
+        return NOTHING
+
+    def _value_of(self, expr: Expr, where: Expr | Stmt) -> object:
+        """Evaluate, refusing NOTHING.
+
+        Every position except a bare call statement needs a real value.
+        Routing them all through here is what keeps NOTHING from ever
+        being stored, compared, printed or added to anything.
+        """
+        value = self._evaluate(expr)
+        if value is NOTHING:
+            name = expr.callee.ident if isinstance(expr, Call) and isinstance(
+                expr.callee, Name
+            ) else "the agent"
+            raise RuntimeErrorML(
+                f"agent '{name}' did not jack out a value",
+                where.line,
+                where.column,
+            )
+        return value
 
     def _binary(self, node: Binary, left: object, right: object) -> object:
         if node.op in _EQUALITY_OPS or node.op in _ORDERING_OPS:

@@ -23,6 +23,8 @@ class TokenType(Enum):
     FLATLINE = auto()
     TRUE = auto()
     FALSE = auto()
+    AGENT = auto()
+    JACKOUT = auto()
 
     # Operators
     PLUS = auto()
@@ -40,6 +42,7 @@ class TokenType(Enum):
     # Punctuation
     LPAREN = auto()
     RPAREN = auto()
+    COMMA = auto()
 
     # Structural
     COMMENT = auto()
@@ -56,6 +59,8 @@ KEYWORDS: dict[str, TokenType] = {
     "flatline": TokenType.FLATLINE,
     "true": TokenType.TRUE,
     "false": TokenType.FALSE,
+    "agent": TokenType.AGENT,
+    "jackout": TokenType.JACKOUT,
 }
 
 

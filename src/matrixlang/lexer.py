@@ -16,6 +16,7 @@ _SINGLE: dict[str, TokenType] = {
     "=": TokenType.ASSIGN,
     "<": TokenType.LT,
     ">": TokenType.GT,
+    ",": TokenType.COMMA,
 }
 
 _DOUBLE: dict[str, TokenType] = {

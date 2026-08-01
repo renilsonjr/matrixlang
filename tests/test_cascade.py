@@ -215,6 +215,48 @@ def test_a_looping_field_with_no_material_stays_empty():
         assert f.advance() == ()
 
 
+# --- The history cap ----------------------------------------------------
+
+
+def test_the_loop_history_is_capped():
+    # Stage 6 design §8. A recursive program emits hundreds of Statement
+    # events -- fib(10) alone produced 366 lines -- and an uncapped
+    # history is a leak in a window that may stay open for hours.
+    from matrixlang.cascade import MAX_HISTORY
+
+    f = CascadeField(40, 20, Random(7), loop=True)
+    for i in range(MAX_HISTORY * 3):
+        f.add(f"line{i}", Kind.SOURCE)
+    assert len(f._history) == MAX_HISTORY
+
+
+def test_the_cap_keeps_the_most_recent_lines():
+    from matrixlang.cascade import MAX_HISTORY
+
+    f = CascadeField(40, 20, Random(7), loop=True)
+    for i in range(MAX_HISTORY + 5):
+        f.add(f"l{i}", Kind.SOURCE)
+    kept = [text for text, _ in f._history]
+    assert kept[-1] == f"l{MAX_HISTORY + 4}"
+    assert "l0" not in kept
+
+
+def test_the_cap_is_two_screens_worth_not_an_arbitrary_number():
+    from matrixlang.cascade import MAX_HISTORY
+
+    assert MAX_HISTORY == 200
+
+
+def test_a_capped_field_still_loops():
+    from matrixlang.cascade import MAX_HISTORY
+
+    f = CascadeField(20, 10, Random(7), loop=True)
+    for i in range(MAX_HISTORY * 2):
+        f.add(f"l{i}", Kind.SOURCE)
+    blanks = [i for i in range(400) if not f.advance()]
+    assert blanks == []
+
+
 # --- Turning events into falling text -----------------------------------
 
 
