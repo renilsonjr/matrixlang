@@ -61,6 +61,14 @@ class Binary(Expr):
     right: Expr
 
 
+@dataclass
+class Call(Expr):
+    """A call. `args` is its own precedence context — see render.py."""
+
+    callee: Expr
+    args: list[Expr]
+
+
 # --- Statements ----------------------------------------------------------
 
 
@@ -106,6 +114,32 @@ class While(Stmt):
     condition: Expr
     body: list[Stmt]
     body_trailing: list[str] = field(default_factory=list, kw_only=True)
+
+
+@dataclass
+class FunctionDef(Stmt):
+    """An agent. Keyword-delimited and closed by `flatline`, per D-02."""
+
+    name: str
+    params: list[str]
+    body: list[Stmt]
+    body_trailing: list[str] = field(default_factory=list, kw_only=True)
+
+
+@dataclass
+class Return(Stmt):
+    """`jackout`. A bare one produces NOTHING, which is legal in a
+    procedure and an error the moment anybody uses the result."""
+
+    value: Expr | None = None
+
+
+@dataclass
+class ExprStmt(Stmt):
+    """An expression evaluated for its effect. Without this, a call whose
+    value is discarded has nowhere to live."""
+
+    value: Expr
 
 
 @dataclass
