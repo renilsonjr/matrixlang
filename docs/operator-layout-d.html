@@ -1,0 +1,186 @@
+<meta charset="utf-8">
+<title>Operator — layout D, source face toggle</title>
+<style>
+  :root{
+    --bg:#05070a; --panel:#0b0f14; --edge:#16202a;
+    --green:#00ff41; --dim:#0d7a2a; --head:#ccffcc;
+    --text:#c8d4cd; --muted:#5d6f66; --white:#e8f0ea;
+    --mono:"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+  header{padding:16px 18px;border-bottom:1px solid var(--edge)}
+  h1{font-size:15px;margin:0 0 4px;color:var(--white);font-weight:600}
+  .tag{color:var(--muted);font-size:11px;line-height:1.65}
+  section{padding:20px 18px;border-bottom:1px solid var(--edge)}
+  .panel{background:var(--panel);border:1px solid var(--edge);border-radius:4px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+  .ph{padding:8px 12px;border-bottom:1px solid var(--edge);color:var(--muted);font-size:11px;
+      display:flex;justify-content:space-between;gap:8px;flex:0 0 auto;align-items:center}
+  .pb{padding:12px;overflow:hidden;flex:1 1 auto;min-height:0}
+  .msg{margin-bottom:10px;line-height:1.55}
+  .who{color:var(--muted);font-size:10px;margin-bottom:3px;text-transform:uppercase;letter-spacing:.08em}
+  .you .bubble{color:var(--white)}
+  .op .bubble{color:var(--text);border-left:2px solid var(--dim);padding-left:9px}
+  .attempt{color:var(--muted);font-size:11px;border-left:2px solid #3a2a12;padding-left:9px;margin:8px 0;line-height:1.55}
+  .attempt b{color:#d68a2a;font-weight:500}
+  .ok{color:var(--green)}
+  .composer{border-top:1px solid var(--edge);padding:9px 12px;color:var(--muted);flex:0 0 auto}
+  pre{margin:0;line-height:1.7;font-size:12.5px}
+  .k{color:var(--green)} .s{color:#9ad5a8} .n{color:#7fb8ff} .c{color:var(--muted)} .id{color:var(--white)}
+  .ln{color:#2b3a33;margin-right:10px}
+  .status{border-top:1px solid var(--edge);padding:6px 12px;color:var(--muted);font-size:11px;background:#0a0d10;flex:0 0 auto}
+  .badge{border:1px solid var(--edge);border-radius:3px;padding:2px 7px;color:var(--muted);font-size:10px}
+  .badge.on{color:var(--green);border-color:var(--dim)}
+
+  .rain{position:relative;background:#000;overflow:hidden;flex:1 1 auto;min-height:200px}
+  .rain .col{position:absolute;top:0;width:1.05em;text-align:center;line-height:1.34;
+             white-space:pre;animation:fall linear infinite;font-size:12.5px}
+  .rain .col span{display:block;color:var(--dim)}
+  .rain .col span:nth-last-child(1){color:var(--head)}
+  .rain .col span:nth-last-child(2),
+  .rain .col span:nth-last-child(3){color:var(--green)}
+  .rain .col.out span{color:#2a8f3f}
+  .rain .col.out span:nth-last-child(1){color:#ffffff}
+  .rain .col.out span:nth-last-child(2),
+  .rain .col.out span:nth-last-child(3){color:var(--head)}
+  @keyframes fall{from{transform:translateY(-110%)}to{transform:translateY(340%)}}
+
+  /* ---------- CSS-only mode toggle ---------- */
+  .modes{display:none}
+  .toolbar{display:flex;gap:6px;align-items:center}
+  .toolbar label{padding:3px 9px;border:1px solid var(--edge);border-radius:3px;color:var(--muted);
+                 font-size:10px;cursor:pointer;user-select:none}
+  #m1:checked ~ .wrap .toolbar label[for=m1],
+  #m2:checked ~ .wrap .toolbar label[for=m2],
+  #m3:checked ~ .wrap .toolbar label[for=m3]{color:var(--green);border-color:var(--dim);background:#08120c}
+  .mode{display:none}
+  #m1:checked ~ .wrap .mode.v1,
+  #m2:checked ~ .wrap .mode.v2,
+  #m3:checked ~ .wrap .mode.v3{display:block}
+  .rain .mode{position:absolute;inset:0}
+
+  .lay-d{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1.05fr);gap:13px;height:540px}
+  .lay-d .left{display:grid;grid-template-rows:1.05fr 1fr;gap:13px;min-height:0}
+  .verdict{margin-top:14px;color:var(--muted);font-size:11.5px;line-height:1.75;max-width:920px}
+  .verdict b{color:var(--text)} .verdict i{color:#9ad5a8;font-style:normal}
+  table{border-collapse:collapse;margin-top:10px;font-size:11.5px}
+  td,th{border:1px solid var(--edge);padding:5px 10px;text-align:left}
+  th{color:var(--muted);font-weight:500}
+  @media (max-width:880px){
+    .lay-d{grid-template-columns:1fr;height:auto}
+    .lay-d .left{grid-template-rows:auto auto}
+    .lay-d .panel{height:250px}
+  }
+</style>
+
+<header>
+  <h1>Operator — layout D · source face toggle</h1>
+  <div class="tag">
+    Click <b>latin</b> / <b>glyph wall 1</b> / <b>glyph wall 2</b> in the cascade header. Pure CSS, no JavaScript.<br>
+    Output is identical in all three — it is already pure glyphs. Only the <b>source</b> columns change.
+  </div>
+</header>
+
+<section>
+<input type="radio" name="mode" id="m1" class="modes" checked>
+<input type="radio" name="mode" id="m2" class="modes">
+<input type="radio" name="mode" id="m3" class="modes">
+
+<div class="wrap">
+  <div class="lay-d">
+
+    <div class="left">
+      <div class="panel">
+        <div class="ph"><span>PROGRAM.RAIN</span>
+          <span><span class="badge on">ascii</span> <span class="badge">glyph</span> <span class="badge">save</span></span></div>
+        <div class="pb"><pre><span class="ln">1</span><span class="k">construct</span> <span class="id">n</span> = <span class="n">3</span>
+<span class="ln">2</span><span class="k">dejavu</span> <span class="id">n</span> &gt; <span class="n">0</span>
+<span class="ln">3</span>  <span class="k">trace</span> <span class="id">n</span>
+<span class="ln">4</span>  <span class="id">n</span> = <span class="id">n</span> - <span class="n">1</span>
+<span class="ln">5</span><span class="k">flatline</span>
+<span class="ln">6</span><span class="k">trace</span> <span class="s">"wake up, Neo"</span></pre></div>
+        <div class="status">parsed ✓ · 6 statements · 0 diagnostics</div>
+      </div>
+
+      <div class="panel">
+        <div class="ph"><span>OPERATOR</span><span class="badge on">connected</span></div>
+        <div class="pb">
+          <div class="msg you"><div class="who">you</div><div class="bubble">count down from 3 then say wake up, Neo</div></div>
+          <div class="msg op"><div class="who">operator</div><div class="bubble">A <span class="k">dejavu</span> loop with a counter, then a trace.</div></div>
+          <div class="attempt"><b>attempt 1 rejected</b> — [line 2, column 9] condition must be a boolean</div>
+          <div class="msg op"><div class="who">operator</div><div class="bubble"><span class="ok">attempt 2 parsed ✓</span> — output: 3, 2, 1, <i>wake up, Neo</i>.</div></div>
+        </div>
+        <div class="composer">&gt; describe a program…</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="ph">
+        <span>CASCADE</span>
+        <span class="toolbar">
+          <label for="m1">latin</label>
+          <label for="m2">glyph wall 1</label>
+          <label for="m3">glyph wall 2</label>
+        </span>
+      </div>
+      <div class="rain">
+
+        <!-- ===== mode 1 : today, Latin identifiers kept ===== -->
+        <div class="mode v1">
+          <div class="col" style="left:6%;  animation-duration:9s;  animation-delay:-1s"><span>ｱ</span><span> </span><span>n</span><span> </span><span>ﾅ</span><span> </span><span>ｩ</span></div>
+          <div class="col" style="left:20%; animation-duration:11s; animation-delay:-5s"><span>ﾃ</span><span> </span><span>n</span><span> </span><span>ｿ</span><span> </span><span>ｦ</span></div>
+          <div class="col" style="left:33%; animation-duration:8s;  animation-delay:-3s"><span>ﾄ</span><span> </span><span>n</span></div>
+          <div class="col" style="left:44%; animation-duration:12s; animation-delay:-7s"><span>ﾄ</span><span> </span><span>"</span><span>w</span><span>a</span><span>k</span><span>e</span><span> </span><span>u</span><span>p</span><span>,</span><span> </span><span>N</span><span>e</span><span>o</span><span>"</span></div>
+          <div class="col" style="left:58%; animation-duration:10s; animation-delay:-2s"><span>ﾗ</span></div>
+          <div class="col out" style="left:70%; animation-duration:20s; animation-delay:-6s"><span>ﾁ</span><span>｡</span><span>ｵ</span><span>･</span><span> </span><span>ｿ</span><span>ｺ</span><span>ﾆ</span><span> </span><span>ﾙ</span><span>ｸ</span><span>･</span><span>ｹ</span></div>
+          <div class="col out" style="left:84%; animation-duration:17s; animation-delay:-11s"><span>ｩ</span></div>
+          <div class="col out" style="left:93%; animation-duration:18s; animation-delay:-3s"><span>ｨ</span></div>
+        </div>
+
+        <!-- ===== mode 2 : glyph wall, option 1 ===== -->
+        <div class="mode v2">
+          <div class="col" style="left:6%;  animation-duration:9s;  animation-delay:-1s"><span>ｱ</span><span> </span><span>ｸ</span><span> </span><span>ﾅ</span><span> </span><span>ｩ</span></div>
+          <div class="col" style="left:20%; animation-duration:11s; animation-delay:-5s"><span>ﾃ</span><span> </span><span>ｸ</span><span> </span><span>ｿ</span><span> </span><span>ｦ</span></div>
+          <div class="col" style="left:33%; animation-duration:8s;  animation-delay:-3s"><span>ﾄ</span><span> </span><span>ｸ</span></div>
+          <div class="col" style="left:44%; animation-duration:12s; animation-delay:-7s"><span>ﾄ</span><span> </span><span>ﾊ</span><span>ﾁ</span><span>｡</span><span>ｵ</span><span>･</span><span> </span><span>ｿ</span><span>ｺ</span><span>ﾆ</span><span> </span><span>ﾙ</span><span>ｸ</span><span>･</span><span>ｹ</span><span>ﾊ</span></div>
+          <div class="col" style="left:58%; animation-duration:10s; animation-delay:-2s"><span>ﾗ</span></div>
+          <div class="col out" style="left:70%; animation-duration:20s; animation-delay:-6s"><span>ﾁ</span><span>｡</span><span>ｵ</span><span>･</span><span> </span><span>ｿ</span><span>ｺ</span><span>ﾆ</span><span> </span><span>ﾙ</span><span>ｸ</span><span>･</span><span>ｹ</span></div>
+          <div class="col out" style="left:84%; animation-duration:17s; animation-delay:-11s"><span>ｩ</span></div>
+          <div class="col out" style="left:93%; animation-duration:18s; animation-delay:-3s"><span>ｨ</span></div>
+        </div>
+
+        <!-- ===== mode 3 : glyph wall, option 2 ===== -->
+        <div class="mode v3">
+          <div class="col" style="left:6%;  animation-duration:14s; animation-delay:-1s"><span>｣</span><span>ｹ</span><span>ｸ</span><span>ｽ</span><span>ｾ</span><span>ｼ</span><span>ｿ</span><span>｣</span><span>ｾ</span><span> </span><span>ｸ</span><span> </span><span>ﾕ</span><span> </span><span>ｩ</span></div>
+          <div class="col" style="left:22%; animation-duration:13s; animation-delay:-5s"><span>､</span><span>･</span><span>ｴ</span><span>｡</span><span>ﾀ</span><span>ｿ</span><span> </span><span>ｸ</span><span> </span><span>></span><span> </span><span>ｦ</span></div>
+          <div class="col" style="left:38%; animation-duration:11s; animation-delay:-3s"><span>ｾ</span><span>ｼ</span><span>｡</span><span>｣</span><span>･</span><span> </span><span>ｸ</span></div>
+          <div class="col" style="left:52%; animation-duration:16s; animation-delay:-7s"><span>ｾ</span><span>ｼ</span><span>｡</span><span>｣</span><span>･</span><span> </span><span>ﾊ</span><span>ﾁ</span><span>｡</span><span>ｵ</span><span>･</span><span> </span><span>ｿ</span><span>ｺ</span><span>ﾆ</span><span> </span><span>ﾙ</span><span>ｸ</span><span>･</span><span>ｹ</span><span>ﾊ</span></div>
+          <div class="col out" style="left:72%; animation-duration:20s; animation-delay:-6s"><span>ﾁ</span><span>｡</span><span>ｵ</span><span>･</span><span> </span><span>ｿ</span><span>ｺ</span><span>ﾆ</span><span> </span><span>ﾙ</span><span>ｸ</span><span>･</span><span>ｹ</span></div>
+          <div class="col out" style="left:86%; animation-duration:17s; animation-delay:-11s"><span>ｩ</span></div>
+          <div class="col out" style="left:94%; animation-duration:18s; animation-delay:-3s"><span>ｨ</span></div>
+        </div>
+
+      </div>
+      <div class="status">source falls faster · output brighter, slower, white head</div>
+    </div>
+
+  </div>
+</div>
+
+<p class="verdict">
+<b>Output never changes.</b> It is already pure glyphs — <i>ﾁ｡ｵ･ ｿｺﾆ ﾙｸ･ｹ</i> = <i>wake up, Neo</i>, falling slower with a white head. Only source columns differ between modes.
+</p>
+
+<table>
+  <tr><th>mode</th><th><code>construct n = 3</code></th><th>height</th><th>naive decode</th><th>keeps the 32-slot face</th></tr>
+  <tr><td>latin (today)</td><td>ｱ n ﾅ ｩ</td><td>7 rows</td><td>—</td><td>yes</td></tr>
+  <tr><td><b>glyph wall 1</b></td><td>ｱ ｸ ﾅ ｩ</td><td>7 rows</td><td>garbled on keywords</td><td><b>yes</b></td></tr>
+  <tr><td>glyph wall 2</td><td>｣ｹｸｽｾｼｿ｣ｾ ｸ ﾕ ｩ</td><td>15 rows</td><td>exact</td><td>no</td></tr>
+</table>
+
+<p class="verdict">
+<b>My read: option 1.</b> It is a true glyph wall, it costs nothing in height, and it keeps <i>ｱ ﾃ ﾄ ﾗ</i> — the language's own notation — visible in the cascade, which is the thing that makes this MatrixLang rather than generic rain.<br><br>
+Option 2 decodes perfectly but pays twice: <b>every line roughly doubles in height</b> (15 rows instead of 7, and a 30-row field starts refusing to show whole statements), and <code>construct</code> becomes nine glyphs, so the 32-slot table you designed simply does not appear on screen any more.<br><br>
+The cost of option 1, stated plainly: a reader decoding a source line with the translit table gets the identifiers and strings right and the <b>keywords wrong</b>, because <i>ｱ</i> means <i>construct</i> in one table and a letter in the other. Output remains perfectly decodable either way — and output is the part anyone would actually want to read back.
+</p>
+</section>
