@@ -14,6 +14,7 @@ from random import Random
 import pytest
 
 from matrixlang.cascade import CascadeField, Kind
+from matrixlang.glyphs import GLYPHS
 from matrixlang.events import Error, Output, Statement
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -247,6 +248,58 @@ def test_a_block_statement_contributes_only_its_own_header_line():
         cells = f.advance()
         if cells:
             assert len({c.col for c in cells}) == 1
+
+
+def test_source_falls_as_pure_glyphs_by_default():
+    # D-03 keeps identifiers Latin in the glyph FACE, because in the editor
+    # "the only Latin text is the thing you need to find". The cascade is
+    # not the editor — the editor pane shows the real source — so the
+    # cascade is a pure glyph wall.
+    f = field()
+    program = parse(lex('construct name = "Neo"\n'))
+    f.consume(Statement(node=program.statements[0], line=1))
+    (text, _kind) = f._waiting[0]
+    assert not any(ch.isascii() and ch.isalnum() for ch in text)
+
+
+def test_the_language_glyphs_survive_transliteration():
+    # Option 1, not option 2: transliterate ON TOP of the glyph face, so
+    # `construct` stays the single glyph the language assigns it rather
+    # than becoming nine glyphs of spelled-out Latin.
+    f = field()
+    program = parse(lex("construct n = 0\n"))
+    f.consume(Statement(node=program.statements[0], line=1))
+    (text, _kind) = f._waiting[0]
+    assert GLYPHS["construct"] in text
+    assert GLYPHS["="] in text
+
+
+def test_a_transliterated_source_line_is_no_taller_than_the_glyph_face():
+    # The whole reason option 1 beat option 2. The cascade renders a line
+    # vertically, so height is length: option 2 doubled it and a 30-row
+    # field stopped fitting whole statements.
+    program = parse(lex('construct name = "Neo"\n'))
+    plain = field(); plain._glyph_source = False
+    plain.consume(Statement(node=program.statements[0], line=1))
+    pure = field()
+    pure.consume(Statement(node=program.statements[0], line=1))
+    assert len(pure._waiting[0][0]) <= len(plain._waiting[0][0]) + 2
+
+
+def test_latin_source_can_be_turned_back_on():
+    f = CascadeField(40, 20, Random(7), glyph_source=False)
+    program = parse(lex('construct name = "Neo"\n'))
+    f.consume(Statement(node=program.statements[0], line=1))
+    (text, _kind) = f._waiting[0]
+    assert "name" in text
+
+
+def test_output_is_unaffected_by_the_source_face():
+    on = field()
+    off = CascadeField(40, 20, Random(7), glyph_source=False)
+    for f in (on, off):
+        f.consume(Output(text="wake up, Neo", line=1))
+    assert on._waiting[0][0] == off._waiting[0][0]
 
 
 def test_an_error_event_never_reaches_the_cascade():
