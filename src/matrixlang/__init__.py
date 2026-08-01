@@ -1,3 +1,3 @@
-"""MatrixLang — a Matrix-styled esoteric programming language."""
+"""MatrixLang — a programming language whose output is the Matrix cascade."""
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

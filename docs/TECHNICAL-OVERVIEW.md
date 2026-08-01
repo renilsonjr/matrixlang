@@ -3,22 +3,38 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Written against `feat/stage-6-functions-impl` — 3,107 lines of source across 20
-modules, 4,554 lines of tests, 878 tests passing, zero third-party dependencies.
+Current as of `fix/audit-findings-and-docs` — 3,626 lines in the package across
+22 modules, plus a 489-line local server and a 650-line web UI. 5,846 lines of
+tests, 1,023 passing, on Python 3.11 through 3.14 in CI. Zero third-party
+runtime dependencies; `pytest` for development and the Anthropic SDK as an
+optional extra for Operator.
+
+New to this project? [LEARNING-MATRIXLANG.md](LEARNING-MATRIXLANG.md) teaches
+the language itself. This document is about the implementation.
 
 ---
 
 ## 1. What it is, in one paragraph
 
 MatrixLang is a small, real programming language: dynamically typed,
-Turing-complete, with a tree-walking interpreter, a REPL, and a command-line
-toolchain. Its distinguishing feature is that a program has **two faces** — the
-same source can be written and read either in ASCII (`construct x = 5`) or in
-Matrix-style glyphs (`ｱ x ﾅ ｫ`), and the toolchain converts losslessly between
-them because both are renderings of a single syntax tree.
+Turing-complete, with closures, a tree-walking interpreter, a REPL, and a
+command-line toolchain. Its distinguishing feature is that a program has **two
+faces** — the same source can be written and read either in ASCII
+(`construct x = 5`) or in Matrix-style glyphs (`ｱ x ﾅ ｫ`), and the toolchain
+converts losslessly between them because both are renderings of a single syntax
+tree.
 
-It is written in Python using only the standard library. `pytest` is the only
-development dependency.
+Its second distinguishing feature is that **the cascade is the output device**.
+Running a program opens a window in which the program's own source and output
+fall as glyphs, looping for as long as the window is open. Nothing random is
+ever generated: every glyph on screen came from material the program produced.
+
+On top of that sit two optional layers, both local-only: a stdlib HTTP server
+that streams the same execution events over SSE, and **Operator**, an assistive
+companion that writes MatrixLang from plain language and is never allowed to
+declare its own output valid.
+
+It is written in Python using only the standard library.
 
 ## 2. The premise, and why it matters technically
 
@@ -54,6 +70,7 @@ source ──► lexer ──► tokens ──► parser ──► AST ──►
   └──────────────── render.py ◄─────────────┘              display ──┴──► text
        (ASCII face or glyph face, from one tree)              │
                                                               └──► cascade ──► window
+                                                                          └──► server ──► SSE ──► web-ui
 ```
 
 The pipeline is the classic front end from Nystrom's *Crafting Interpreters*
@@ -61,28 +78,46 @@ Part I, with one addition: `render.py` runs the pipeline **backwards**, turning 
 tree back into source text in either face. That reverse edge is what makes the
 two-face design work, and it is where most of the interesting problems live.
 
+The two display backends — the Tk window and the browser — sit at the same
+place on that diagram and consume the same `events` stream. Neither knows
+anything about the language, which is the whole point of the split.
+
 ### Module map
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 75 | Token vocabulary. Pure data |
-| `nodes.py` | 151 | AST node definitions. Pure data |
+| `tokens.py` | 80 | Token vocabulary. Pure data |
+| `nodes.py` | 148 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 118 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 66 | The 35-slot bijective glyph table. 21 slots left of the block |
-| `lexer.py` | 244 | Source text → token list. Handles both faces |
-| `parser.py` | 396 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 355 | Tree walker. Executes the AST |
-| `render.py` | 232 | AST → source text, in either face |
-| `treeview.py` | 133 | AST → indented text, for teaching |
+| `values.py` | 115 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `glyphs.py` | 62 | The 35-slot bijective glyph table. 21 slots left of the block |
+| `lexer.py` | 245 | Source text → token list. Handles both faces |
+| `parser.py` | 417 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 409 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 250 | AST → source text, in either face |
+| `treeview.py` | 137 | AST → indented text, for teaching |
 | `repl.py` | 110 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
-| `translit.py` | 112 | The reversible display table. Pure |
+| `translit.py` | 162 | The reversible display table. Pure |
 | `display.py` | 96 | The display protocol and backend selection. Pure |
-| `cascade.py` | 163 | The content-carrying field simulation. Pure |
-| `window.py` | 168 | The Tk backend. The only impure module |
+| `cascade.py` | 271 | The content-carrying field simulation. Pure |
+| `window.py` | 210 | The Tk backend. The only impure module in the package |
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
-| `cli.py` | 202 | Command-line entry point |
+| `cli.py` | 230 | Command-line entry point |
+| `operator/prompt.py` | 101 | The system prompt. The language's rules, as text |
+| `operator/validate.py` | 87 | Parse and dry-run a candidate program. The gate |
+| `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
+| `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |
+
+Outside the package, and deliberately not installable:
+
+| Path | Lines | Responsibility |
+| --- | --- | --- |
+| `server/sse.py` | 91 | Event → wire payload, and the SSE framing. One source of truth for both |
+| `server/runs.py` | 147 | A run's lifecycle: worker thread, queue, wall-clock deadline |
+| `server/app.py` | 214 | Three endpoints and static file serving. Binds `127.0.0.1` only |
+| `web-ui/cascade.js` | 211 | The cascade again, in a canvas. Mirrors `cascade.py` decision for decision |
+| `web-ui/app.js` | 182 | Wiring only: post, read the event stream, hand events to the cascade |
 
 ### The dependency graph is a test, not a convention
 
@@ -154,7 +189,7 @@ flatline
 - **`+` is overloaded** for integer addition and string concatenation; mixed
   operands are an error, with no implicit stringification.
 
-## 5. The six problems worth talking about
+## 5. The seven problems worth talking about
 
 These are the parts where the work was genuinely non-trivial. In an interview,
 these are the answers to "tell me about something hard."
@@ -196,7 +231,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 32 slots is
+and a **per-seed randomly mixed** face where each of the 35 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -237,7 +272,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 32-entry table the renderer writes through, just
+The lexer reads the same 35-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.
@@ -293,7 +328,79 @@ And the gate survives unchanged: **piped or redirected output is byte-identical
 to what it was before any of this existed** — verified as bytes, not just as
 strings.
 
-## 6. Security posture
+### 5.7 The same animation, twice, without a second source of truth
+
+The browser needs the cascade too, and a canvas cannot import `cascade.py`. So
+there are two implementations of one simulation, which is exactly the shape that
+produced the project's worst prior defect: a hand-written `web/interpreter.js`
+that drifted from the real interpreter until the two disagreed about the
+language. That file was deleted rather than fixed.
+
+The rule that came out of it: **the browser may re-implement presentation, never
+semantics.** `cascade.js` mirrors `cascade.py` — one reserved column per stream,
+character 0 highest, source faster than output — and nothing else. Every glyph
+it draws arrives over the wire already rendered and already transliterated,
+because owning a copy of the translit table is how the old web layer drifted.
+
+Two things went wrong anyway, and both are worth stating:
+
+- **The wire payload was built in two places** — once for the queue the Tk
+  window drains, once for the HTTP response — and they disagreed about whether
+  output was sent as text or as glyphs, so the browser drew Latin with the glyph
+  wall selected. Collapsed into `sse.payload`, which both paths now call.
+- **The browser ran the simulation at the monitor's refresh rate.** Stepping
+  once per `requestAnimationFrame` meant 60 rows/second on a 60Hz panel and 108
+  on a 120Hz one, against the Tk window's 27. Accumulating real time and
+  stepping at a fixed 33ms makes speed a property of the design rather than of
+  the hardware.
+
+Both were found by running it, not by a test — which is the recurring lesson of
+§5.6 restated at a layer boundary.
+
+## 6. Operator, and the local web layer
+
+Operator writes MatrixLang from plain language. The interesting decision is not
+that it calls a model; it is what it is **not** allowed to do.
+
+**Operator never declares its own output valid.** A candidate program is parsed
+and dry-run against a reduced step limit before the user ever sees it. If either
+fails, the diagnostic — the real one, with its line and column — is fed back and
+the model tries again, at most three times. There is no path by which unvalidated
+source reaches the editor.
+
+```
+request ──► prompt ──► model ──► candidate ──► validate ──► ok? ──► editor
+                         ▲                         │
+                         └──── the real diagnostic ─┘   (≤ 3 attempts)
+```
+
+Three consequences that make it work:
+
+- **The retry loop is shown, not hidden.** The UI prints each rejected attempt
+  and why. Concealing it would waste the most important property of the design.
+- **A client error ends the loop immediately.** Retrying a missing SDK three
+  times was a real bug: only *validation* failures are worth another attempt.
+- **The SDK is imported inside the function that calls it.** `pip install
+  matrixlang` stays dependency-free and `import matrixlang.operator` works
+  without the extra installed.
+
+The server is `http.server` and Server-Sent Events rather than a framework, for
+the same reason the package has no dependencies. Three endpoints — run, chat,
+events — and static files. It **binds `127.0.0.1` only**, resolves static paths
+and checks containment before serving, and gives every run a wall-clock deadline
+in addition to the interpreter's step limit, because a program can be slow
+without executing many statements.
+
+One contract is worth naming because it was wrong first: **the event stream
+always ends with `done`.** The queue originally treated `error` as terminal
+while HTTP appended `done` after it, so a client could not write one handler
+that worked against both.
+
+`server/` is deliberately not packaged. A top-level `server` module on PyPI
+would collide with half the ecosystem; it runs from the repo root with
+`python -m server`, which is the clone-and-run model the design chose.
+
+## 7. Security posture
 
 A whole-repository security review was run against v0.5.0. Worth being able to
 state precisely:
@@ -326,10 +433,19 @@ an error*) rather than inventing a new one.
 This is a good story precisely because the first instinct was wrong and the
 constraint that revealed it was a property test.
 
-## 7. Testing philosophy
+**What the web layer adds, and what it does not.** The server binds `127.0.0.1`
+and is not intended to face a network. Static paths are resolved and checked for
+containment before anything is served. Everything the model produces is escaped
+before it reaches `innerHTML`, and a run carries a wall-clock deadline as well as
+a step limit. What is deliberately *absent* is authentication, rate limiting, and
+any notion of a user — those belong to a hosted product, and hosting was
+explicitly deferred. Exposing this server publicly is not a supported
+configuration.
 
-743 tests, ~1.4× more test code than source code. Three practices are worth
-describing:
+## 8. Testing philosophy
+
+1,023 tests, ~1.6× more test code than source code, run against Python 3.11
+through 3.14 on every pull request. Three practices are worth describing:
 
 **Teeth-checks.** Every load-bearing guard is proven by injecting the bug and
 watching the test fail, then reverting. A test that has never failed proves
@@ -353,7 +469,16 @@ The most instructive failure in the project: three tests with "drain" and
 green — while a third of an 80×24 terminal was still lit when the animation
 ended. The lesson is that a test's name is not its assertion.
 
-## 8. What is deliberately absent
+**And the standing limit of all of it: units pass while the wiring fails.** Four
+of the project's worst defects were invisible to a green suite — the cascade
+draining to a black window, the retry loop retrying an unfixable client error,
+the browser drawing Latin with the glyph wall selected, and `matrixlang parse`
+crashing on an agent while 878 tests passed. Every one was found by running the
+thing. Each has a test now, but the pattern is the honest caveat on a suite this
+size, and it is why every example in
+[LEARNING-MATRIXLANG.md](LEARNING-MATRIXLANG.md) was executed before it shipped.
+
+## 9. What is deliberately absent
 
 Scope discipline is part of the design, and being able to say *why* something
 isn't there is usually more convincing than a feature list:
@@ -363,6 +488,9 @@ isn't there is usually more convincing than a feature list:
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.
 - **Logical operators** (`and` / `or` / `not`) — reachable, but not needed for
   Turing completeness or any demo.
+- **Hosting, accounts, and anything a product needs.** The web layer runs on
+  `127.0.0.1` for whoever cloned the repo. Deploying it would mean designing
+  auth, quotas and abuse handling first, which is a separate project.
 - **A bytecode VM.** Explicitly deferred: starting there would mean debugging an
   unfamiliar execution model, an unfamiliar parser, and an unfamiliar glyph
   pipeline simultaneously.
@@ -378,18 +506,21 @@ isn't there is usually more convincing than a feature list:
 ## The 30-second version
 
 > I built a small programming language in Python — lexer, parser, tree-walking
-> interpreter, REPL, and a CLI. The interesting constraint is that it has two
-> interchangeable syntaxes: the same program can be written in ASCII or in
-> Japanese katakana glyphs, and the toolchain converts between them losslessly
-> because both are just renderings of one syntax tree. That's enforced by a
-> property test: for any tree, rendering it either way and re-parsing gives back
-> an identical tree, comments included. About 2,500 lines of source, 743 tests,
-> no third-party dependencies.
+> interpreter with closures, REPL, and a CLI. Two things make it interesting.
+> First, it has two interchangeable syntaxes: the same program can be written in
+> ASCII or in Japanese katakana glyphs, and the toolchain converts between them
+> losslessly because both are just renderings of one syntax tree — enforced by a
+> property test that renders any tree either way, re-parses, and gets an
+> identical tree back, comments included. Second, its output device is the
+> Matrix cascade: running a program opens a window where its own source and
+> output fall as glyphs, and the transliteration is reversible, so what falls
+> can be read back rather than merely watched. About 3,600 lines of source,
+> 1,023 tests, no third-party runtime dependencies.
 
 ## The two-minute version
 
 Lead with the pipeline (§3), then pick **one** deep problem rather than listing
-all six. The best single choice for most interviews is §5.1 — reconstructing
+all seven. The best single choice for most interviews is §5.1 — reconstructing
 parentheses — because it is:
 
 - easy to state in one sentence ("the tree doesn't store parentheses, so the
@@ -429,8 +560,18 @@ Two honest answers. First, several test bodies were written stronger than the
 truth — one asserted a value that is legitimately false once a column falls off
 the screen, and an implementer changed working code to satisfy it. Tests encode
 assumptions, and an over-strict assertion is a bug that costs you correct code.
-Second, there is no CI: a source change once rode in on a documentation PR and
-broke `main`, and no gate existed to catch it.
+Second, CI arrived late: a source change once rode in on a documentation PR and
+broke `main` because no gate existed. There is one now — the suite runs on
+3.11 through 3.14 on every pull request — but it was a reaction rather than a
+starting condition.
+
+**"How do you keep an LLM from writing broken code?"**
+You do not. You make it impossible for broken code to reach the user. Operator's
+output is parsed and dry-run before anyone sees it, and the real diagnostic goes
+back to the model on failure — at most three times, because a model that cannot
+satisfy a request will not start to on the fourth try. Operator is never the
+authority on whether its own output is valid; the parser is. The UI shows the
+rejected attempts rather than hiding them, since that gate is the design.
 
 **"Why Python, and why no dependencies?"**
 Python because the reference material (*Crafting Interpreters*) lines up and the
@@ -455,26 +596,36 @@ look. Brainfuck manages it with eight punctuation marks.
   renderer is canonical.
 - **Testing / quality:** teeth-checks, the property test and its meta-test, the
   "tests that could not fail" failures and what they cost.
-- **Security-adjacent:** §6 — particularly that the obvious fix was wrong, and
+- **Security-adjacent:** §7 — particularly that the obvious fix was wrong, and
   that a property test is what proved it.
+- **AI-adjacent:** §6 — validation as a gate rather than a suggestion, and the
+  deleted `web/interpreter.js` as the case for one implementation of anything.
 
 ## Things to be honest about
 
 Volunteering these lands better than being caught by them:
 
-- It is a **teaching artifact**, not a product. No users, no ecosystem, and
-  languages win on ecosystem rather than syntax.
-- The glyph set is Unicode katakana, **not** the film's actual glyphs — those
-  exist as WebGL vector data in a reverse-engineering project, not as a
-  distributable font.
+- It is a **teaching artifact that anyone can clone and run**, not a product.
+  No users, no ecosystem, no hosting, and languages win on ecosystem rather than
+  syntax.
+- The glyph set is Unicode katakana, **not** the film's actual glyphs. Those
+  were reverse-engineered by Rezmason/matrix and now ship as real fonts, so
+  swapping them in is a change to `glyphs.py` and nothing else — the katakana
+  are a convenience, not a limitation, and an earlier version of this document
+  claimed otherwise.
 - The novelty is in the **combination**. CJK-as-syntax has 124 prior examples on
   the esolang wiki; pop-culture-themed esolangs are an established genre; digital
   rain has been implemented dozens of times. Claiming component novelty would be
   false and trivially checkable.
-- **No CI**, as above.
+- **CI came after the incident that needed it**, as above.
 - The animation's *visual quality* has never been verified by an automated test —
-  only its byte stream and frame math. Whether it looks right is a human judgment
-  that hasn't been formally captured.
+  only its byte stream and frame math. Whether it looks right is a human
+  judgment that hasn't been formally captured, and it has been wrong twice in
+  ways every test missed: a window that went black after 3.6 seconds, and a
+  field with exactly two speeds in it that read as a block of text sliding down
+  rather than as rain.
+- **Operator costs money to use** and needs an API key. Everything else in the
+  repository runs on the standard library alone.
 
 ---
 
@@ -488,6 +639,8 @@ matrixlang parse examples/hello.rain        # the tree; shape is the lesson
 matrixlang render --face glyph examples/hello.rain   # the operator view
 matrixlang render --face ascii glyph.rain   # ...and back; also a formatter
 matrixlang repl                             # :glyph toggles live echo
+
+python -m server                            # the browser version, on 127.0.0.1
 ```
 
 The strongest 20-second live demo is the round trip: render a file to glyphs,

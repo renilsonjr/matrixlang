@@ -1,7 +1,7 @@
 [project]
 name = "matrixlang"
-version = "0.5.0"
-description = "A Matrix-styled esoteric programming language."
+version = "0.6.0"
+description = "A programming language whose output is the Matrix cascade."
 requires-python = ">=3.11"
 dependencies = []
 
