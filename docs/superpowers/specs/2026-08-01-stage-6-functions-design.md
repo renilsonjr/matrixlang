@@ -24,6 +24,7 @@ each their own stage, per #21's sequence.
 | S6-4 | Argument syntax | **Parens with a comma.** Parens already have glyphs; the comma costs one new slot. Juxtaposition (`add 1 2`) costs nothing but cannot be parsed without knowing arity. |
 | S6-5 | What an `agent` that never jacks out produces | **An internal `NOTHING` sentinel**, not a language value. See §4. |
 | S6-6 | The A/B/C architecture fork from #21 | **Still undecided, deliberately.** Functions are identical under all three, so the decision waits for real experience. |
+| S6-7 | How an agent appears in output and diagnostics | **`type_name` is `agent`, `to_display` is `<agent fib>`.** `values.py` currently falls through to Python for both, which would leak a class name and a memory address. See §4.1. |
 
 ## 1. Vocabulary and the glyph budget
 
@@ -117,6 +118,43 @@ at the use site rather than the definition — acceptable, and it carries a posi
 parser does not track function context and giving it that tracking costs more than the
 error is worth.
 
+### 4.1 `values.py` must learn about agents
+
+Functions become a fourth kind of runtime value, and `values.py` — the one auditable
+place where value rules live — currently ends both of its dispatches in a fall-through
+to Python:
+
+```python
+def type_name(value): ...  return type(value).__name__
+def to_display(value): ... return str(value)
+```
+
+Left alone, an agent would surface as `cannot add integer and Function` in a
+diagnostic, and `trace fib` would print
+`<matrixlang.interpreter.Function object at 0x104…>` — a Python class name and a
+memory address, in output a program produced. §6 of the technical overview records
+that a `.rain` program has no route into Python; printing its repr is a small hole in
+exactly that claim.
+
+So:
+
+- `is_function(value)` joins the predicates, using `type(value) is Function` like every
+  other rule in the module. Never `isinstance`.
+- `type_name` returns **`"agent"`**, so arity and type errors read in the language's
+  own vocabulary.
+- `to_display` returns **`<agent fib>`** for a named agent — stable, decodable, and
+  containing nothing from the host.
+
+This makes `agent` a displayable type without making it an arithmetic or comparison
+operand: everything else in the interpreter already goes through `_require_int`, so
+`fib + 1` fails with `left operand must be an integer, got agent`, which is the right
+error for the right reason.
+
+The circular-import question this raises is real: `values.py` imports nothing today,
+and `Function` lives in `interpreter.py`. The resolution is to define `Function` in
+`values.py` alongside the rules that describe it — it is a runtime value type, which
+is precisely what that module is for.
+
 ## 5. Return as control flow
 
 `Return` unwinds to the call site via an internal exception, the standard tree-walker
@@ -181,6 +219,7 @@ Test-driven throughout, following the practices already established:
 
 | Layer | Approach |
 | --- | --- |
+| Values | `type_name` and `to_display` for an agent, asserted to contain no Python class name, no module path and no memory address |
 | Environment | Directed tests for define/assign/read across the chain, including shadowing and the "assign finds the nearest binding" rule |
 | Closures | A returned inner agent still sees its defining scope after the outer call has finished |
 | Calls | Arity, non-callable, `NOTHING` used as a value — each a `RuntimeErrorML` with position |
