@@ -317,6 +317,14 @@ class Interpreter:
             return value
         if isinstance(expr, Unary):
             operand = self._value_of(expr.operand, expr)
+            if expr.op is TokenType.UNPLUG:
+                if not is_bool(operand):
+                    raise RuntimeErrorML(
+                        f"'unplug' takes a boolean, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                return not operand
             if expr.op is TokenType.LENGTH:
                 if not (is_list(operand) or is_str(operand)):
                     raise RuntimeErrorML(

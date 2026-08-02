@@ -49,3 +49,76 @@ def test_each_new_slot_has_a_single_glyph(slot):
 
 def test_the_table_is_still_bijective_at_41():
     assert len(set(GLYPHS.values())) == len(GLYPHS) == 41
+
+
+# --- unplug's shape -----------------------------------------------------
+
+
+def first(source):
+    return parse(lex(source)).statements[0]
+
+
+def test_unplug_is_a_unary_over_the_whole_comparison():
+    # THE precedence test for unplug. `unplug n == 1` must be
+    # unplug (n == 1). The C reading, (unplug n) == 1, is an error for
+    # every possible n — either n is not boolean and unplug fails, or it
+    # is and a boolean is compared to an integer.
+    from matrixlang.nodes import Binary, Unary
+
+    parsed = first("construct b = unplug n == 1\n").value
+    assert isinstance(parsed, Unary)
+    assert parsed.op is TokenType.UNPLUG
+    assert isinstance(parsed.operand, Binary)
+    assert parsed.operand.op is TokenType.EQ
+
+
+def test_unplug_nests():
+    from matrixlang.nodes import Unary
+
+    parsed = first("construct b = unplug unplug flag\n").value
+    assert isinstance(parsed, Unary)
+    assert isinstance(parsed.operand, Unary)
+
+
+def test_unplug_over_a_parenthesised_expression():
+    from matrixlang.nodes import Binary, Unary
+
+    parsed = first("construct b = unplug (a == b)\n").value
+    assert isinstance(parsed, Unary)
+    assert isinstance(parsed.operand, Binary)
+
+
+# --- unplug round-trips -------------------------------------------------
+
+
+def roundtrip(source):
+    from matrixlang.render import render_ascii, render_glyph
+
+    tree = parse(lex(source))
+    assert parse(lex(render_ascii(tree))) == tree, "ascii face"
+    assert parse(lex(render_glyph(tree))) == tree, "glyph face"
+    return tree
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "construct b = unplug flag\n",
+        "construct b = unplug n == 1\n",
+        "construct b = unplug unplug flag\n",
+        "construct b = unplug (a == b)\n",
+    ],
+)
+def test_unplug_round_trips(source):
+    roundtrip(source)
+
+
+def test_unplug_renders_with_a_separator_and_no_parens_over_a_comparison():
+    # A word operator needs the space or `unplug flag` becomes
+    # `unplugflag` and re-lexes as one identifier. And because unplug
+    # binds LOOSER than comparison, no parens are needed here — adding
+    # them would be harmless but adding them in the wrong place would not.
+    from matrixlang.render import render_ascii
+
+    tree = parse(lex("construct b = unplug n == 1\n"))
+    assert render_ascii(tree) == "construct b = unplug n == 1\n"

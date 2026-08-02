@@ -58,25 +58,35 @@ _OPS: dict[TokenType, str] = {
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
+    TokenType.UNPLUG: "unplug",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
 # reconstructed from these plus associativity — there is no Grouping
 # node, so this table IS the §6.4 contract.
 _LEVEL: dict[TokenType, int] = {
-    TokenType.EQ: 1,
-    TokenType.NEQ: 1,
-    TokenType.LT: 2,
-    TokenType.GT: 2,
-    TokenType.LTE: 2,
-    TokenType.GTE: 2,
-    TokenType.PLUS: 3,
-    TokenType.MINUS: 3,
-    TokenType.STAR: 4,
-    TokenType.SLASH: 4,
+    # Levels 1 and 2 belong to `fork` and `splice`, added in Stage 9's
+    # next step. The whole table is renumbered in one move rather than
+    # shifted twice: this structure is what decides where parentheses go,
+    # and an off-by-one here changes what a program means without failing
+    # loudly anywhere else.
+    TokenType.EQ: 4,
+    TokenType.NEQ: 4,
+    TokenType.LT: 5,
+    TokenType.GT: 5,
+    TokenType.LTE: 5,
+    TokenType.GTE: 5,
+    TokenType.PLUS: 6,
+    TokenType.MINUS: 6,
+    TokenType.STAR: 7,
+    TokenType.SLASH: 7,
 }
-_UNARY_LEVEL = 5
-_ATOM_LEVEL = 6
+# `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
+# unlike `-` and `length` it binds LOOSER than every binary operator
+# except fork and splice.
+_NOT_LEVEL = 3
+_UNARY_LEVEL = 8
+_ATOM_LEVEL = 9
 # A call is postfix and binds tighter than every operator, including unary
 # minus: -f(1) is -(f(1)), never (-f)(1). That makes it an atom for
 # parenthesisation purposes, and saying so is better than the two constants
@@ -222,6 +232,13 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
     if isinstance(expr, Name):
         return expr.ident, _ATOM_LEVEL
     if isinstance(expr, Unary):
+        if expr.op is TokenType.UNPLUG:
+            # Looser than every binary operator except fork and splice, so
+            # `unplug n == 1` needs no parens while `unplug (a fork b)`
+            # does. Rendering the operand at _UNARY_LEVEL instead would
+            # parenthesise the common case unnecessarily.
+            operand = _expression(expr.operand, _NOT_LEVEL, face)
+            return _map(face, "unplug") + " " + operand, _NOT_LEVEL
         # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)

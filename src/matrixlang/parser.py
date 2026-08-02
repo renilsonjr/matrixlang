@@ -381,11 +381,27 @@ class _Parser:
     # --- expressions ------------------------------------------------------
 
     def expression(self) -> Expr:
-        return self._equality()
+        return self._not()
 
     # The ladder: each level parses the next-tighter level, then folds a
     # left-associative chain of its own operators. Named levels keep the
-    # grammar visible; the shared loop lives once in _binary_level.
+    # grammar visible; the shared loop lives once in _binary_level. `_not`
+    # sits above the ladder's top rung (_equality) rather than in it: it is
+    # unary and right-recursive, not a left-associative binary chain.
+
+    def _not(self) -> Expr:
+        """`unplug`, binding looser than comparison.
+
+        Recurses into itself so `unplug unplug flag` works. Placed above
+        _equality rather than at the unary level because `unplug n == 1`
+        must mean `unplug (n == 1)`: the tight reading, `(unplug n) == 1`,
+        is an error for every possible n.
+        """
+        if self.check(TokenType.UNPLUG):
+            op = self.advance()
+            operand = self._not()
+            return Unary(op.type, operand, line=op.line, column=op.column)
+        return self._equality()
 
     def _equality(self) -> Expr:
         return self._binary_level(_EQUALITY_OPS, self._comparison)
