@@ -50,7 +50,7 @@ class _Nothing:
 
     Not a language value and not reachable as one: a call in statement
     position may produce it, and a call in expression position that
-    produces it is a runtime error. This keeps the language at three types
+    produces it is a runtime error. This keeps the language at four types
     while still allowing a procedure to exist.
     """
 
@@ -199,15 +199,22 @@ def _equal(left: object, right: object, seen: set) -> bool:
         return True
     seen.add(pair)
     # No finally/discard here: this is a memo, not a path-scoped visited
-    # set. A pair is only ever added after both sides recursed to True —
-    # a `False` result or an Incomparable exception propagates straight
-    # to the top of the outermost `equal()` call and neither one leaves
-    # an entry behind — so consulting a stale `True` for a pair returns
-    # exactly what recomputing it would return. Discarding on the way
-    # back up would only throw away that memo, forcing shared (DAG)
-    # structure to be re-walked once per path to it — exponential in
-    # depth for something like `node = [node, node]` repeated N times.
-    # `seen` is fresh per `equal()` call, so nothing leaks between calls.
+    # set. The pair is added BEFORE recursing, but it is only ever
+    # CONSULTED again in two situations, and both are sound. On the
+    # stack (a genuine cycle): the lookup above assumes equality, which
+    # is the standard coinductive treatment of cycles. Off the stack,
+    # after this recursion has already returned (shared, DAG structure
+    # reached by a second path): that can only happen if this recursion
+    # completed `True`, because a `False` return cascades straight
+    # through every enclosing `if not _equal(...)` and an Incomparable
+    # exception unwinds just as fast — either one aborts the whole
+    # outermost `equal()` call before any sibling gets a chance to run
+    # and look this pair up again. A completed pair therefore completed
+    # `True`. Discarding it on the way back up would only throw that memo
+    # away, forcing shared structure to be re-walked once per path to it
+    # — exponential in depth for something like `node = [node, node]`
+    # repeated N times. `seen` is fresh per `equal()` call, so nothing
+    # leaks between calls.
     for a, b in zip(left, right):
         if not _equal(a, b, seen):
             return False
