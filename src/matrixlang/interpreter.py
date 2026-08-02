@@ -336,15 +336,22 @@ class Interpreter:
 
     def _element(self, target: object, index: object, node) -> object:
         """Bounds-check and read. Shared by Index and IndexAssign so the
-        two cannot disagree about what a legal index is."""
-        if not is_list(target):
+        two cannot disagree about what a legal index is.
+
+        Strings read like lists: `s[i]` is a one-character string, because
+        the language has no character type. `target[index]` on a Python
+        str already returns exactly that, so the read generalises for
+        free. WRITING to a string is refused separately — see the
+        IndexAssign branch in _execute.
+        """
+        if not (is_list(target) or is_str(target)):
             raise RuntimeErrorML(
                 f"cannot index {type_name(target)}", node.line, node.column
             )
         self._check_index(target, index, node)
         return target[index]
 
-    def _check_index(self, target: list, index: object, node) -> None:
+    def _check_index(self, target: list | str, index: object, node) -> None:
         if not is_int(index):
             raise RuntimeErrorML(
                 f"an index must be an integer, got {type_name(index)}",
@@ -358,9 +365,12 @@ class Interpreter:
                 node.column,
             )
         if index >= len(target):
+            # type_name rather than a hardcoded "list": one message serves
+            # both, so the two can never drift into disagreeing about the
+            # same rule.
             raise RuntimeErrorML(
-                f"index {index} is past the end of a list of length "
-                f"{len(target)}",
+                f"index {index} is past the end of a {type_name(target)} "
+                f"of length {len(target)}",
                 node.line,
                 node.column,
             )

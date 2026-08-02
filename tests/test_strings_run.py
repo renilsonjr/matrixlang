@@ -88,3 +88,87 @@ def test_arithmetic_still_requires_integers():
     assert 'must be an integer' in fails('trace 1 - "a"\n').message
     assert 'must be an integer' in fails('trace -"a"\n').message
     assert 'must be an integer' in fails('trace "a" * 2\n').message
+
+
+# --- Reading a character ------------------------------------------------
+
+
+def test_a_string_can_be_indexed():
+    assert run('trace "Neo"[0]\n') == "N\n"
+    assert run('trace "Neo"[2]\n') == "o\n"
+
+
+def test_a_character_is_a_one_character_string():
+    # There is no character type. `s[0]` is a string, so it can be
+    # concatenated, compared and measured like any other.
+    assert run('trace "Neo"[0] + "eo"\n') == "Neo\n"
+    assert run('trace "Neo"[0] == "N"\n') == "true\n"
+    assert run('trace length "Neo"[0]\n') == "1\n"
+
+
+def test_the_regress_terminates_because_you_stop_asking():
+    assert run('trace "Neo"[0][0][0]\n') == "N\n"
+
+
+def test_indexing_a_name_holding_a_string():
+    assert run('construct name = "Neo"\ntrace name[1]\n') == "e\n"
+
+
+def test_walking_a_string_character_by_character():
+    # The program this stage exists for.
+    source = (
+        'construct name = "Neo"\n'
+        "construct n = 0\n"
+        "dejavu n < length name\n"
+        "  trace name[n]\n"
+        "  n = n + 1\n"
+        "flatline\n"
+    )
+    assert run(source) == "N\ne\no\n"
+
+
+def test_a_string_inside_a_list_can_be_indexed():
+    assert run('construct xs = ["Neo"]\ntrace xs[0][1]\n') == "e\n"
+
+
+# --- Read errors, shared with lists -------------------------------------
+
+
+def test_indexing_past_the_end_of_a_string_says_string():
+    error = fails('trace "Neo"[5]\n')
+    assert error.message == "index 5 is past the end of a string of length 3"
+
+
+def test_the_bounds_message_differs_from_the_list_one_only_by_the_noun():
+    # They come from the same _check_index. Asserting them together is
+    # what stops a future edit from forking one and not the other.
+    string_error = fails('trace "Neo"[5]\n').message
+    list_error = fails("construct xs = [1, 2, 3]\ntrace xs[5]\n").message
+    assert string_error == "index 5 is past the end of a string of length 3"
+    assert list_error == "index 5 is past the end of a list of length 3"
+    assert string_error.replace("string", "list") == list_error
+
+
+def test_a_negative_string_index_is_an_error():
+    assert (
+        fails('trace "Neo"[-1]\n').message
+        == "an index cannot be negative — use xs[length xs - 1]"
+    )
+
+
+def test_a_non_integer_string_index_is_an_error():
+    assert (
+        fails('trace "Neo"["a"]\n').message
+        == "an index must be an integer, got string"
+    )
+
+
+def test_indexing_an_empty_string_is_an_error():
+    assert (
+        fails('trace ""[0]\n').message
+        == "index 0 is past the end of a string of length 0"
+    )
+
+
+def test_indexing_a_boolean_is_still_an_error():
+    assert fails("trace true[0]\n").message == "cannot index boolean"
