@@ -88,10 +88,27 @@ def test_unplug_composes_with_them():
 
 
 def test_the_bounded_search_does_not_run_off_the_end():
-    # THE test for this task. Without short-circuit, crew[n] is evaluated
-    # at the boundary where n == length crew and the program dies with
+    # THE test for this task. The target is absent from crew, so the
+    # search runs all the way to n == length crew. Without short-circuit,
+    # crew[n] is evaluated at that boundary and the program dies with
     # "index 3 is past the end of a list of length 3" — an error that
     # looks like a bug in the program rather than in the language.
+    source = (
+        'construct crew = ["Neo", "Trinity", "Tank"]\n'
+        "construct n = 0\n"
+        'dejavu n < length crew splice crew[n] != "Cypher"\n'
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace n\n"
+    )
+    assert run(source) == "3\n"
+
+
+def test_a_search_finds_a_target_at_the_last_index():
+    # Not a short-circuit test: the target sits one before the boundary,
+    # so crew[n] never gets read out of range even without short-circuit.
+    # This is a plain regression test that the search itself lands on the
+    # right index.
     source = (
         'construct crew = ["Neo", "Trinity", "Tank"]\n'
         "construct n = 0\n"
