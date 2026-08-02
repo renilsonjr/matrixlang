@@ -61,6 +61,12 @@ DEFAULT_MAX_STEPS = 200_000
 
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
+_LOGICAL_OPS = (TokenType.SPLICE, TokenType.FORK)
+
+# The operator's own word, for its diagnostic. Not render._OPS: importing
+# render into the interpreter would put a presentation module underneath
+# execution, which tests/test_architecture.py forbids.
+_OP_WORDS = {TokenType.SPLICE: "splice", TokenType.FORK: "fork"}
 
 
 class Environment:
@@ -336,6 +342,15 @@ class Interpreter:
                 return len(operand)
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
+        if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
+            # Intercepted HERE, not in _binary, and that is the whole
+            # point: the Binary branch below evaluates both operands
+            # before dispatching, so routing these through _binary would
+            # give operators that work and do not short-circuit. Every
+            # truth-table test would still pass, and the bounded search
+            # `n < length xs splice xs[n] != target` would die at the
+            # boundary with an out-of-bounds error.
+            return self._logical(expr)
         if isinstance(expr, Binary):
             left = self._value_of(expr.left, expr)
             right = self._value_of(expr.right, expr)
@@ -454,6 +469,36 @@ class Interpreter:
                 where.column,
             )
         return value
+
+    def _logical(self, expr: Binary) -> bool:
+        """`splice` and `fork`, short-circuiting.
+
+        The right operand is evaluated only when the left does not already
+        decide the answer. That is what makes a bounded search safe:
+        `n < length xs splice xs[n] != target` must not read xs[n] at the
+        boundary.
+
+        The cost, which is documented rather than hidden: an operand that
+        is never evaluated is never type-checked, so `false splice 1` is
+        false while `true splice 1` is an error.
+        """
+        left = self._value_of(expr.left, expr)
+        self._require_bool(left, expr.left, expr.op)
+        if expr.op is TokenType.SPLICE and not left:
+            return False
+        if expr.op is TokenType.FORK and left:
+            return True
+        right = self._value_of(expr.right, expr)
+        self._require_bool(right, expr.right, expr.op)
+        return right
+
+    def _require_bool(self, value: object, node: Expr, op: TokenType) -> None:
+        if not is_bool(value):
+            raise RuntimeErrorML(
+                f"'{_OP_WORDS[op]}' takes booleans, got {type_name(value)}",
+                node.line,
+                node.column,
+            )
 
     def _binary(self, node: Binary, left: object, right: object) -> object:
         if node.op in _EQUALITY_OPS or node.op in _ORDERING_OPS:
