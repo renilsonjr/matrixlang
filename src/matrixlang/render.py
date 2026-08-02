@@ -261,7 +261,9 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # element ever needs parens for the list's sake. Same reasoning as
         # Call.args. The literal itself is an atom — [1] + [2] must never
         # come back as [1] + [2] with parens, and never as [1 + [2]].
-        inner = ", ".join(_expression(e, 0, face) for e in expr.elements)
+        inner = f"{_map(face, ',')} ".join(
+            _expression(e, 0, face) for e in expr.elements
+        )
         return f"{_map(face, '[')}{inner}{_map(face, ']')}", _ATOM_LEVEL
     if isinstance(expr, Binary):
         level = _LEVEL[expr.op]

@@ -41,11 +41,17 @@ def test_the_ascii_face_uses_brackets():
 
 
 def test_the_glyph_face_uses_the_bracket_glyphs():
-    tree = parse(lex("construct xs = [1]\n"))
+    # A multi-element list, not a single-element one: [1] alone has no
+    # comma to render, so it cannot catch a hardcoded ASCII "," in the
+    # ListLiteral branch of _emit — every other comma site (params, call
+    # args) maps through the face table, and this one silently didn't.
+    tree = parse(lex("construct xs = [1, 2, 3]\n"))
     rendered = render_glyph(tree)
     assert GLYPHS["["] in rendered
     assert GLYPHS["]"] in rendered
+    assert GLYPHS[","] in rendered
     assert "[" not in rendered
+    assert "," not in rendered
 
 
 @pytest.mark.parametrize(
