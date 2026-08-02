@@ -32,11 +32,14 @@ Working today: lexer, parser, tree-walking interpreter, REPL, CLI, the
 two interchangeable source faces with a lossless round trip, the cascade
 window, a step limit that stops runaway loops, **functions with
 closures**, **lists** — literals, indexing, element assignment, `+`
-concatenation, and `length` — and **Operator**, an assistive companion
+concatenation, and `length` — **strings that are indexable and orderable**
+— `name[0]` reads a character, and `<`/`>`/`<=`/`>=` order two strings by
+codepoint, while `name[0] = "X"` is refused because strings, unlike
+lists, cannot be written to — and **Operator**, an assistive companion
 that writes MatrixLang from plain language, in the terminal or in a
 browser.
 
-1,135 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,165 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```

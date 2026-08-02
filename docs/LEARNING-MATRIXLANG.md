@@ -127,6 +127,36 @@ trace 3 != 3       # false
 the *same* type; comparing across types is an error rather than `false`,
 because that comparison is almost always a mistake.
 
+### Ordering strings
+
+The same four operators order two strings:
+
+```
+trace "Neo" < "Trinity"     # true
+```
+
+The order is **codepoint order**, not the alphabetical order a dictionary
+uses. `"a" < "B"` is `false`, because comparison looks at each character's
+underlying number, and every uppercase letter (`A`–`Z`) has a lower
+number than every lowercase one (`a`–`z`):
+
+```
+trace "a" < "B"      # false
+```
+
+This is not a quirk of this language — Python, Java and C all order
+strings the same way, for the same reason.
+
+Ordering across types is an error, the same way adding them is:
+
+```
+trace "Neo" < 5
+```
+
+```
+matrixlang: [line 1, column 13] cannot order string with integer
+```
+
 ---
 
 ## 4. Choosing — `redpill` / `bluepill`
@@ -296,6 +326,26 @@ construct crew = ["Neo", "Trinity", "Morpheus"]
 trace crew[0]                # Neo
 ```
 
+### A string indexes the same way — `name[0]`
+
+```
+construct name = "Neo"
+trace name[0]                # N
+```
+
+There is no separate character type. Indexing a string returns another
+**string, one character long** — so it can be indexed again:
+
+```
+construct name = "Neo"
+trace name[0][0]             # N
+```
+
+`name[0][0]` does not drill down into something smaller. Asking a
+one-character string for its own first character just returns itself —
+the regress stops because you stop asking, not because there is a
+character type underneath waiting to be reached.
+
 ### Writing an element — `xs[0] = v`
 
 ```
@@ -366,6 +416,26 @@ Morpheus
 There is still no `for`. A counter, `length`, and `dejavu` are how you
 walk a list here.
 
+### Walking a string the same way
+
+```
+construct name = "Neo"
+construct n = 0
+dejavu n < length name
+  trace name[n]
+  n = n + 1
+flatline
+```
+
+```
+N
+e
+o
+```
+
+Same pattern as walking a list, because `length` already worked on
+strings (see §3) and now indexing does too.
+
 ### Lists are shared, not copied
 
 Assigning a list to another name, or passing it as an argument, does not
@@ -386,6 +456,29 @@ trace xs[0]      # 2
 `bump` did not receive a copy of `xs`. It received the same list `xs`
 points at, and `zs[0] = zs[0] + 1` mutated that list in place — which is
 why the change is visible back at the call site through `xs`.
+
+### Strings cannot be written to
+
+`xs[0] = v` works on a list, as above. The same syntax on a string is
+refused:
+
+```
+construct name = "Neo"
+name[0] = "X"
+```
+
+```
+matrixlang: [line 2, column 6] a string cannot be changed — build a new one with +
+```
+
+This is not a missing feature — it is the other half of a trade. A list
+handed to an agent can come back changed, because that is exactly what
+`bump` just did. A **string** handed to an agent is guaranteed to come
+back exactly as it went in, because nothing in the language can write
+through it, no matter how many agents it gets passed to. Lists gave that
+guarantee up in exchange for in-place mutation; strings kept it. When you
+need a different string, `+` (§3) builds a new one — it does not change
+the old one.
 
 ### Four new errors
 
@@ -422,6 +515,18 @@ trace [1] + 2
 
 ```
 matrixlang: [line 1, column 11] cannot add list and integer
+```
+
+Indexing a string out of bounds or with a negative number gives the same
+messages, with the noun changed:
+
+```
+construct name = "Neo"
+trace name[5]
+```
+
+```
+matrixlang: [line 2, column 11] index 5 is past the end of a string of length 3
 ```
 
 ---
@@ -698,7 +803,8 @@ wake up, Neo
 Being clear about this saves more time than any feature list:
 
 - no floats, dictionaries, sets, or null
-- no indexing into a string — `"Neo"[0]` is an error; only lists index
+- no slicing (`name[0:2]`) and no string methods — indexing one character
+  at a time (§7) is as far as string access goes
 - no `for`, `break`, `continue`, or `else if`
 - no `and`, `or`, or `not`
 - no input — a program's only channel out is `trace`
