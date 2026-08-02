@@ -217,7 +217,7 @@ flatline
 - **`+` is overloaded** for integer addition and string concatenation; mixed
   operands are an error, with no implicit stringification.
 
-## 5. The seven problems worth talking about
+## 5. The eight problems worth talking about
 
 These are the parts where the work was genuinely non-trivial. In an interview,
 these are the answers to "tell me about something hard."
@@ -668,7 +668,7 @@ isn't there is usually more convincing than a feature list:
 ## The two-minute version
 
 Lead with the pipeline (§3), then pick **one** deep problem rather than listing
-all seven. The best single choice for most interviews is §5.1 — reconstructing
+all eight. The best single choice for most interviews is §5.1 — reconstructing
 parentheses — because it is:
 
 - easy to state in one sentence ("the tree doesn't store parentheses, so the

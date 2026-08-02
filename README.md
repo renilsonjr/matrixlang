@@ -309,7 +309,7 @@ the suite:
 It runs on every pull request against Python 3.11, 3.12, 3.13 and 3.14.
 
 [docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md) is the fastest way
-in: the compilation pipeline, what each module owns, and the seven design
+in: the compilation pipeline, what each module owns, and the eight design
 problems that took real work — reconstructing parentheses from a tree that
 does not store them, the round-trip property, why testing an animation
 required splitting the code on a purity gradient, and how the browser gets
