@@ -20,6 +20,7 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    ListLiteral,
     Return,
     Assign,
     Binary,
@@ -228,6 +229,13 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             f"{callee}{_map(face, '(')}{args}{_map(face, ')')}",
             _CALL_LEVEL,
         )
+    if isinstance(expr, ListLiteral):
+        # Elements render from level 0: the brackets delimit them, so no
+        # element ever needs parens for the list's sake. Same reasoning as
+        # Call.args. The literal itself is an atom — [1] + [2] must never
+        # come back as [1] + [2] with parens, and never as [1 + [2]].
+        inner = ", ".join(_expression(e, 0, face) for e in expr.elements)
+        return f"{_map(face, '[')}{inner}{_map(face, ']')}", _ATOM_LEVEL
     if isinstance(expr, Binary):
         level = _LEVEL[expr.op]
         # Left-associative grammar: the left child may sit at the same

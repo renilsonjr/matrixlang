@@ -13,6 +13,7 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    ListLiteral,
     Return,
     Assign,
     Binary,
@@ -410,6 +411,17 @@ class _Parser:
             inner = self.expression()
             self.expect(TokenType.RPAREN, "expected ')' to close '('")
             return inner
+        if token.type is TokenType.LBRACKET:
+            self.advance()
+            elements: list[Expr] = []
+            if not self.check(TokenType.RBRACKET):
+                while True:
+                    elements.append(self.expression())
+                    if not self.check(TokenType.COMMA):
+                        break
+                    self.advance()
+            self.expect(TokenType.RBRACKET, "expected ']' to close the list")
+            return ListLiteral(elements, line=token.line, column=token.column)
         raise ParseError(
             f"expected an expression, found {_describe(token)}",
             token.line,

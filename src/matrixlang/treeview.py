@@ -15,6 +15,7 @@ from matrixlang.nodes import (
     ExprStmt,
     FunctionDef,
     If,
+    ListLiteral,
     Return,
     Name,
     NumberLiteral,
@@ -133,5 +134,9 @@ def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
         lines.append(f"{pad}Binary {_OPS[expr.op]}")
         _expression(expr.left, depth + 1, lines)
         _expression(expr.right, depth + 1, lines)
+    elif isinstance(expr, ListLiteral):
+        lines.append(f"{pad}ListLiteral ({len(expr.elements)})")
+        for element in expr.elements:
+            _expression(element, depth + 1, lines)
     else:
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")

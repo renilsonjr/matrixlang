@@ -69,6 +69,13 @@ class Call(Expr):
     args: list[Expr]
 
 
+@dataclass
+class ListLiteral(Expr):
+    """`[1, 2]`. Elements are their own precedence context, like Call.args."""
+
+    elements: list[Expr]
+
+
 # --- Statements ----------------------------------------------------------
 
 

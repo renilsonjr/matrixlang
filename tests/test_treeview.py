@@ -122,3 +122,11 @@ def test_an_empty_bluepill_block_still_prints_an_else_header():
 
     without_else = format_tree(parse(lex("redpill true\nflatline\n")))
     assert "else:" not in without_else
+
+
+def test_a_list_literal_has_a_treeview_case():
+    # treeview.py had no case for the Stage 6 nodes and `matrixlang parse`
+    # crashed on an agent while 878 tests passed. One test per new node.
+    out = format_tree(parse(lex("construct xs = [1, 2]\n")))
+    assert "ListLiteral (2)" in out
+    assert "NumberLiteral 1" in out
