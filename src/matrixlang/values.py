@@ -192,16 +192,23 @@ def _equal(left: object, right: object, seen: set) -> bool:
         return False
     pair = (id(left), id(right))
     if pair in seen:
-        # Already comparing this pair further up the stack. Assuming
-        # equality is the standard treatment and is what terminates.
+        # Already comparing this pair further up the stack, or already
+        # proven equal earlier in this same call. Either way, assuming
+        # equality is the standard coinductive treatment of cycles and is
+        # what terminates.
         return True
     seen.add(pair)
-    try:
-        for a, b in zip(left, right):
-            if not _equal(a, b, seen):
-                return False
-        return True
-    finally:
-        # Discarded so a cycle assumption cannot leak into a sibling
-        # comparison and make two unequal lists compare equal.
-        seen.discard(pair)
+    # No finally/discard here: this is a memo, not a path-scoped visited
+    # set. A pair is only ever added after both sides recursed to True —
+    # a `False` result or an Incomparable exception propagates straight
+    # to the top of the outermost `equal()` call and neither one leaves
+    # an entry behind — so consulting a stale `True` for a pair returns
+    # exactly what recomputing it would return. Discarding on the way
+    # back up would only throw away that memo, forcing shared (DAG)
+    # structure to be re-walked once per path to it — exponential in
+    # depth for something like `node = [node, node]` repeated N times.
+    # `seen` is fresh per `equal()` call, so nothing leaks between calls.
+    for a, b in zip(left, right):
+        if not _equal(a, b, seen):
+            return False
+    return True

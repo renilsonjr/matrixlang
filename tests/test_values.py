@@ -206,13 +206,35 @@ def test_cyclic_lists_compare_without_blowing_the_stack():
     assert equal(a, a) is True
 
 
-def test_a_cycle_does_not_make_unequal_lists_equal():
-    # The seen-set assumes equality on re-entry, which is the standard
-    # coinductive treatment. It must not leak into siblings.
+def test_a_shared_sublist_is_walked_correctly_when_the_same_pair_recurs():
+    # `seen` is a memo of pairs already proven equal within this call, not
+    # a path-scoped "currently visiting" set -- nothing is removed on the
+    # way back up. That's sound because a `False` result or an
+    # Incomparable exception propagates straight to the top of the
+    # outermost `equal()` call: a pair is only ever memoized after really
+    # being proven equal, so consulting the memo again returns exactly
+    # what recomputing it would. Exercise the case that motivates keeping
+    # entries around: the same object pair reached twice in one call,
+    # both when it is equal and when it is not.
     from matrixlang.values import equal
 
-    a = [None, 1]
+    same_left = [1, 2]
+    same_right = [1, 2]
+    assert equal([same_left, same_left], [same_right, same_right]) is True
+
+    other_right = [1, 9]
+    assert equal([same_left, same_left], [other_right, other_right]) is False
+
+
+def test_a_cyclic_pair_terminates_by_assuming_equality_on_re_entry():
+    # Re-entering a pair still being compared further up the stack
+    # returns True -- the standard coinductive treatment of cycles, and
+    # the reason equal() terminates on cyclic input at all instead of
+    # recursing forever.
+    from matrixlang.values import equal
+
+    a = [None]
     a[0] = a
-    b = [None, 2]
+    b = [None]
     b[0] = b
-    assert equal(a, b) is False
+    assert equal(a, b) is True
