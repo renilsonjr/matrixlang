@@ -13,6 +13,7 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    Index,
     ListLiteral,
     Return,
     Assign,
@@ -372,25 +373,34 @@ class _Parser:
         return self._call()
 
     def _call(self) -> Expr:
-        """Postfix application, so a call binds tighter than any operator.
+        """Postfix application, so a call or an index binds tighter than
+        any operator.
 
-        Loops rather than recurses so `f()()` is a call on a call. Nothing
-        reaches across a NEWLINE: the lexer emits one between statements,
-        and `check` sees it before it sees a '('.
+        Loops rather than recurses so `f()()` is a call on a call and
+        `xs[0][1]` is an index of an index. Nothing reaches across a
+        NEWLINE: the lexer emits one between statements, and `check` sees
+        it before it sees a '(' or a '['.
         """
         expr = self._primary()
-        while self.check(TokenType.LPAREN):
-            paren = self.advance()
-            args: list[Expr] = []
-            if not self.check(TokenType.RPAREN):
-                while True:
-                    args.append(self.expression())
-                    if not self.check(TokenType.COMMA):
-                        break
-                    self.advance()
-            self.expect(TokenType.RPAREN, "expected ')' to close the arguments")
-            expr = Call(expr, args, line=paren.line, column=paren.column)
-        return expr
+        while True:
+            if self.check(TokenType.LPAREN):
+                paren = self.advance()
+                args: list[Expr] = []
+                if not self.check(TokenType.RPAREN):
+                    while True:
+                        args.append(self.expression())
+                        if not self.check(TokenType.COMMA):
+                            break
+                        self.advance()
+                self.expect(TokenType.RPAREN, "expected ')' to close the arguments")
+                expr = Call(expr, args, line=paren.line, column=paren.column)
+            elif self.check(TokenType.LBRACKET):
+                bracket = self.advance()
+                index = self.expression()
+                self.expect(TokenType.RBRACKET, "expected ']' to close the index")
+                expr = Index(expr, index, line=bracket.line, column=bracket.column)
+            else:
+                return expr
 
     def _primary(self) -> Expr:
         token = self.peek()

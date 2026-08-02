@@ -76,6 +76,15 @@ class ListLiteral(Expr):
     elements: list[Expr]
 
 
+@dataclass
+class Index(Expr):
+    """`xs[0]`. Postfix, so it binds tighter than every operator — see
+    render.py's _CALL_LEVEL, which this shares for exactly that reason."""
+
+    target: Expr
+    index: Expr
+
+
 # --- Statements ----------------------------------------------------------
 
 

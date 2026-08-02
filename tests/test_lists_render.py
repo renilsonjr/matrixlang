@@ -46,3 +46,30 @@ def test_the_glyph_face_uses_the_bracket_glyphs():
     assert GLYPHS["["] in rendered
     assert GLYPHS["]"] in rendered
     assert "[" not in rendered
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "construct a = xs[0]\n",
+        "construct a = xs[0][1]\n",
+        "construct a = xs[n + 1]\n",
+        "construct a = [1, 2][0]\n",
+        "construct a = f()[0]\n",
+        "construct a = -xs[0]\n",
+    ],
+)
+def test_indexing_round_trips(source):
+    roundtrip(source)
+
+
+def test_indexing_binds_tighter_than_unary_minus():
+    # -xs[0] is -(xs[0]), never (-xs)[0]. Rendering it as the latter
+    # would be a different tree with a different meaning.
+    tree = parse(lex("construct a = -xs[0]\n"))
+    assert render_ascii(tree) == "construct a = -xs[0]\n"
+
+
+def test_an_index_expression_keeps_its_parens_where_needed():
+    tree = parse(lex("construct a = xs[n + 1]\n"))
+    assert render_ascii(tree) == "construct a = xs[n + 1]\n"

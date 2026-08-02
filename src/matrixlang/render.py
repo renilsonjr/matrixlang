@@ -20,6 +20,7 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    Index,
     ListLiteral,
     Return,
     Assign,
@@ -227,6 +228,17 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         )
         return (
             f"{callee}{_map(face, '(')}{args}{_map(face, ')')}",
+            _CALL_LEVEL,
+        )
+    if isinstance(expr, Index):
+        # _CALL_LEVEL for the target for the same reason a call uses it:
+        # the suffix binds tighter than every operator, so a looser target
+        # needs parens. The index itself renders from 0 — the brackets
+        # delimit it, exactly like call arguments.
+        target = _expression(expr.target, _CALL_LEVEL, face)
+        inner = _expression(expr.index, 0, face)
+        return (
+            f"{target}{_map(face, '[')}{inner}{_map(face, ']')}",
             _CALL_LEVEL,
         )
     if isinstance(expr, ListLiteral):

@@ -130,3 +130,13 @@ def test_a_list_literal_has_a_treeview_case():
     out = format_tree(parse(lex("construct xs = [1, 2]\n")))
     assert "ListLiteral (2)" in out
     assert "NumberLiteral 1" in out
+
+
+def test_an_index_has_a_treeview_case():
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+    from matrixlang.treeview import format_tree
+
+    out = format_tree(parse(lex("construct a = xs[0]\n")))
+    assert "Index" in out
+    assert "Name 'xs'" in out or "'xs'" in out
