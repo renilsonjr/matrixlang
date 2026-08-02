@@ -59,17 +59,20 @@ _OPS: dict[TokenType, str] = {
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
     TokenType.UNPLUG: "unplug",
+    TokenType.SPLICE: "splice",
+    TokenType.FORK: "fork",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
 # reconstructed from these plus associativity — there is no Grouping
 # node, so this table IS the §6.4 contract.
 _LEVEL: dict[TokenType, int] = {
-    # Levels 1 and 2 belong to `fork` and `splice`, added in Stage 9's
-    # next step. The whole table is renumbered in one move rather than
-    # shifted twice: this structure is what decides where parentheses go,
-    # and an off-by-one here changes what a program means without failing
+    # The whole table is renumbered in one move rather than shifted
+    # twice: this structure is what decides where parentheses go, and an
+    # off-by-one here changes what a program means without failing
     # loudly anywhere else.
+    TokenType.FORK: 1,
+    TokenType.SPLICE: 2,
     TokenType.EQ: 4,
     TokenType.NEQ: 4,
     TokenType.LT: 5,

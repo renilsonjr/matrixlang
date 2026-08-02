@@ -122,3 +122,92 @@ def test_unplug_renders_with_a_separator_and_no_parens_over_a_comparison():
 
     tree = parse(lex("construct b = unplug n == 1\n"))
     assert render_ascii(tree) == "construct b = unplug n == 1\n"
+
+
+# --- splice and fork: shape and precedence ------------------------------
+
+
+def test_splice_and_fork_parse_as_binary():
+    from matrixlang.nodes import Binary
+
+    for source, op in [
+        ("construct b = a splice c\n", TokenType.SPLICE),
+        ("construct b = a fork c\n", TokenType.FORK),
+    ]:
+        parsed = first(source).value
+        assert isinstance(parsed, Binary)
+        assert parsed.op is op
+
+
+def test_fork_binds_looser_than_splice():
+    # `a fork b splice c` is `a fork (b splice c)`, as in every language
+    # that has both. Asserted on the tree: a value test would agree with
+    # the wrong grouping for many inputs.
+    from matrixlang.nodes import Binary
+
+    parsed = first("construct b = a fork b splice c\n").value
+    assert parsed.op is TokenType.FORK
+    assert isinstance(parsed.right, Binary)
+    assert parsed.right.op is TokenType.SPLICE
+
+
+def test_splice_binds_looser_than_comparison():
+    from matrixlang.nodes import Binary
+
+    parsed = first("construct b = n < 3 splice m > 1\n").value
+    assert parsed.op is TokenType.SPLICE
+    assert isinstance(parsed.left, Binary) and parsed.left.op is TokenType.LT
+    assert isinstance(parsed.right, Binary) and parsed.right.op is TokenType.GT
+
+
+def test_unplug_binds_tighter_than_splice():
+    from matrixlang.nodes import Binary, Unary
+
+    parsed = first("construct b = unplug a splice c\n").value
+    assert isinstance(parsed, Binary)
+    assert parsed.op is TokenType.SPLICE
+    assert isinstance(parsed.left, Unary)
+
+
+def test_both_are_left_associative():
+    from matrixlang.nodes import Binary
+
+    parsed = first("construct b = a splice c splice d\n").value
+    assert parsed.op is TokenType.SPLICE
+    assert isinstance(parsed.left, Binary)
+    assert parsed.left.op is TokenType.SPLICE
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "construct b = a splice c\n",
+        "construct b = a fork c\n",
+        "construct b = a fork b splice c\n",
+        "construct b = (a fork b) splice c\n",
+        "construct b = unplug a splice c\n",
+        "construct b = unplug (a fork c)\n",
+        "construct b = n < 3 splice m > 1\n",
+    ],
+)
+def test_logical_expressions_round_trip(source):
+    roundtrip(source)
+
+
+def test_grouping_parens_survive_a_render():
+    # (a fork b) splice c is a DIFFERENT tree from a fork b splice c.
+    # The renderer must put those parens back from the level table alone.
+    from matrixlang.render import render_ascii
+
+    tree = parse(lex("construct b = (a fork b) splice c\n"))
+    assert render_ascii(tree) == "construct b = (a fork b) splice c\n"
+
+
+def test_the_glyph_face_uses_the_new_glyphs():
+    from matrixlang.render import render_glyph
+
+    rendered = render_glyph(parse(lex("construct b = a splice c fork d\n")))
+    assert GLYPHS["splice"] in rendered
+    assert GLYPHS["fork"] in rendered
+    assert "splice" not in rendered
+    assert "fork" not in rendered

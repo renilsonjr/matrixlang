@@ -87,6 +87,8 @@ def _adopt_header_comment(
         trailing.insert(0, comment)
 
 
+_FORK_OPS = (TokenType.FORK,)
+_SPLICE_OPS = (TokenType.SPLICE,)
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _COMPARISON_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
 _TERM_OPS = (TokenType.PLUS, TokenType.MINUS)
@@ -381,13 +383,19 @@ class _Parser:
     # --- expressions ------------------------------------------------------
 
     def expression(self) -> Expr:
-        return self._not()
+        return self._fork()
 
     # The ladder: each level parses the next-tighter level, then folds a
     # left-associative chain of its own operators. Named levels keep the
     # grammar visible; the shared loop lives once in _binary_level. `_not`
     # sits above the ladder's top rung (_equality) rather than in it: it is
     # unary and right-recursive, not a left-associative binary chain.
+
+    def _fork(self) -> Expr:
+        return self._binary_level(_FORK_OPS, self._splice)
+
+    def _splice(self) -> Expr:
+        return self._binary_level(_SPLICE_OPS, self._not)
 
     def _not(self) -> Expr:
         """`unplug`, binding looser than comparison.
