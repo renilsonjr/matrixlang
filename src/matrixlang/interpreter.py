@@ -226,9 +226,11 @@ class Interpreter:
             value = self._value_of(stmt.value, stmt)
             if not is_list(target):
                 raise RuntimeErrorML(
-                    f"cannot index {type_name(target)}", stmt.line, stmt.column
+                    f"cannot index {type_name(target)}",
+                    stmt.index.line,
+                    stmt.index.column,
                 )
-            self._check_index(target, index, stmt)
+            self._check_index(target, index, stmt.index)
             target[index] = value
         elif isinstance(stmt, FunctionDef):
             agent = Function(stmt.name, stmt.params, stmt.body, self._env)
@@ -268,8 +270,13 @@ class Interpreter:
 
         Spec §5: no truthy integers, no truthy strings. `redpill 1` is an
         error, not a taken branch.
+
+        Routes through `_value_of`, not `_evaluate`, so a valueless agent
+        used as a condition reports "did not jack out a value" instead of
+        leaking NOTHING into `type_name`'s `type(value).__name__` fallback
+        — the Python class name `_Nothing` is not a diagnostic.
         """
-        value = self._evaluate(expr)
+        value = self._value_of(expr, expr)
         if not is_bool(value):
             raise RuntimeErrorML(
                 f"condition must be a boolean, got {type_name(value)}",

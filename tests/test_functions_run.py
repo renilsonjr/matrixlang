@@ -220,6 +220,25 @@ def test_nothing_can_never_be_stored():
     assert "did not jack out" in str(error)
 
 
+def test_nothing_as_a_redpill_condition_says_did_not_jack_out():
+    # _condition used to call _evaluate rather than _value_of, so NOTHING
+    # survived into type_name's fallback and the error read "condition
+    # must be a boolean, got _Nothing" — a Python class name in a
+    # user-facing diagnostic. It must read the same as every other place
+    # NOTHING is used as a value.
+    src = "agent f()\n  jackout\nflatline\nredpill f()\n  trace 1\nflatline\n"
+    error = fails(src)
+    assert "did not jack out" in str(error)
+    assert "_Nothing" not in str(error)
+
+
+def test_nothing_as_a_dejavu_condition_says_did_not_jack_out():
+    src = "agent f()\n  jackout\nflatline\ndejavu f()\n  trace 1\nflatline\n"
+    error = fails(src)
+    assert "did not jack out" in str(error)
+    assert "_Nothing" not in str(error)
+
+
 # --- Display ------------------------------------------------------------
 
 

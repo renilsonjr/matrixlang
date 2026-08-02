@@ -198,6 +198,16 @@ def test_assigning_past_the_end_is_an_error():
     assert error.line == 2
 
 
+def test_the_write_path_index_error_points_at_the_index_not_the_statement():
+    # IndexAssign used to pass `stmt` to the bounds helpers, anchoring
+    # every error at the statement's own start regardless of where the
+    # index expression actually sits. `xs[3]` begins at column 3 ('x' is
+    # column 1) so the index literal '3' sits at column 4 — not column 1,
+    # which is where the statement itself starts.
+    error = fails("construct xs = [1]\nxs[3] = 9\n")
+    assert error.column == 4
+
+
 def test_every_list_error_carries_a_line_and_a_column():
     for source in [
         "construct xs = []\ntrace xs[0]\n",
