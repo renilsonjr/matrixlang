@@ -37,7 +37,11 @@ trace double(21)
 construct xs = [1, 2, 3]
 xs[0] = xs[0] + 1
 trace xs[0]
-trace length xs"""
+trace length xs
+
+construct name = "Neo"
+trace name < "Trinity"
+trace name[0]"""
 
 # The ways MatrixLang differs from what a model assumes by default. Each
 # line here exists because getting it wrong produces a candidate that
@@ -55,6 +59,11 @@ Rules that differ from most languages:
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
   with `xs[i] = v`, and measure one with `length xs` (also works on a
   string). Indexing is 0-based and out of range is an error.
+- A string can be indexed too: `s[i]` reads a one-character string. It
+  cannot be written — `s[i] = v` is an error, because a string can never
+  change once made. Build a different one with `+` instead.
+- `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
+  and never any other type.
 - `+` adds integers, joins strings, or concatenates lists — never a mix
   of different types.
 - Integer division truncates toward zero.
