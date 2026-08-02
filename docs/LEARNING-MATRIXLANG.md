@@ -3,9 +3,10 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has eleven keywords, four types, and two ways of writing every
-program: **ASCII**, which you type, and **glyphs**, which you read. They
-are the same program — the toolchain converts between them without loss.
+MatrixLang has fourteen keywords, four types, and two ways of writing
+every program: **ASCII**, which you type, and **glyphs**, which you
+read. They are the same program — the toolchain converts between them
+without loss.
 
 ```bash
 .venv/bin/matrixlang run examples/hello.rain
@@ -33,7 +34,7 @@ wake up, Neo
 ```
 
 `--no-window` prints to the terminal. Without it, a window opens and the
-program falls through it as glyphs — see §11.
+program falls through it as glyphs — see §12.
 
 ---
 
@@ -547,7 +548,136 @@ matrixlang: [line 2, column 11] an index cannot be negative — use s[length s -
 
 ---
 
-## 8. Scope, and agents that remember
+## 8. Logical operators — `splice`, `fork`, `unplug`
+
+```
+trace true splice false     # false
+trace true fork false       # true
+trace unplug true           # false
+```
+
+`splice` is *and*, `fork` is *or*, `unplug` is *not*. The truth table:
+
+| `a` | `b` | `a splice b` | `a fork b` |
+| --- | --- | --- | --- |
+| `true` | `true` | `true` | `true` |
+| `true` | `false` | `false` | `true` |
+| `false` | `true` | `false` | `true` |
+| `false` | `false` | `false` | `false` |
+
+**Operands must be boolean.** Same rule as `redpill` — there is no
+truthiness anywhere in this language:
+
+```
+trace 1 splice true
+```
+
+```
+matrixlang: [line 1, column 7] 'splice' takes booleans, got integer
+```
+
+### `unplug` binds looser than comparison
+
+```
+construct n = 1
+trace unplug n == 1
+```
+
+```
+false
+```
+
+`unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1` — the
+tight reading would compare a boolean to `1`, which is an error for
+every possible `n`:
+
+```
+construct n = 1
+trace (unplug n) == 1
+```
+
+```
+matrixlang: [line 2, column 8] 'unplug' takes a boolean, got integer
+```
+
+### `splice` and `fork` short-circuit
+
+`a splice b` skips `b` entirely once `a` is already `false`. `a fork b`
+skips `b` once `a` is already `true`. This has a consequence worth
+stating plainly, because it holds nowhere else in the language:
+**whether the right side is even type-checked depends on the value of
+the left side.**
+
+```
+trace false splice 1
+```
+
+```
+false
+```
+
+```
+trace true splice 1
+```
+
+```
+matrixlang: [line 1, column 19] 'splice' takes booleans, got integer
+```
+
+Same shape, same `1` on the right — one runs, one errors, because the
+left side decided whether the right side was ever looked at. This is not
+a quirk of this language: Python, Java and C all behave the same way.
+
+### The bounded search
+
+This is the reason the operators exist. Indexing past the end of a list
+is an error:
+
+```
+construct crew = ["Neo", "Trinity", "Tank"]
+trace crew[3]
+```
+
+```
+matrixlang: [line 2, column 11] index 3 is past the end of a list of length 3
+```
+
+So a loop that searches a list for something that might not be there has
+to stop checking the length **before** it ever reads an element at that
+length — and short-circuit is what lets one condition do both jobs
+safely:
+
+```
+construct crew = ["Neo", "Trinity", "Tank"]
+construct n = 0
+dejavu n < length crew splice crew[n] != "Cypher"
+  n = n + 1
+flatline
+trace n
+
+redpill unplug (n == length crew)
+  trace "found at"
+  trace n
+bluepill
+  trace "not found"
+flatline
+```
+
+```
+3
+not found
+```
+
+`"Cypher"` is not in `crew`, so the loop keeps going until `n` reaches
+`3` — `length crew`. At that point `n < length crew` is `false`,
+`splice` never evaluates `crew[n]`, and the loop exits without indexing
+past the end. `unplug (n == length crew)` then reads as "the search did
+not run off the end without finding it" — true when the target is
+missing, which is exactly what happened here.
+
+---
+
+## 9. Scope, and agents that remember
 
 A name declared inside an agent is local to it:
 
@@ -617,7 +747,7 @@ trace inc             # <agent inc>
 
 ---
 
-## 9. Comments
+## 10. Comments
 
 ```
 # this is a comment
@@ -629,7 +759,7 @@ and back and your comments are still there, in place.
 
 ---
 
-## 10. The two faces
+## 11. The two faces
 
 Every program can be written and read two ways. This:
 
@@ -666,8 +796,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Eleven keywords, eleven operators, parentheses, a comma, two brackets,
-ten digits, and the comment marker — 38 slots in all.
+Fourteen keywords, eleven operators, parentheses, a comma, two brackets,
+ten digits, and the comment marker — 41 slots in all.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -675,6 +805,7 @@ ten digits, and the comment marker — 38 slots in all.
 | `agent` `ｴ` | `jackout` `ﾖ` | `length` `ﾙ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` |
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
+| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | | | | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -688,7 +819,7 @@ is what makes the glyph face usable rather than decorative.
 
 ---
 
-## 11. Watching a program run
+## 12. Watching a program run
 
 ```bash
 .venv/bin/matrixlang run program.rain
@@ -713,7 +844,7 @@ Three things worth knowing:
 
 ---
 
-## 12. When something goes wrong
+## 13. When something goes wrong
 
 Every error carries a line and a column:
 
@@ -735,6 +866,7 @@ The ones you will meet first:
 | `'x' is already declared` | A second `construct` for the same name in the same scope |
 | `'x' is not declared — use 'construct' first` | Assigning or reading a name that does not exist. Often a typo |
 | `condition must be a boolean, got integer` | `redpill 1` — there is no truthiness |
+| `'splice' takes booleans, got integer` | An operand of `splice` or `fork` was not a boolean — same rule as `redpill` |
 | `cannot add string and integer` | `"n = " + 5`. There is no automatic conversion |
 | `cannot compare string with integer` | `==` across two types |
 | `agent 'f' takes 2 arguments, got 1` | Wrong number of arguments |
@@ -745,7 +877,7 @@ The ones you will meet first:
 
 ---
 
-## 13. Seeing the shape of a program
+## 14. Seeing the shape of a program
 
 ```bash
 .venv/bin/matrixlang parse program.rain
@@ -782,7 +914,7 @@ the glyph face; `:ascii` turns that off.
 
 ---
 
-## 14. A whole program
+## 15. A whole program
 
 ```
 # Count down, then greet — using an agent and a closure.
@@ -822,7 +954,6 @@ Being clear about this saves more time than any feature list:
 - no slicing (`name[0:2]`) and no string methods — indexing one character
   at a time (§7) is as far as string access goes
 - no `for`, `break`, `continue`, or `else if`
-- no `and`, `or`, or `not`
 - no input — a program's only channel out is `trace`
 - no modules, imports, or standard library
 - no file or network access, and no way to reach the host language

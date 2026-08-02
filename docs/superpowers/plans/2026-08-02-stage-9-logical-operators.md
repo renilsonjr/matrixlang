@@ -890,6 +890,30 @@ def test_the_error_carries_a_position():
     assert error.column >= 1
 ```
 
+> **Plan correction, recorded during Task 4 (superseded — kept for the
+> record, not rewritten as though it had always been right).** The
+> `test_the_bounded_search_does_not_run_off_the_end` specified above
+> searches for `"Tank"`, which is the **last** element of `crew`. The
+> loop therefore exits at `n == 2`, reading `crew[2]` — a perfectly
+> legal index — and never reaches the boundary `n == length crew` at
+> all. The test's own comment claims it "dies with `index 3 is past the
+> end of a list of length 3`" without short-circuit, but that is false:
+> a non-short-circuiting interpreter evaluates `crew[2] != "Tank"`,
+> gets `false`, and the loop exits at `n == 2` exactly as a
+> short-circuiting one does. The test passed under both, so it could
+> not fail for the behaviour it was named after and existed to pin.
+> The fix, made during Task 4, was a one-word data change to an absent
+> target — searching for `"Cypher"`, which is not in `crew`, so the
+> loop genuinely runs to the boundary and only short-circuit prevents
+> `crew[3]` from being read. Short-circuit itself was never
+> unverified: `test_splice_does_not_evaluate_the_right_side_when_the_left_is_false`,
+> `test_fork_does_not_evaluate_the_right_side_when_the_left_is_true`,
+> `test_the_right_side_does_run_when_it_is_needed`, and
+> `test_an_unevaluated_operand_is_never_type_checked` — all four
+> already in this task's plan — pin it directly through an observable
+> side effect. Only the one test named after the bounded search failed
+> to test the bounded search's boundary.
+
 - [ ] **Step 2: Run to verify failure**
 
 ```bash

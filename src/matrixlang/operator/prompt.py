@@ -41,7 +41,16 @@ trace length xs
 
 construct name = "Neo"
 trace name < "Trinity"
-trace name[0]"""
+trace name[0]
+
+construct crew = ["Neo", "Trinity", "Tank"]
+construct i = 0
+dejavu i < length crew splice crew[i] != "Trinity"
+  i = i + 1
+flatline
+redpill unplug (i == length crew)
+  trace i
+flatline"""
 
 # The ways MatrixLang differs from what a model assumes by default. Each
 # line here exists because getting it wrong produces a candidate that
@@ -69,7 +78,15 @@ Rules that differ from most languages:
 - Integer division truncates toward zero.
 - `agent` defines; `jackout` returns. An agent that never jacks out
   produces nothing, and using that nothing as a value is an error.
-- The only way to produce output is `trace`. There is no input."""
+- The only way to produce output is `trace`. There is no input.
+- `splice` is and, `fork` is or, `unplug` is not. Operands must be
+  boolean — `1 splice true` is an error, the same rule that makes
+  `redpill 1` an error. `splice` and `fork` short-circuit: the right
+  side of `a splice b` runs only if `a` is true, and the right side of
+  `a fork b` runs only if `a` is false, so a side that is never
+  evaluated is never type-checked (`false splice 1` is `false`, but
+  `true splice 1` is an error). `unplug` binds looser than comparison,
+  so `unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1`."""
 
 
 def _keywords() -> str:
