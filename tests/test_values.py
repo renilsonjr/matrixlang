@@ -1,3 +1,5 @@
+import pytest
+
 from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
 
 
@@ -37,3 +39,70 @@ def test_display_prints_booleans_in_the_language_s_spelling():
 def test_display_prints_integers():
     assert to_display(0) == "0"
     assert to_display(-7) == "-7"
+
+
+def test_a_list_is_recognised_by_identity_of_type_not_isinstance():
+    from matrixlang.values import is_list
+
+    assert is_list([]) is True
+    assert is_list([1, 2]) is True
+    assert is_list("no") is False
+    assert is_list(1) is False
+
+
+def test_a_list_names_itself_list():
+    from matrixlang.values import type_name
+
+    assert type_name([1]) == "list"
+
+
+def test_a_list_displays_with_brackets():
+    from matrixlang.values import to_display
+
+    assert to_display([]) == "[]"
+    assert to_display([1, 2]) == "[1, 2]"
+    assert to_display([True, False]) == "[true, false]"
+
+
+def test_strings_are_quoted_inside_a_list_but_not_outside_one():
+    # Bare `trace "hi"` prints hi. Inside a list, without quotes there is
+    # no way to tell a string from a name and a list of strings becomes
+    # unreadable, so the inconsistency is deliberate.
+    from matrixlang.values import to_display
+
+    assert to_display("hi") == "hi"
+    assert to_display(["hi"]) == '["hi"]'
+    assert to_display(["a", 1]) == '["a", 1]'
+
+
+def test_a_quote_inside_a_displayed_string_is_escaped():
+    from matrixlang.values import to_display
+
+    assert to_display(['say "hi"']) == '["say \\"hi\\""]'
+
+
+def test_nested_lists_display():
+    from matrixlang.values import to_display
+
+    assert to_display([[1], [2, 3]]) == "[[1], [2, 3]]"
+
+
+def test_an_agent_inside_a_list_displays_by_name():
+    from matrixlang.values import Function, to_display
+
+    agent = Function("fib", ["n"], None, None)
+    assert to_display([agent]) == "[<agent fib>]"
+
+
+def test_displaying_a_cyclic_list_raises_a_named_error_not_a_recursion_error():
+    # Measured before the design was written: the naive recursive
+    # to_display raises RecursionError, which the interpreter converts to
+    # "expression is nested too deeply" — a false statement about a
+    # one-element list. A named exception is what lets the interpreter
+    # report the truth.
+    from matrixlang.values import CyclicValue, to_display
+
+    xs = [1]
+    xs[0] = xs
+    with pytest.raises(CyclicValue):
+        to_display(xs)

@@ -68,6 +68,17 @@ class _Nothing:
 NOTHING = _Nothing()
 
 
+class CyclicValue(Exception):
+    """A list that contains itself, directly or through other lists.
+
+    Raised rather than recursing forever. It is NOT a MatrixLangError,
+    because this module may import nothing (tests/test_architecture.py)
+    and has never had access to a line or column — every MatrixLangError
+    carries one. The interpreter catches this and attaches the position,
+    which is the module that actually knows it.
+    """
+
+
 def is_int(value: object) -> bool:
     return type(value) is int
 
@@ -84,6 +95,10 @@ def is_function(value: object) -> bool:
     return type(value) is Function
 
 
+def is_list(value: object) -> bool:
+    return type(value) is list
+
+
 def type_name(value: object) -> str:
     """The language's own word for a value's type, for error messages."""
     if is_int(value):
@@ -94,22 +109,41 @@ def type_name(value: object) -> str:
         return "string"
     if is_function(value):
         return "agent"
+    if is_list(value):
+        return "list"
     return type(value).__name__
 
 
 def to_display(value: object) -> str:
     """How `trace` renders a value.
 
-    Strings print without quotes; booleans print in the language's own
-    lowercase spelling, not Python's `True`/`False`.
+    Strings print without quotes at the top level; booleans print in the
+    language's own lowercase spelling, not Python's True/False.
+
+    Inside a list, strings ARE quoted. The inconsistency is deliberate:
+    without quotes `[hi, 1]` gives a reader no way to tell a string from
+    a name. The top level keeps its old behaviour because changing it
+    would alter the output of every program written so far.
     """
+    return _display(value, nested=False, seen=frozenset())
+
+
+def _display(value: object, nested: bool, seen: frozenset) -> str:
     if is_bool(value):
         return "true" if value else "false"
     if is_str(value):
-        return value
+        if not nested:
+            return value
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
     if is_function(value):
         # Never str(value): that would put a Python class name and a
         # memory address into output a program produced, which is a hole
         # in the claim that a .rain program has no route into Python.
         return f"<agent {value.name}>"
+    if is_list(value):
+        if id(value) in seen:
+            raise CyclicValue
+        seen = seen | {id(value)}
+        return "[" + ", ".join(_display(v, True, seen) for v in value) + "]"
     return str(value)
