@@ -20,6 +20,9 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    Index,
+    IndexAssign,
+    ListLiteral,
     Return,
     Assign,
     Binary,
@@ -54,6 +57,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.GT: ">",
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
+    TokenType.LENGTH: "length",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
@@ -127,6 +131,14 @@ def _statement(stmt: Stmt, depth: int, face: Face, lines: list[str]) -> None:
         lines.append(pad + head + _trail(stmt, face))
     elif isinstance(stmt, Assign):
         head = f"{stmt.name} {_map(face, '=')} {_expression(stmt.value, 0, face)}"
+        lines.append(pad + head + _trail(stmt, face))
+    elif isinstance(stmt, IndexAssign):
+        target = _expression(stmt.target, _CALL_LEVEL, face)
+        index = _expression(stmt.index, 0, face)
+        head = (
+            f"{target}{_map(face, '[')}{index}{_map(face, ']')} "
+            f"{_map(face, '=')} {_expression(stmt.value, 0, face)}"
+        )
         lines.append(pad + head + _trail(stmt, face))
     elif isinstance(stmt, Trace):
         head = f"{_map(face, 'trace')} {_expression(stmt.value, 0, face)}"
@@ -213,6 +225,11 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)
+        if expr.op is TokenType.LENGTH:
+            # A word operator needs a separator or `length xs` renders as
+            # `lengthxs` and re-lexes as one identifier — a silent change
+            # of meaning, which is exactly what §4.3 exists to catch.
+            return _map(face, "length") + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):
         # A call binds tighter than every operator, so the callee needs
@@ -228,6 +245,26 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             f"{callee}{_map(face, '(')}{args}{_map(face, ')')}",
             _CALL_LEVEL,
         )
+    if isinstance(expr, Index):
+        # _CALL_LEVEL for the target for the same reason a call uses it:
+        # the suffix binds tighter than every operator, so a looser target
+        # needs parens. The index itself renders from 0 — the brackets
+        # delimit it, exactly like call arguments.
+        target = _expression(expr.target, _CALL_LEVEL, face)
+        inner = _expression(expr.index, 0, face)
+        return (
+            f"{target}{_map(face, '[')}{inner}{_map(face, ']')}",
+            _CALL_LEVEL,
+        )
+    if isinstance(expr, ListLiteral):
+        # Elements render from level 0: the brackets delimit them, so no
+        # element ever needs parens for the list's sake. Same reasoning as
+        # Call.args. The literal itself is an atom — [1] + [2] must never
+        # come back as [1] + [2] with parens, and never as [1 + [2]].
+        inner = f"{_map(face, ',')} ".join(
+            _expression(e, 0, face) for e in expr.elements
+        )
+        return f"{_map(face, '[')}{inner}{_map(face, ']')}", _ATOM_LEVEL
     if isinstance(expr, Binary):
         level = _LEVEL[expr.op]
         # Left-associative grammar: the left child may sit at the same

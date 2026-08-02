@@ -1582,6 +1582,39 @@ def test_a_cycle_does_not_make_unequal_lists_equal():
 
 Expected: FAIL — `cannot import name 'equal'`.
 
+> **Correction recorded 2026-08-02 (Task 11).** Step 3 below, as written,
+> is superseded. This plan is a historical record, so the original text is
+> left intact beneath this note rather than silently rewritten — read the
+> `finally: seen.discard(pair)` block that follows knowing it did not ship.
+>
+> The plan mandated discarding the `(id, id)` pair from `seen` on the way
+> back up the recursion, with a comment claiming the discard prevented "a
+> cycle assumption leaking into a sibling comparison." During Task 8's
+> implementation, code review found that invariant does not exist:
+> fuzzing 20,000 random object graphs (sharing, self-loops, mutual cycles)
+> found zero divergence between the discard and no-discard forms, because
+> within one `equal()` call a `False` result and an `Incomparable`
+> exception both propagate straight to the top without leaving a stale
+> entry behind — so any pair that ever finishes recursing does so `True`,
+> and a memoized `True` is never wrong to reuse.
+>
+> What the discard *did* do was make `seen` path-scoped rather than a true
+> memo, forcing shared (not just cyclic) list structure to be re-walked
+> once per path to it — exponential in the number of shared paths.
+> Measured on `node = [node, node]` repeated to depth 20, compared against
+> a `copy.deepcopy` of itself: **1,195 ms with the discard** versus
+> **0.017 ms without it**. This is reachable from an ordinary `.rain`
+> program, not a contrived one — `[n, n]` evaluates `n` once into one
+> shared object, which is exactly what Task 9's list-literal evaluation
+> does.
+>
+> The human ruled the plan text superseded rather than binding: the
+> shipped code (commit `0947c9a`, "fix: drop discard in values.equal,
+> memoize proven-equal pairs instead") deletes the `try`/`finally` and
+> lets `seen` accumulate as a genuine memo for the lifetime of one
+> `equal()` call. See `docs/TECHNICAL-OVERVIEW.md` §5.5 for the write-up
+> alongside the `bool`/`int` finding it sits next to.
+
 - [ ] **Step 3: Implement**
 
 In `src/matrixlang/values.py`, after `CyclicValue`:

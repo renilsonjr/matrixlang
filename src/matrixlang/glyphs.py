@@ -1,4 +1,4 @@
-"""The 35-slot glyph table — D-03's fixed bijective mapping.
+"""The 38-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
@@ -24,6 +24,12 @@ GLYPHS: dict[str, str] = {
     # jackout is leaving the construct and coming back with something.
     "agent": "ｴ",
     "jackout": "ﾖ",
+    # Stage 7. A keyword rather than a built-in `length(xs)`: a built-in
+    # name is an identifier, so it would be the first piece of the
+    # language surface rendered in Latin in the glyph face, and D-03's
+    # claim is that the only readable text in a wall of green is the
+    # thing you wrote.
+    "length": "ﾙ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
@@ -40,6 +46,9 @@ GLYPHS: dict[str, str] = {
     "(": "ｸ",
     ")": "ｹ",
     ",": "ﾈ",
+    # Adjacent, mirroring ( and ) which are adjacent too.
+    "[": "ﾍ",
+    "]": "ﾎ",
     # digits, per-digit (§6.2: 10 renders as two glyphs)
     "0": "ｦ",
     "1": "ｧ",

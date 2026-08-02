@@ -32,7 +32,12 @@ agent double(x)
   jackout x * 2
 flatline
 
-trace double(21)"""
+trace double(21)
+
+construct xs = [1, 2, 3]
+xs[0] = xs[0] + 1
+trace xs[0]
+trace length xs"""
 
 # The ways MatrixLang differs from what a model assumes by default. Each
 # line here exists because getting it wrong produces a candidate that
@@ -45,9 +50,13 @@ Rules that differ from most languages:
   have been declared already. Re-declaring in the same scope is an error.
 - Conditions must be a boolean. `redpill 1` is an error, not a taken
   branch. There is no truthiness.
-- Types are integer, boolean and string. No floats, no lists, no
+- Types are integer, boolean, string and list. No floats, no
   dictionaries, no null.
-- `+` adds integers or joins strings, never a mix.
+- A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
+  with `xs[i] = v`, and measure one with `length xs` (also works on a
+  string). Indexing is 0-based and out of range is an error.
+- `+` adds integers, joins strings, or concatenates lists — never a mix
+  of different types.
 - Integer division truncates toward zero.
 - `agent` defines; `jackout` returns. An agent that never jacks out
   produces nothing, and using that nothing as a value is an error.

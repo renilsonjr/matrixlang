@@ -7,11 +7,15 @@ trees stay small by construction.
 Coverage is deliberate, not hoped-for: equal-precedence right children
 and unary-over-binary shapes (the §6.4 parens rules), all three
 else_body shapes (None / [] / populated), trivia honouring the §6.1
-invariant, and string/comment content chosen to smoke out corruption
+invariant, string/comment content chosen to smoke out corruption
 (a quote, a backslash, a newline escape, a keyword spelling, a glyph
-char, digits). test_roundtrip has a test asserting this coverage
-actually occurs — a generator that stops producing the hard shapes
-would quietly gut the property.
+char, digits), calls with binary arguments and calls on calls (Stage
+6), and — Stage 7 — empty and populated list literals, nested lists,
+indexing a list literal and chaining an index over an index
+(`[1,2][0]`, `xs[0][1]`), `length` over a binary expression, and
+index-assignment statements. test_roundtrip has a test asserting this
+coverage actually occurs — a generator that stops producing the hard
+shapes would quietly gut the property.
 """
 
 import random
@@ -23,6 +27,9 @@ from matrixlang.nodes import (
     Declare,
     Expr,
     If,
+    Index,
+    IndexAssign,
+    ListLiteral,
     Name,
     NumberLiteral,
     Program,
@@ -74,12 +81,18 @@ def gen_comments(rng: random.Random) -> list[str]:
 
 
 def gen_statement(rng: random.Random, depth: int) -> Stmt:
-    kinds = ["declare", "assign", "trace", "return", "exprstmt"]
+    kinds = ["declare", "assign", "trace", "return", "exprstmt", "indexassign"]
     if depth > 0:
         kinds += ["if", "while", "agent"]
     kind = rng.choice(kinds)
     stmt: Stmt
-    if kind == "return":
+    if kind == "indexassign":
+        stmt = IndexAssign(
+            gen_assignable_chain(rng) if rng.random() < 0.3 else Name(rng.choice(_IDENTS)),
+            gen_expression(rng, 2),
+            gen_expression(rng, 3),
+        )
+    elif kind == "return":
         # Both shapes: a bare jackout is an early exit and must not
         # round-trip into a returned value.
         stmt = Return(
@@ -131,7 +144,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
     if depth == 0:
         return gen_atom(rng)
     roll = rng.random()
-    if roll < 0.40:
+    if roll < 0.34:
         # Both children draw from the full depth-1 space, so equal-
         # precedence right children (R-PAREN-2) and nested chains occur
         # constantly rather than by luck.
@@ -140,15 +153,25 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             rng.choice(_BINARY_OPS),
             gen_expression(rng, depth - 1),
         )
-    if roll < 0.55:
-        # Unary over a full subexpression: the R-PAREN-3 shape.
-        return Unary(TokenType.MINUS, gen_expression(rng, depth - 1))
-    if roll < 0.70:
+    if roll < 0.46:
+        # Unary over a full subexpression: the R-PAREN-3 shape. Both
+        # unary operators, so `length (a + b)` is generated too — the
+        # shape that would render as `length a + b` if the emitter reused
+        # the enclosing level, which is a different tree.
+        return Unary(
+            rng.choice([TokenType.MINUS, TokenType.LENGTH]),
+            gen_expression(rng, depth - 1),
+        )
+    if roll < 0.58:
         # Calls, with arguments drawn from the full space so f(a + b)
         # occurs constantly rather than by luck. That shape is the one an
         # emitter that reuses the enclosing precedence renders as
         # f(a) + b -- a different tree with a different meaning.
         return gen_call(rng, depth - 1)
+    if roll < 0.70:
+        return gen_list(rng, depth - 1)
+    if roll < 0.80:
+        return gen_index(rng, depth - 1)
     return gen_atom(rng)
 
 
@@ -159,6 +182,43 @@ def gen_call(rng: random.Random, depth: int) -> Call:
         callee = gen_call(rng, depth - 1)
     args = [gen_expression(rng, max(0, depth)) for _ in range(rng.randint(0, 2))]
     return Call(callee, args)
+
+
+def gen_list(rng: random.Random, depth: int) -> ListLiteral:
+    """A list literal, empty a fifth of the time so [] is covered."""
+    if rng.random() < 0.2:
+        return ListLiteral([])
+    return ListLiteral(
+        [gen_expression(rng, max(0, depth)) for _ in range(rng.randint(1, 3))]
+    )
+
+
+def gen_index(rng: random.Random, depth: int) -> Index:
+    """An index whose target may be a name, a list literal or another
+    index, so xs[0][1] and [1,2][0] both occur."""
+    roll = rng.random()
+    target: Expr
+    if roll < 0.5 or depth <= 0:
+        target = Name(rng.choice(_IDENTS))
+    elif roll < 0.75:
+        target = gen_list(rng, depth - 1)
+    else:
+        target = gen_index(rng, depth - 1)
+    return Index(target, gen_expression(rng, max(0, depth - 1)))
+
+
+def gen_assignable_chain(rng: random.Random) -> Expr:
+    """A Name, or an Index chain rooted in a Name -- the only shapes the
+    parser accepts as the base of `xs[0] = v` / `xs[0][1] = v`. Unlike
+    gen_index's target, this must never bottom out in a list literal:
+    the parser only enters index-assignment when the statement starts
+    with an IDENT (see parser._call/_primary), so `[1,2][0] = v` isn't a
+    parseable statement even though it's a parseable expression. So
+    unlike gen_index, this stays rooted in a Name at every level."""
+    target: Expr = Name(rng.choice(_IDENTS))
+    while rng.random() < 0.5:
+        target = Index(target, gen_expression(rng, 1))
+    return target
 
 
 def gen_atom(rng: random.Random) -> Expr:

@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has ten keywords, three types, and two ways of writing every
+MatrixLang has eleven keywords, four types, and two ways of writing every
 program: **ASCII**, which you type, and **glyphs**, which you read. They
 are the same program — the toolchain converts between them without loss.
 
@@ -33,7 +33,7 @@ wake up, Neo
 ```
 
 `--no-window` prints to the terminal. Without it, a window opens and the
-program falls through it as glyphs — see §10.
+program falls through it as glyphs — see §11.
 
 ---
 
@@ -69,17 +69,21 @@ tells you the name already exists somewhere above.
 
 ---
 
-## 3. Types — there are three
+## 3. Types — there are four
 
 | Type | Examples |
 | --- | --- |
 | integer | `0`, `42`, `-7` |
 | boolean | `true`, `false` |
 | string | `"Neo"`, `""`, `"wake up"` |
+| list | `[1, 2, 3]`, `[]`, `["Neo", true]` |
 
-No floats, no lists, no dictionaries, and **no null**. If you are used to
+No floats, no dictionaries, no sets, and **no null**. If you are used to
 a language where a missing value is `null` or `None`, there is nothing
 here that corresponds — a name either holds a value or does not exist.
+Lists get their own section (§7) once agents have been introduced,
+because the interesting thing about them — that they are shared, not
+copied — is easiest to show with one.
 
 ### Arithmetic
 
@@ -260,7 +264,169 @@ That error is the language telling you it has no null to give you.
 
 ---
 
-## 7. Scope, and agents that remember
+## 7. Lists
+
+```
+trace ["Neo", "Trinity", "Morpheus"]
+```
+
+```
+["Neo", "Trinity", "Morpheus"]
+```
+
+A list is a sequence of values inside `[` and `]`, comma-separated.
+Elements can be any type, mixed freely:
+
+```
+trace [1, true, "Neo"]      # [1, true, "Neo"]
+```
+
+Notice the strings are quoted *inside* the list but not at the top level
+(compare `trace "Neo"`, which prints `Neo`). Without the quotes there
+would be no way to tell a string from a name in the printed form — the
+top level keeps its old, unquoted behaviour so it does not change what
+every earlier program in this file prints.
+
+### Reading an element — `xs[0]`
+
+Indexing is zero-based:
+
+```
+construct crew = ["Neo", "Trinity", "Morpheus"]
+trace crew[0]                # Neo
+```
+
+### Writing an element — `xs[0] = v`
+
+```
+construct crew = ["Neo", "Trinity", "Morpheus"]
+crew[0] = "Mr. Anderson"
+trace crew
+```
+
+```
+["Mr. Anderson", "Trinity", "Morpheus"]
+```
+
+This **mutates** the list — there is no new list produced. Keep that in
+mind for the "shared" section below.
+
+### `length`
+
+`length` is a keyword, not a function call — no parentheses. It works on
+lists and strings alike:
+
+```
+trace length ["Neo", "Trinity", "Morpheus"]     # 3
+trace length "Neo"                              # 3
+trace length []                                 # 0
+```
+
+### `+` concatenates, and copies
+
+```
+trace [1, 2] + [3]      # [1, 2, 3]
+```
+
+`+` always builds a **new** list. It never mutates either side:
+
+```
+construct xs = [1]
+construct ys = xs + [2]
+xs[0] = 99
+trace xs
+trace ys
+```
+
+```
+[99]
+[1, 2]
+```
+
+`ys` does not see the change to `xs` — concatenation copied, so the two
+lists are independent from the moment `+` ran.
+
+### Walking one with `dejavu`
+
+```
+construct crew = ["Neo", "Trinity", "Morpheus"]
+construct n = 0
+dejavu n < length crew
+  trace crew[n]
+  n = n + 1
+flatline
+```
+
+```
+Neo
+Trinity
+Morpheus
+```
+
+There is still no `for`. A counter, `length`, and `dejavu` are how you
+walk a list here.
+
+### Lists are shared, not copied
+
+Assigning a list to another name, or passing it as an argument, does not
+copy it — both names refer to the same list, so a mutation through one
+is visible through the other. This is the one place in the language with
+reference semantics; every other type is a value.
+
+```
+agent bump(zs)
+  zs[0] = zs[0] + 1
+flatline
+
+construct xs = [1]
+bump(xs)
+trace xs[0]      # 2
+```
+
+`bump` did not receive a copy of `xs`. It received the same list `xs`
+points at, and `zs[0] = zs[0] + 1` mutated that list in place — which is
+why the change is visible back at the call site through `xs`.
+
+### Four new errors
+
+```
+construct xs = [1, 2]
+trace xs[5]
+```
+
+```
+matrixlang: [line 2, column 9] index 5 is past the end of a list of length 2
+```
+
+```
+construct xs = [1]
+trace xs[-1]
+```
+
+```
+matrixlang: [line 2, column 9] an index cannot be negative — use xs[length xs - 1]
+```
+
+```
+construct n = 1
+trace n[0]
+```
+
+```
+matrixlang: [line 2, column 8] cannot index integer
+```
+
+```
+trace [1] + 2
+```
+
+```
+matrixlang: [line 1, column 11] cannot add list and integer
+```
+
+---
+
+## 8. Scope, and agents that remember
 
 A name declared inside an agent is local to it:
 
@@ -330,7 +496,7 @@ trace inc             # <agent inc>
 
 ---
 
-## 8. Comments
+## 9. Comments
 
 ```
 # this is a comment
@@ -342,7 +508,7 @@ and back and your comments are still there, in place.
 
 ---
 
-## 9. The two faces
+## 10. The two faces
 
 Every program can be written and read two ways. This:
 
@@ -379,15 +545,15 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Ten keywords, eleven operators, parentheses, a comma, ten digits, and the
-comment marker — 35 slots in all.
+Eleven keywords, eleven operators, parentheses, a comma, two brackets,
+ten digits, and the comment marker — 38 slots in all.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
 | `construct` `ｱ` | `trace` `ﾄ` | `redpill` `ﾚ` | `bluepill` `ﾌ` | `dejavu` `ﾃ` | `flatline` `ﾗ` | `#` `ﾒ` |
-| `agent` `ｴ` | `jackout` `ﾖ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` | `,` `ﾈ` |
-| `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` |
-| `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` | | | |
+| `agent` `ｴ` | `jackout` `ﾖ` | `length` `ﾙ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` |
+| `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
+| `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -401,7 +567,7 @@ is what makes the glyph face usable rather than decorative.
 
 ---
 
-## 10. Watching a program run
+## 11. Watching a program run
 
 ```bash
 .venv/bin/matrixlang run program.rain
@@ -426,7 +592,7 @@ Three things worth knowing:
 
 ---
 
-## 11. When something goes wrong
+## 12. When something goes wrong
 
 Every error carries a line and a column:
 
@@ -458,7 +624,7 @@ The ones you will meet first:
 
 ---
 
-## 12. Seeing the shape of a program
+## 13. Seeing the shape of a program
 
 ```bash
 .venv/bin/matrixlang parse program.rain
@@ -495,7 +661,7 @@ the glyph face; `:ascii` turns that off.
 
 ---
 
-## 13. A whole program
+## 14. A whole program
 
 ```
 # Count down, then greet — using an agent and a closure.
@@ -531,7 +697,8 @@ wake up, Neo
 
 Being clear about this saves more time than any feature list:
 
-- no floats, lists, dictionaries, or null
+- no floats, dictionaries, sets, or null
+- no indexing into a string — `"Neo"[0]` is an error; only lists index
 - no `for`, `break`, `continue`, or `else if`
 - no `and`, `or`, or `not`
 - no input — a program's only channel out is `trace`

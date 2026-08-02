@@ -14,7 +14,7 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.nodes import Binary, If, Unary
+from matrixlang.nodes import Binary, Call, If, Unary
 from matrixlang.parser import parse
 from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
@@ -166,3 +166,80 @@ def test_the_generator_produces_the_stage_6_shapes_too():
     assert agent_with_params, "no agent with parameters was generated"
     assert agent_without_params, "no agent without parameters was generated"
     assert expression_statement, "no expression statement was generated"
+
+
+def test_the_generator_produces_the_stage_7_shapes_too():
+    # Same reasoning as the two tests above, extended to lists. A
+    # generator that never emits an index over a list literal would let
+    # a precedence bug in [1,2][0] through while looking green.
+    from matrixlang.nodes import Index, IndexAssign, ListLiteral, Unary
+    from matrixlang.tokens import TokenType
+
+    empty_list = False
+    populated_list = False
+    nested_list = False
+    index_of_index = False
+    index_of_literal = False
+    length_over_binary = False
+    index_assignment = False
+
+    def walk_expr(expr):
+        nonlocal empty_list, populated_list, nested_list
+        nonlocal index_of_index, index_of_literal, length_over_binary
+        if isinstance(expr, ListLiteral):
+            if expr.elements:
+                populated_list = True
+            else:
+                empty_list = True
+            if any(isinstance(e, ListLiteral) for e in expr.elements):
+                nested_list = True
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            if isinstance(expr.target, Index):
+                index_of_index = True
+            if isinstance(expr.target, ListLiteral):
+                index_of_literal = True
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Unary):
+            if expr.op is TokenType.LENGTH and isinstance(expr.operand, Binary):
+                length_over_binary = True
+            walk_expr(expr.operand)
+        elif isinstance(expr, Binary):
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+
+    def walk_stmt(stmt):
+        nonlocal index_assignment
+        if isinstance(stmt, IndexAssign):
+            index_assignment = True
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if hasattr(stmt, field) and getattr(stmt, field) is not None:
+                walk_expr(getattr(stmt, field))
+        for child in getattr(stmt, "body", []):
+            walk_stmt(child)
+        for child in getattr(stmt, "then_body", []):
+            walk_stmt(child)
+        for child in getattr(stmt, "else_body", None) or []:
+            walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    assert empty_list, "no [] in 300 seeds"
+    assert populated_list, "no populated list in 300 seeds"
+    assert nested_list, "no nested list in 300 seeds"
+    assert index_of_index, "no xs[0][1] shape in 300 seeds"
+    assert index_of_literal, "no [1,2][0] shape in 300 seeds"
+    assert length_over_binary, "no `length (a + b)` shape in 300 seeds"
+    assert index_assignment, "no IndexAssign in 300 seeds"

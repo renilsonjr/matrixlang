@@ -1,3 +1,5 @@
+import pytest
+
 from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
 
 
@@ -37,3 +39,232 @@ def test_display_prints_booleans_in_the_language_s_spelling():
 def test_display_prints_integers():
     assert to_display(0) == "0"
     assert to_display(-7) == "-7"
+
+
+def test_a_list_is_recognised_by_identity_of_type_not_isinstance():
+    from matrixlang.values import is_list
+
+    assert is_list([]) is True
+    assert is_list([1, 2]) is True
+    assert is_list("no") is False
+    assert is_list(1) is False
+
+
+def test_a_list_names_itself_list():
+    from matrixlang.values import type_name
+
+    assert type_name([1]) == "list"
+
+
+def test_a_list_displays_with_brackets():
+    from matrixlang.values import to_display
+
+    assert to_display([]) == "[]"
+    assert to_display([1, 2]) == "[1, 2]"
+    assert to_display([True, False]) == "[true, false]"
+
+
+def test_strings_are_quoted_inside_a_list_but_not_outside_one():
+    # Bare `trace "hi"` prints hi. Inside a list, without quotes there is
+    # no way to tell a string from a name and a list of strings becomes
+    # unreadable, so the inconsistency is deliberate.
+    from matrixlang.values import to_display
+
+    assert to_display("hi") == "hi"
+    assert to_display(["hi"]) == '["hi"]'
+    assert to_display(["a", 1]) == '["a", 1]'
+
+
+def test_a_quote_inside_a_displayed_string_is_escaped():
+    from matrixlang.values import to_display
+
+    assert to_display(['say "hi"']) == '["say \\"hi\\""]'
+
+
+def test_nested_lists_display():
+    from matrixlang.values import to_display
+
+    assert to_display([[1], [2, 3]]) == "[[1], [2, 3]]"
+
+
+def test_an_agent_inside_a_list_displays_by_name():
+    from matrixlang.values import Function, to_display
+
+    agent = Function("fib", ["n"], None, None)
+    assert to_display([agent]) == "[<agent fib>]"
+
+
+def test_displaying_a_cyclic_list_raises_a_named_error_not_a_recursion_error():
+    # Measured before the design was written: the naive recursive
+    # to_display raises RecursionError, which the interpreter converts to
+    # "expression is nested too deeply" — a false statement about a
+    # one-element list. A named exception is what lets the interpreter
+    # report the truth.
+    from matrixlang.values import CyclicValue, to_display
+
+    xs = [1]
+    xs[0] = xs
+    with pytest.raises(CyclicValue):
+        to_display(xs)
+
+
+def test_displaying_a_mutual_cycle_also_raises_cyclic_value():
+    # The self-referential case above (xs[0] = xs) is the direct cycle.
+    # This is the mutual one: a[0] is b and b[0] is a, so neither list
+    # contains itself, but walking either from the top still revisits an
+    # id already on the path. Task 7's review verified this behaves
+    # correctly but noted it had no committed test -- pin it here rather
+    # than let it recurse to a bare RecursionError.
+    from matrixlang.values import CyclicValue, to_display
+
+    a = [1]
+    b = [2]
+    a[0] = b
+    b[0] = a
+    with pytest.raises(CyclicValue):
+        to_display(a)
+
+
+def test_a_sibling_list_reused_twice_is_not_a_cycle():
+    # The false-positive direction: the same list object appearing twice
+    # as a SIBLING (not on the path from itself back to itself) must not
+    # be mistaken for a cycle. `seen` in _display is threaded per-branch
+    # as an immutable frozenset, so one sibling's traversal can't poison
+    # the other's -- getting this wrong would make ordinary shared lists
+    # undisplayable.
+    from matrixlang.values import to_display
+
+    xs = [1]
+    assert to_display([xs, xs]) == "[[1], [1]]"
+
+
+# --- The rule the top-level guard could not reach ------------------------
+
+
+def test_a_bool_never_equals_an_int_at_any_depth():
+    # THE test for this task. The old code guarded operand types with
+    # type_name and then handed off to Python's ==, where 1 == True. The
+    # guard held exactly at the surface: [1] == [true] returned True.
+    from matrixlang.values import Incomparable, equal
+
+    for left, right in [
+        (1, True),
+        ([1], [True]),
+        ([0], [False]),
+        ([[1]], [[True]]),
+        ([1, [2]], [1, [True]]),
+    ]:
+        with pytest.raises(Incomparable):
+            equal(left, right)
+
+
+def test_incomparable_carries_both_type_names():
+    from matrixlang.values import Incomparable, equal
+
+    with pytest.raises(Incomparable) as caught:
+        equal([1], [True])
+    assert caught.value.left == "integer"
+    assert caught.value.right == "boolean"
+
+
+def test_lists_compare_structurally():
+    from matrixlang.values import equal
+
+    assert equal([1, 2], [1, 2]) is True
+    assert equal([], []) is True
+    assert equal([[1], [2]], [[1], [2]]) is True
+
+
+def test_lists_of_different_contents_or_length_are_not_equal():
+    from matrixlang.values import equal
+
+    assert equal([1, 2], [1, 3]) is False
+    assert equal([1], [1, 2]) is False
+    assert equal([1, 2], [1]) is False
+
+
+def test_scalars_still_compare_by_value():
+    from matrixlang.values import equal
+
+    assert equal(1, 1) is True
+    assert equal("a", "a") is True
+    assert equal(True, True) is True
+    assert equal(1, 2) is False
+
+
+def test_comparing_across_types_is_incomparable():
+    from matrixlang.values import Incomparable, equal
+
+    with pytest.raises(Incomparable):
+        equal("3", 3)
+    with pytest.raises(Incomparable):
+        equal([1], 1)
+
+
+def test_agents_compare_by_identity_inside_a_list():
+    from matrixlang.values import Function, equal
+
+    a = Function("f", [], None, None)
+    b = Function("f", [], None, None)
+    assert equal([a], [a]) is True
+    assert equal([a], [b]) is False
+
+
+# --- Cycles --------------------------------------------------------------
+
+
+def test_cyclic_lists_compare_without_blowing_the_stack():
+    # Measured: Python's per-element identity shortcut saves `a == a` but
+    # NOT two mutually referential lists, which raise RecursionError.
+    from matrixlang.values import equal
+
+    b = [None]
+    c = [None]
+    b[0] = c
+    c[0] = b
+
+    d = [None]
+    e = [None]
+    d[0] = d
+    e[0] = e
+
+    a = [1]
+    a[0] = a
+
+    assert equal(b, c) is True
+    assert equal(d, e) is True
+    assert equal(a, a) is True
+
+
+def test_a_shared_sublist_is_walked_correctly_when_the_same_pair_recurs():
+    # `seen` is a memo of pairs already proven equal within this call, not
+    # a path-scoped "currently visiting" set -- nothing is removed on the
+    # way back up. That's sound because a `False` result or an
+    # Incomparable exception propagates straight to the top of the
+    # outermost `equal()` call: a pair is only ever memoized after really
+    # being proven equal, so consulting the memo again returns exactly
+    # what recomputing it would. Exercise the case that motivates keeping
+    # entries around: the same object pair reached twice in one call,
+    # both when it is equal and when it is not.
+    from matrixlang.values import equal
+
+    same_left = [1, 2]
+    same_right = [1, 2]
+    assert equal([same_left, same_left], [same_right, same_right]) is True
+
+    other_right = [1, 9]
+    assert equal([same_left, same_left], [other_right, other_right]) is False
+
+
+def test_a_cyclic_pair_terminates_by_assuming_equality_on_re_entry():
+    # Re-entering a pair still being compared further up the stack
+    # returns True -- the standard coinductive treatment of cycles, and
+    # the reason equal() terminates on cyclic input at all instead of
+    # recursing forever.
+    from matrixlang.values import equal
+
+    a = [None]
+    a[0] = a
+    b = [None]
+    b[0] = b
+    assert equal(a, b) is True

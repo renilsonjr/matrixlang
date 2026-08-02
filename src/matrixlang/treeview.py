@@ -15,6 +15,9 @@ from matrixlang.nodes import (
     ExprStmt,
     FunctionDef,
     If,
+    Index,
+    IndexAssign,
+    ListLiteral,
     Return,
     Name,
     NumberLiteral,
@@ -38,6 +41,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.GT: ">",
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
+    TokenType.LENGTH: "length",
 }
 
 
@@ -60,6 +64,11 @@ def _statement(stmt: Stmt, depth: int, lines: list[str]) -> None:
         _expression(stmt.value, depth + 1, lines)
     elif isinstance(stmt, Assign):
         lines.append(f"{pad}Assign '{stmt.name}'{tail}")
+        _expression(stmt.value, depth + 1, lines)
+    elif isinstance(stmt, IndexAssign):
+        lines.append(f"{pad}IndexAssign{tail}")
+        _expression(stmt.target, depth + 1, lines)
+        _expression(stmt.index, depth + 1, lines)
         _expression(stmt.value, depth + 1, lines)
     elif isinstance(stmt, Trace):
         lines.append(f"{pad}Trace{tail}")
@@ -133,5 +142,13 @@ def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
         lines.append(f"{pad}Binary {_OPS[expr.op]}")
         _expression(expr.left, depth + 1, lines)
         _expression(expr.right, depth + 1, lines)
+    elif isinstance(expr, ListLiteral):
+        lines.append(f"{pad}ListLiteral ({len(expr.elements)})")
+        for element in expr.elements:
+            _expression(element, depth + 1, lines)
+    elif isinstance(expr, Index):
+        lines.append(f"{pad}Index")
+        _expression(expr.target, depth + 1, lines)
+        _expression(expr.index, depth + 1, lines)
     else:
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")

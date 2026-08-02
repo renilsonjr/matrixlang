@@ -69,6 +69,22 @@ class Call(Expr):
     args: list[Expr]
 
 
+@dataclass
+class ListLiteral(Expr):
+    """`[1, 2]`. Elements are their own precedence context, like Call.args."""
+
+    elements: list[Expr]
+
+
+@dataclass
+class Index(Expr):
+    """`xs[0]`. Postfix, so it binds tighter than every operator — see
+    render.py's _CALL_LEVEL, which this shares for exactly that reason."""
+
+    target: Expr
+    index: Expr
+
+
 # --- Statements ----------------------------------------------------------
 
 
@@ -89,6 +105,17 @@ class Declare(Stmt):
 @dataclass
 class Assign(Stmt):
     name: str
+    value: Expr
+
+
+@dataclass
+class IndexAssign(Stmt):
+    """`xs[0] = 9`. The first statement in the language that mutates a
+    VALUE rather than rebinding a NAME — which is what makes cyclic
+    lists reachable. See the Stage 7 design §3."""
+
+    target: Expr
+    index: Expr
     value: Expr
 
 

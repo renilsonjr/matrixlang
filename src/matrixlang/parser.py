@@ -13,6 +13,9 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    Index,
+    IndexAssign,
+    ListLiteral,
     Return,
     Assign,
     Binary,
@@ -156,18 +159,16 @@ class _Parser:
         if token.type is TokenType.JACKOUT:
             return self._return()
         if token.type is TokenType.IDENT:
-            # One token of lookahead decides, and it is the '(' rather
+            # One token of lookahead decides, and it is the suffix rather
             # than the '='. Dispatching on the paren means `x + 1` still
             # reaches _assign and still reports "expected '='", which is
             # the more useful message for what that mistake usually is.
-            if self._tokens[self._pos + 1].type is TokenType.LPAREN:
+            nxt = self._tokens[self._pos + 1].type
+            if nxt is TokenType.LPAREN:
                 return self._expression_statement()
+            if nxt is TokenType.LBRACKET:
+                return self._index_assign()
             return self._assign()
-        raise ParseError(
-            f"expected a statement, found {_describe(token)}",
-            token.line,
-            token.column,
-        )
         raise ParseError(
             f"expected a statement, found {_describe(token)}",
             token.line,
@@ -188,6 +189,40 @@ class _Parser:
         self.expect(TokenType.ASSIGN, "expected '=' after the name")
         value = self.expression()
         node = Assign(name.lexeme, value, line=name.line, column=name.column)
+        self._end_statement(node)
+        return node
+
+    def _index_assign(self) -> IndexAssign:
+        """`xs[0] = 9`, and `xs[0][1] = 9`.
+
+        The target is a name followed by one or more index suffixes.
+        Parsing it as a full postfix chain and then rejecting a Call is
+        what produces a message about the real problem — a call result is
+        not a place — instead of a confusing one about the '['.
+        """
+        start = self.peek()
+        chain = self._call()
+        if not isinstance(chain, Index):
+            raise ParseError(
+                "cannot assign to this — only a name or an element of one",
+                start.line,
+                start.column,
+            )
+        if isinstance(chain.target, Call):
+            raise ParseError(
+                "cannot assign to the result of a call",
+                start.line,
+                start.column,
+            )
+        self.expect(TokenType.ASSIGN, "expected '=' after the element")
+        value = self.expression()
+        node = IndexAssign(
+            chain.target,
+            chain.index,
+            value,
+            line=start.line,
+            column=start.column,
+        )
         self._end_statement(node)
         return node
 
@@ -298,6 +333,17 @@ class _Parser:
         token = self.peek()
         value = self.expression()
         if not isinstance(value, Call):
+            # This branch is only reached when the statement started with
+            # IDENT '(' — a call — so an Index here always has a Call
+            # somewhere at the base of its chain (e.g. f()[0]). If it's
+            # sitting right before '=', the mistake is an assignment to
+            # that call result, not a missing statement.
+            if isinstance(value, Index) and self.check(TokenType.ASSIGN):
+                raise ParseError(
+                    "cannot assign to the result of a call",
+                    token.line,
+                    token.column,
+                )
             raise ParseError(
                 f"expected a statement, found {_describe(token)}",
                 token.line,
@@ -364,32 +410,41 @@ class _Parser:
         return expr
 
     def _unary(self) -> Expr:
-        if self.check(TokenType.MINUS):
+        if self.check(TokenType.MINUS) or self.check(TokenType.LENGTH):
             op = self.advance()
             operand = self._unary()
-            return Unary(TokenType.MINUS, operand, line=op.line, column=op.column)
+            return Unary(op.type, operand, line=op.line, column=op.column)
         return self._call()
 
     def _call(self) -> Expr:
-        """Postfix application, so a call binds tighter than any operator.
+        """Postfix application, so a call or an index binds tighter than
+        any operator.
 
-        Loops rather than recurses so `f()()` is a call on a call. Nothing
-        reaches across a NEWLINE: the lexer emits one between statements,
-        and `check` sees it before it sees a '('.
+        Loops rather than recurses so `f()()` is a call on a call and
+        `xs[0][1]` is an index of an index. Nothing reaches across a
+        NEWLINE: the lexer emits one between statements, and `check` sees
+        it before it sees a '(' or a '['.
         """
         expr = self._primary()
-        while self.check(TokenType.LPAREN):
-            paren = self.advance()
-            args: list[Expr] = []
-            if not self.check(TokenType.RPAREN):
-                while True:
-                    args.append(self.expression())
-                    if not self.check(TokenType.COMMA):
-                        break
-                    self.advance()
-            self.expect(TokenType.RPAREN, "expected ')' to close the arguments")
-            expr = Call(expr, args, line=paren.line, column=paren.column)
-        return expr
+        while True:
+            if self.check(TokenType.LPAREN):
+                paren = self.advance()
+                args: list[Expr] = []
+                if not self.check(TokenType.RPAREN):
+                    while True:
+                        args.append(self.expression())
+                        if not self.check(TokenType.COMMA):
+                            break
+                        self.advance()
+                self.expect(TokenType.RPAREN, "expected ')' to close the arguments")
+                expr = Call(expr, args, line=paren.line, column=paren.column)
+            elif self.check(TokenType.LBRACKET):
+                bracket = self.advance()
+                index = self.expression()
+                self.expect(TokenType.RBRACKET, "expected ']' to close the index")
+                expr = Index(expr, index, line=bracket.line, column=bracket.column)
+            else:
+                return expr
 
     def _primary(self) -> Expr:
         token = self.peek()
@@ -410,6 +465,17 @@ class _Parser:
             inner = self.expression()
             self.expect(TokenType.RPAREN, "expected ')' to close '('")
             return inner
+        if token.type is TokenType.LBRACKET:
+            self.advance()
+            elements: list[Expr] = []
+            if not self.check(TokenType.RBRACKET):
+                while True:
+                    elements.append(self.expression())
+                    if not self.check(TokenType.COMMA):
+                        break
+                    self.advance()
+            self.expect(TokenType.RBRACKET, "expected ']' to close the list")
+            return ListLiteral(elements, line=token.line, column=token.column)
         raise ParseError(
             f"expected an expression, found {_describe(token)}",
             token.line,
