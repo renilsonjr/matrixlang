@@ -1,7 +1,7 @@
 from matrixlang.tokens import KEYWORDS, Token, TokenType
 
 
-def test_all_eleven_keywords_are_registered():
+def test_all_fourteen_keywords_are_registered():
     assert set(KEYWORDS) == {
         "construct",
         "trace",
@@ -16,6 +16,10 @@ def test_all_eleven_keywords_are_registered():
         "jackout",
         # Stage 7
         "length",
+        # Stage 9
+        "splice",
+        "fork",
+        "unplug",
     }
 
 

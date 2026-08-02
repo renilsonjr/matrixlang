@@ -26,6 +26,9 @@ class TokenType(Enum):
     AGENT = auto()
     JACKOUT = auto()
     LENGTH = auto()
+    SPLICE = auto()
+    FORK = auto()
+    UNPLUG = auto()
 
     # Operators
     PLUS = auto()
@@ -65,6 +68,9 @@ KEYWORDS: dict[str, TokenType] = {
     "agent": TokenType.AGENT,
     "jackout": TokenType.JACKOUT,
     "length": TokenType.LENGTH,
+    "splice": TokenType.SPLICE,
+    "fork": TokenType.FORK,
+    "unplug": TokenType.UNPLUG,
 }
 
 
