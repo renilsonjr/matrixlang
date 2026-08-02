@@ -3,9 +3,9 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Current as of `feat/stage-7-lists` — 3,974 lines in the package across
-22 modules, plus a 497-line local server and a 650-line web UI. 6,842 lines of
-tests, 1,135 passing, on Python 3.11 through 3.14 in CI. Zero third-party
+Current as of `feat/stage-8-strings` — 4,010 lines in the package across
+22 modules, plus a 497-line local server and a 650-line web UI. 7,092 lines of
+tests, 1,165 passing, on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies; `pytest` for development and the Anthropic SDK as an
 optional extra for Operator.
 
@@ -89,12 +89,12 @@ anything about the language, which is the whole point of the split.
 | `tokens.py` | 84 | Token vocabulary. Pure data |
 | `nodes.py` | 175 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 214 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `values.py` | 221 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
 | `glyphs.py` | 71 | The 38-slot bijective glyph table. 18 slots left of the block |
 | `lexer.py` | 247 | Source text → token list. Handles both faces |
 | `parser.py` | 483 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 498 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 285 | AST → source text, in either face |
+| `interpreter.py` | 539 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 287 | AST → source text, in either face |
 | `treeview.py` | 154 | AST → indented text, for teaching |
 | `repl.py` | 110 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
@@ -104,7 +104,7 @@ anything about the language, which is the whole point of the split.
 | `window.py` | 210 | The Tk backend. The only impure module in the package |
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 230 | Command-line entry point |
-| `operator/prompt.py` | 101 | The system prompt. The language's rules, as text |
+| `operator/prompt.py` | 110 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 87 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
 | `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |
@@ -178,6 +178,15 @@ flatline
   a *new* list and copies, so concatenation cannot itself introduce sharing.
   Element assignment (`xs[i] = v`) is therefore the only route to a
   cycle — nothing else in the language can make a value contain itself.
+- **Strings are indexable but immutable, and that asymmetry with lists is
+  deliberate, not an oversight.** `s[i]` reads a one-character string —
+  there is no separate character type, so `s[i][0]` is `s[i]` — but
+  `s[i] = v` is refused (`a string cannot be changed — build a new one
+  with +`). Lists gave up "handed to an agent, guaranteed unchanged" in
+  exchange for in-place mutation; strings kept the guarantee instead. A
+  string can be passed through any number of agent calls and is
+  guaranteed to come back exactly as it went in, which is the property
+  lists deliberately traded away when `xs[i] = v` was added in Stage 7.
 - **Dynamic typing, a chain of environments.** Stage 6 replaced the flat dict:
   `construct` defines in the current scope, assignment and reads walk outward to
   the nearest binding. That walk is the whole of what lexical scoping is, and
@@ -454,6 +463,21 @@ interpreter is a closed `isinstance` dispatch over a fixed AST node set, so a
 program has no route into Python. There are no file *writes* at all; the only
 read is the path the operator typed.
 
+**A Python exception name is also something a `.rain` program cannot
+surface, and Stage 8 had a near miss.** `s[0] = "X"` on a string reaches
+`IndexAssign`, and Python strings are themselves immutable — the careless
+implementation would let `s[i] = v` fall through to Python's own item
+assignment and raise `TypeError: 'str' object does not support item
+assignment` straight into the user's terminal, a Python-internal name
+leaking through a language boundary that is supposed to be closed. The
+shipped guard checks the target's type before assignment and raises the
+language's own diagnostic (`a string cannot be changed — build a new one
+with +`) instead. A teeth-check proves the guard is load-bearing rather
+than decorative: widening it the way an unrelated check was once
+loosened lets the Python `TypeError` through, and the regression test
+that would catch that (`test_assigning_to_a_character_never_raises_a_python_exception`
+in `tests/test_strings_run.py`) fails the moment it does.
+
 **The one finding, and why the obvious fix was wrong.** The lexer preserved raw
 source bytes verbatim — correct for round-tripping — so an ESC byte in a string
 or comment reached the terminal unescaped through `trace`, `parse`, `render` and
@@ -486,7 +510,7 @@ configuration.
 
 ## 8. Testing philosophy
 
-1,135 tests, ~1.7× more test code than source code, run against Python 3.11
+1,165 tests, ~1.8× more test code than source code, run against Python 3.11
 through 3.14 on every pull request. Three practices are worth describing:
 
 **Teeth-checks.** Every load-bearing guard is proven by injecting the bug and
@@ -525,15 +549,20 @@ size, and it is why every example in
 Scope discipline is part of the design, and being able to say *why* something
 isn't there is usually more convincing than a feature list:
 
-- **String indexing, dictionaries, and sets.** Stage 7 gave the language
-  one collection type — a list — deliberately, not as a first installment.
-  `"Neo"[0]` is a runtime error (`cannot index string`), not a character; a
-  key/value or unique-membership type would need its own hashing and
-  equality story on top of the one lists already required.
+- **Dictionaries and sets.** Stage 7 gave the language one collection
+  type — a list — deliberately, not as a first installment; Stage 8 gave
+  strings single-character indexing and ordering, but a key/value or
+  unique-membership type would still need its own hashing and equality
+  story on top of the one lists already required.
+- **Slicing (`name[0:2]`) and string methods** (`upper`, `split`,
+  `find`, and the like). Stage 8 went as far as one character at a time
+  — `name[0]` — and stopped; a range or a method table is more surface
+  than the pedagogical goal needed.
 - **Floats** — see §4.
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.
-- **Logical operators** (`and` / `or` / `not`) — reachable, but not needed for
-  Turing completeness or any demo.
+- **Logical operators** (`and` / `or` / `not`) — reachable, but not needed
+  for Turing completeness or any demo. With string indexing and ordering
+  now shipped, this is the largest remaining gap in the language.
 - **Hosting, accounts, and anything a product needs.** The web layer runs on
   `127.0.0.1` for whoever cloned the repo. Deploying it would mean designing
   auth, quotas and abuse handling first, which is a separate project.
@@ -561,7 +590,7 @@ isn't there is usually more convincing than a feature list:
 > Matrix cascade: running a program opens a window where its own source and
 > output fall as glyphs, and the transliteration is reversible, so what falls
 > can be read back rather than merely watched. About 4,000 lines of source,
-> 1,135 tests, no third-party runtime dependencies.
+> 1,165 tests, no third-party runtime dependencies.
 
 ## The two-minute version
 

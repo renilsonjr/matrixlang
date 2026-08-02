@@ -224,6 +224,18 @@ class Interpreter:
             target = self._value_of(stmt.target, stmt)
             index = self._value_of(stmt.index, stmt)
             value = self._value_of(stmt.value, stmt)
+            # Three ways, not two. A string IS indexable — _element reads
+            # one happily — so `cannot index string` would now be a lie.
+            # And widening this to `is_list or is_str` the way _element
+            # was widened would let the assignment reach Python's own item
+            # assignment and raise TypeError, putting a Python exception
+            # name in front of someone running a .rain file.
+            if is_str(target):
+                raise RuntimeErrorML(
+                    "a string cannot be changed — build a new one with +",
+                    stmt.index.line,
+                    stmt.index.column,
+                )
             if not is_list(target):
                 raise RuntimeErrorML(
                     f"cannot index {type_name(target)}",
@@ -335,16 +347,26 @@ class Interpreter:
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
     def _element(self, target: object, index: object, node) -> object:
-        """Bounds-check and read. Shared by Index and IndexAssign so the
-        two cannot disagree about what a legal index is."""
-        if not is_list(target):
+        """Bounds-check and read. The only caller is the Index branch of
+        `_evaluate` — this method itself is not shared. What IS shared is
+        `_check_index`, called from here and from the IndexAssign branch
+        of `_execute`, so the two paths cannot disagree about what a
+        legal index is.
+
+        Strings read like lists: `s[i]` is a one-character string, because
+        the language has no character type. `target[index]` on a Python
+        str already returns exactly that, so the read generalises for
+        free. WRITING to a string is refused separately, before it ever
+        reaches this method — see the IndexAssign branch in `_execute`.
+        """
+        if not (is_list(target) or is_str(target)):
             raise RuntimeErrorML(
                 f"cannot index {type_name(target)}", node.line, node.column
             )
         self._check_index(target, index, node)
         return target[index]
 
-    def _check_index(self, target: list, index: object, node) -> None:
+    def _check_index(self, target: list | str, index: object, node) -> None:
         if not is_int(index):
             raise RuntimeErrorML(
                 f"an index must be an integer, got {type_name(index)}",
@@ -352,15 +374,22 @@ class Interpreter:
                 node.column,
             )
         if index < 0:
+            # The placeholder name mirrors the bounds message's noun below:
+            # a list example says `xs`, a string example says `s`, so
+            # neither reader is told to fix a string with list vocabulary.
+            example = "s" if is_str(target) else "xs"
             raise RuntimeErrorML(
-                "an index cannot be negative — use xs[length xs - 1]",
+                f"an index cannot be negative — use {example}[length {example} - 1]",
                 node.line,
                 node.column,
             )
         if index >= len(target):
+            # type_name rather than a hardcoded "list": one message serves
+            # both, so the two can never drift into disagreeing about the
+            # same rule.
             raise RuntimeErrorML(
-                f"index {index} is past the end of a list of length "
-                f"{len(target)}",
+                f"index {index} is past the end of a {type_name(target)} "
+                f"of length {len(target)}",
                 node.line,
                 node.column,
             )
@@ -443,8 +472,20 @@ class Interpreter:
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
         if node.op in _ORDERING_OPS:
-            self._require_int(left, node.left, "left operand")
-            self._require_int(right, node.right, "right operand")
+            # Not _require_int: that helper also serves unary minus and
+            # arithmetic, which still require integers. Ordering is now a
+            # rule about the PAIR — both integers or both strings — so it
+            # gets its own check and reports the operator's position, the
+            # way `cannot compare` and `cannot add` already do.
+            orderable = (is_int(left) and is_int(right)) or (
+                is_str(left) and is_str(right)
+            )
+            if not orderable:
+                raise RuntimeErrorML(
+                    f"cannot order {type_name(left)} with {type_name(right)}",
+                    node.line,
+                    node.column,
+                )
             if node.op is TokenType.LT:
                 return left < right
             if node.op is TokenType.GT:

@@ -7,6 +7,7 @@ Pure. No network, no SDK, no key. The whole point of separating this from
 from matrixlang.operator.prompt import build
 from matrixlang.operator.validate import Invalid, Stage
 from matrixlang.tokens import KEYWORDS
+from matrixlang.values import Function, type_name
 
 
 def test_the_request_appears_in_the_prompt():
@@ -21,6 +22,27 @@ def test_every_keyword_is_described():
     prompt = build("anything")
     for keyword in KEYWORDS:
         assert keyword in prompt
+
+
+def test_every_type_name_is_mentioned():
+    # This gap has been missed in two consecutive stage plans: Stage 7
+    # shipped a prompt that said "no lists" after lists existed, and this
+    # stage shipped one silent about strings being indexable and
+    # orderable. Derive the type names from `type_name` itself — one
+    # representative value per type — rather than retyping the list, for
+    # the same reason the keyword line above is derived and not retyped:
+    # a hardcoded copy can drift from the thing it is supposed to track.
+    sample_values = [1, True, "x", [], Function("f", [], [], None)]
+    type_names = {type_name(value) for value in sample_values}
+    assert type_names == {"integer", "boolean", "string", "list", "agent"}
+
+    prompt = build("anything").lower()
+    missing = sorted(name for name in type_names if name not in prompt)
+    assert not missing, (
+        f"the prompt never mentions the type name(s) {missing} — "
+        "a model told to write MatrixLang has no signal that this type "
+        "exists. Add it to _RULES in src/matrixlang/operator/prompt.py."
+    )
 
 
 def test_the_stage_6_keywords_are_present_without_being_retyped():
