@@ -40,6 +40,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.GT: ">",
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
+    TokenType.LENGTH: "length",
 }
 
 

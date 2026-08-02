@@ -95,3 +95,36 @@ def test_an_empty_index_is_an_error():
     with pytest.raises(ParseError) as caught:
         first("construct a = xs[]\n")
     assert "expected an expression" in caught.value.message
+
+
+def test_length_parses_as_a_unary():
+    from matrixlang.nodes import Unary
+
+    assert first("construct n = length xs\n").value == Unary(
+        TokenType.LENGTH, Name("xs")
+    )
+
+
+def test_length_binds_tighter_than_plus():
+    # `length xs + 1` must be `(length xs) + 1`, matching `-x + 1`.
+    from matrixlang.nodes import Unary
+
+    parsed = first("construct n = length xs + 1\n").value
+    assert isinstance(parsed, Binary)
+    assert isinstance(parsed.left, Unary)
+    assert parsed.left.op is TokenType.LENGTH
+
+
+def test_length_applies_to_an_index():
+    from matrixlang.nodes import Unary
+
+    parsed = first("construct n = length xs[0]\n").value
+    assert isinstance(parsed, Unary)
+    assert isinstance(parsed.operand, Index)
+
+
+def test_length_of_a_parenthesised_expression_parses():
+    from matrixlang.nodes import Unary
+
+    parsed = first("construct n = length (xs + ys)\n").value
+    assert isinstance(parsed, Unary)

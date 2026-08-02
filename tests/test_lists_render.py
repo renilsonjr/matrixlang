@@ -73,3 +73,30 @@ def test_indexing_binds_tighter_than_unary_minus():
 def test_an_index_expression_keeps_its_parens_where_needed():
     tree = parse(lex("construct a = xs[n + 1]\n"))
     assert render_ascii(tree) == "construct a = xs[n + 1]\n"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "construct n = length xs\n",
+        "construct n = length xs + 1\n",
+        "construct n = length [1, 2]\n",
+        "construct n = length xs[0]\n",
+        'construct n = length "Neo"\n',
+        "construct n = -length xs\n",
+    ],
+)
+def test_length_round_trips(source):
+    roundtrip(source)
+
+
+def test_length_renders_with_a_space_and_keeps_precedence():
+    # Unary minus renders with no space (-x); length is a WORD and needs
+    # one, or `length xs` becomes `lengthxs` and re-lexes as an identifier.
+    tree = parse(lex("construct n = length xs + 1\n"))
+    assert render_ascii(tree) == "construct n = length xs + 1\n"
+
+
+def test_length_over_a_binary_gets_parens():
+    tree = parse(lex("construct n = length (xs + ys)\n"))
+    assert render_ascii(tree) == "construct n = length (xs + ys)\n"

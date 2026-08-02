@@ -56,6 +56,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.GT: ">",
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
+    TokenType.LENGTH: "length",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
@@ -215,6 +216,11 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)
+        if expr.op is TokenType.LENGTH:
+            # A word operator needs a separator or `length xs` renders as
+            # `lengthxs` and re-lexes as one identifier — a silent change
+            # of meaning, which is exactly what §4.3 exists to catch.
+            return _map(face, "length") + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):
         # A call binds tighter than every operator, so the callee needs

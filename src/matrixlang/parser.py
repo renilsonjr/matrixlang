@@ -366,10 +366,10 @@ class _Parser:
         return expr
 
     def _unary(self) -> Expr:
-        if self.check(TokenType.MINUS):
+        if self.check(TokenType.MINUS) or self.check(TokenType.LENGTH):
             op = self.advance()
             operand = self._unary()
-            return Unary(TokenType.MINUS, operand, line=op.line, column=op.column)
+            return Unary(op.type, operand, line=op.line, column=op.column)
         return self._call()
 
     def _call(self) -> Expr:
