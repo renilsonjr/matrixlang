@@ -13,9 +13,15 @@ char, digits), calls with binary arguments and calls on calls (Stage
 6), and — Stage 7 — empty and populated list literals, nested lists,
 indexing a list literal and chaining an index over an index
 (`[1,2][0]`, `xs[0][1]`), `length` over a binary expression, and
-index-assignment statements. test_roundtrip has a test asserting this
-coverage actually occurs — a generator that stops producing the hard
-shapes would quietly gut the property.
+index-assignment statements. And — Stage 9 — splice and fork with both
+children drawn from the full expression space (so `a fork (b splice
+c)` and logical-over-comparison shapes occur), and `unplug` alongside
+the other unary operators (so `unplug (a == b)` occurs). Stage 9
+renumbered every level in render._LEVEL, and these are the shapes that
+make a wrong level in that table loud instead of silent.
+test_roundtrip has a test asserting this coverage actually occurs — a
+generator that stops producing the hard shapes would quietly gut the
+property.
 """
 
 import random
@@ -144,7 +150,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
     if depth == 0:
         return gen_atom(rng)
     roll = rng.random()
-    if roll < 0.34:
+    if roll < 0.28:
         # Both children draw from the full depth-1 space, so equal-
         # precedence right children (R-PAREN-2) and nested chains occur
         # constantly rather than by luck.
@@ -153,24 +159,31 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             rng.choice(_BINARY_OPS),
             gen_expression(rng, depth - 1),
         )
-    if roll < 0.46:
-        # Unary over a full subexpression: the R-PAREN-3 shape. Both
-        # unary operators, so `length (a + b)` is generated too — the
-        # shape that would render as `length a + b` if the emitter reused
-        # the enclosing level, which is a different tree.
-        return Unary(
-            rng.choice([TokenType.MINUS, TokenType.LENGTH]),
+    if roll < 0.40:
+        # splice and fork, drawing both children from the full space so
+        # `a fork (b splice c)` and logical-over-comparison shapes occur.
+        # These are the shapes that catch a wrong level in render._LEVEL,
+        # which Stage 9 renumbered end to end.
+        return Binary(
+            gen_expression(rng, depth - 1),
+            rng.choice([TokenType.SPLICE, TokenType.FORK]),
             gen_expression(rng, depth - 1),
         )
-    if roll < 0.58:
+    if roll < 0.50:
+        # All three unary operators. unplug over a binary is the shape
+        # that would render as `unplug a == b` re-parsing differently if
+        # its level were wrong.
+        return Unary(
+            rng.choice([TokenType.MINUS, TokenType.LENGTH, TokenType.UNPLUG]),
+            gen_expression(rng, depth - 1),
+        )
+    if roll < 0.60:
         # Calls, with arguments drawn from the full space so f(a + b)
-        # occurs constantly rather than by luck. That shape is the one an
-        # emitter that reuses the enclosing precedence renders as
-        # f(a) + b -- a different tree with a different meaning.
+        # occurs constantly rather than by luck.
         return gen_call(rng, depth - 1)
-    if roll < 0.70:
+    if roll < 0.72:
         return gen_list(rng, depth - 1)
-    if roll < 0.80:
+    if roll < 0.82:
         return gen_index(rng, depth - 1)
     return gen_atom(rng)
 
