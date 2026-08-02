@@ -108,6 +108,36 @@ def test_displaying_a_cyclic_list_raises_a_named_error_not_a_recursion_error():
         to_display(xs)
 
 
+def test_displaying_a_mutual_cycle_also_raises_cyclic_value():
+    # The self-referential case above (xs[0] = xs) is the direct cycle.
+    # This is the mutual one: a[0] is b and b[0] is a, so neither list
+    # contains itself, but walking either from the top still revisits an
+    # id already on the path. Task 7's review verified this behaves
+    # correctly but noted it had no committed test -- pin it here rather
+    # than let it recurse to a bare RecursionError.
+    from matrixlang.values import CyclicValue, to_display
+
+    a = [1]
+    b = [2]
+    a[0] = b
+    b[0] = a
+    with pytest.raises(CyclicValue):
+        to_display(a)
+
+
+def test_a_sibling_list_reused_twice_is_not_a_cycle():
+    # The false-positive direction: the same list object appearing twice
+    # as a SIBLING (not on the path from itself back to itself) must not
+    # be mistaken for a cycle. `seen` in _display is threaded per-branch
+    # as an immutable frozenset, so one sibling's traversal can't poison
+    # the other's -- getting this wrong would make ordinary shared lists
+    # undisplayable.
+    from matrixlang.values import to_display
+
+    xs = [1]
+    assert to_display([xs, xs]) == "[[1], [1]]"
+
+
 # --- The rule the top-level guard could not reach ------------------------
 
 
