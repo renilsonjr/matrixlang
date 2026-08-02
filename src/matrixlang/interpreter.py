@@ -443,8 +443,20 @@ class Interpreter:
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
         if node.op in _ORDERING_OPS:
-            self._require_int(left, node.left, "left operand")
-            self._require_int(right, node.right, "right operand")
+            # Not _require_int: that helper also serves unary minus and
+            # arithmetic, which still require integers. Ordering is now a
+            # rule about the PAIR — both integers or both strings — so it
+            # gets its own check and reports the operator's position, the
+            # way `cannot compare` and `cannot add` already do.
+            orderable = (is_int(left) and is_int(right)) or (
+                is_str(left) and is_str(right)
+            )
+            if not orderable:
+                raise RuntimeErrorML(
+                    f"cannot order {type_name(left)} with {type_name(right)}",
+                    node.line,
+                    node.column,
+                )
             if node.op is TokenType.LT:
                 return left < right
             if node.op is TokenType.GT:

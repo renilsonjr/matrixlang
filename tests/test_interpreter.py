@@ -154,11 +154,12 @@ def test_booleans_are_not_integers_under_unary_minus():
 
 
 def test_ordering_type_errors_point_at_the_offending_operand():
-    # 'trace true < 1': 'true' is the left operand, at column 7.
+    # 'trace true < 1': '<' is the operator, at column 12 (not the operand at column 7).
+    # Matches `cannot compare` and `cannot add`, which report the operator's position.
     with pytest.raises(RuntimeErrorML) as excinfo:
         output("trace true < 1\n")
     assert excinfo.value.line == 1
-    assert excinfo.value.column == 7
+    assert excinfo.value.column == 12
 
 
 def test_integer_equality_and_ordering():
@@ -187,16 +188,10 @@ def test_true_does_not_equal_one():
     assert "boolean" in str(excinfo.value)
 
 
-def test_ordering_strings_is_an_error():
-    with pytest.raises(RuntimeErrorML) as excinfo:
-        output('trace "a" < "b"\n')
-    assert "must be an integer" in str(excinfo.value)
-
-
 def test_ordering_booleans_is_an_error():
     with pytest.raises(RuntimeErrorML) as excinfo:
         output("trace true < false\n")
-    assert "must be an integer" in str(excinfo.value)
+    assert excinfo.value.message == "cannot order boolean with boolean"
 
 
 def test_redpill_takes_the_then_branch():
