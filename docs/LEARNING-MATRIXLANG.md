@@ -123,9 +123,10 @@ trace 3 == 3       # true
 trace 3 != 3       # false
 ```
 
-`<`, `>`, `<=`, `>=` compare integers. `==` and `!=` compare two values of
-the *same* type; comparing across types is an error rather than `false`,
-because that comparison is almost always a mistake.
+`<`, `>`, `<=`, `>=` order two values of the same type — see below for
+which types. `==` and `!=` compare two values of the *same* type;
+comparing across types is an error rather than `false`, because that
+comparison is almost always a mistake.
 
 ### Ordering strings
 
@@ -480,7 +481,10 @@ guarantee up in exchange for in-place mutation; strings kept it. When you
 need a different string, `+` (§3) builds a new one — it does not change
 the old one.
 
-### Four new errors
+### Four more new errors
+
+Four more, on top of the "a string cannot be changed" refusal already
+shown above:
 
 ```
 construct xs = [1, 2]
@@ -517,8 +521,8 @@ trace [1] + 2
 matrixlang: [line 1, column 11] cannot add list and integer
 ```
 
-Indexing a string out of bounds or with a negative number gives the same
-messages, with the noun changed:
+Indexing a string out of bounds gives the same message as a list, with
+the noun changed:
 
 ```
 construct name = "Neo"
@@ -527,6 +531,18 @@ trace name[5]
 
 ```
 matrixlang: [line 2, column 11] index 5 is past the end of a string of length 3
+```
+
+A negative string index gives a related message, but not by swapping a
+noun — the fix-it example changes its placeholder from `xs` to `s`:
+
+```
+construct name = "Neo"
+trace name[-1]
+```
+
+```
+matrixlang: [line 2, column 11] an index cannot be negative — use s[length s - 1]
 ```
 
 ---

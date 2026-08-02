@@ -153,7 +153,7 @@ def test_booleans_are_not_integers_under_unary_minus():
     assert "boolean" in str(excinfo.value)
 
 
-def test_ordering_type_errors_point_at_the_offending_operand():
+def test_ordering_type_errors_point_at_the_operator():
     # 'trace true < 1': '<' is the operator, at column 12 (not the operand at column 7).
     # Matches `cannot compare` and `cannot add`, which report the operator's position.
     with pytest.raises(RuntimeErrorML) as excinfo:
