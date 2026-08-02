@@ -31,10 +31,12 @@ from material the program produced.
 Working today: lexer, parser, tree-walking interpreter, REPL, CLI, the
 two interchangeable source faces with a lossless round trip, the cascade
 window, a step limit that stops runaway loops, **functions with
-closures**, and **Operator** — an assistive companion that writes
-MatrixLang from plain language, in the terminal or in a browser.
+closures**, **lists** — literals, indexing, element assignment, `+`
+concatenation, and `length` — and **Operator**, an assistive companion
+that writes MatrixLang from plain language, in the terminal or in a
+browser.
 
-1,023 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,135 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```
@@ -103,7 +105,7 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — ten keywords, three types, and both faces —
+teaches the whole language — eleven keywords, four types, and both faces —
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade

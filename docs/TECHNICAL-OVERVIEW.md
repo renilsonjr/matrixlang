@@ -3,9 +3,9 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Current as of `fix/audit-findings-and-docs` — 3,626 lines in the package across
-22 modules, plus a 489-line local server and a 650-line web UI. 5,846 lines of
-tests, 1,023 passing, on Python 3.11 through 3.14 in CI. Zero third-party
+Current as of `feat/stage-7-lists` — 3,974 lines in the package across
+22 modules, plus a 497-line local server and a 650-line web UI. 6,842 lines of
+tests, 1,135 passing, on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies; `pytest` for development and the Anthropic SDK as an
 optional extra for Operator.
 
@@ -86,16 +86,16 @@ anything about the language, which is the whole point of the split.
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 80 | Token vocabulary. Pure data |
-| `nodes.py` | 148 | AST node definitions. Pure data |
+| `tokens.py` | 84 | Token vocabulary. Pure data |
+| `nodes.py` | 175 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 115 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 62 | The 35-slot bijective glyph table. 21 slots left of the block |
-| `lexer.py` | 245 | Source text → token list. Handles both faces |
-| `parser.py` | 417 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 409 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 250 | AST → source text, in either face |
-| `treeview.py` | 137 | AST → indented text, for teaching |
+| `values.py` | 214 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `glyphs.py` | 71 | The 38-slot bijective glyph table. 18 slots left of the block |
+| `lexer.py` | 247 | Source text → token list. Handles both faces |
+| `parser.py` | 483 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 498 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 285 | AST → source text, in either face |
+| `treeview.py` | 154 | AST → indented text, for teaching |
 | `repl.py` | 110 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
 | `translit.py` | 162 | The reversible display table. Pure |
@@ -138,9 +138,12 @@ katakana literal, which keeps the glyph set genuinely swappable.
 
 ## 4. The language
 
-**Keywords (10):** `construct` (declare), `trace` (print), `redpill` / `bluepill`
-(if / else), `dejavu` (while), `flatline` (end block), `true` / `false`, and from
-Stage 6 `agent` (define) / `jackout` (return).
+**Keywords (11):** `construct` (declare), `trace` (print), `redpill` / `bluepill`
+(if / else), `dejavu` (while), `flatline` (end block), `true` / `false`, from
+Stage 6 `agent` (define) / `jackout` (return), and from Stage 7 `length` — a
+keyword rather than a built-in `length(xs)`, because a built-in name is an
+identifier, and identifiers are the one thing D-03 keeps in Latin in the
+glyph face.
 
 An Agent is a callable, reusable program in the films; `jackout` is leaving the
 construct and coming back with something. Both had to pass D-05's test — does it
@@ -166,9 +169,15 @@ flatline
 
 **Semantics worth knowing:**
 
-- **Types:** integer, boolean, string. No floats — they buy nothing pedagogically
-  and cost `.` disambiguation, a second numeric type, and a division-semantics
-  tangent.
+- **Types:** integer, boolean, string, list. No floats — they buy nothing
+  pedagogically and cost `.` disambiguation, a second numeric type, and a
+  division-semantics tangent.
+- **Lists are the one reference type.** `construct ys = xs` and passing `xs`
+  to an agent both share the same underlying list — mutating through one
+  name is visible through the other. `+` is the exception: it always builds
+  a *new* list and copies, so concatenation cannot itself introduce sharing.
+  Element assignment (`xs[i] = v`) is therefore the only route to a
+  cycle — nothing else in the language can make a value contain itself.
 - **Dynamic typing, a chain of environments.** Stage 6 replaced the flat dict:
   `construct` defines in the current scope, assignment and reads walk outward to
   the nearest binding. That walk is the whole of what lexical scoping is, and
@@ -178,7 +187,7 @@ flatline
   finished.
 - **`NOTHING` is a sentinel, not a value.** An agent that never jacks out
   produces it; a call in statement position may, and a call in expression
-  position that does is a runtime error. The language still has three types, and
+  position that does is a runtime error. The language still has four types, and
   no program can hold or compare a null.
 - **`construct` declares; `=` requires a prior declaration.** Re-declaring is an
   error; assigning to an undeclared name is an error. This is what makes
@@ -231,7 +240,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 35 slots is
+and a **per-seed randomly mixed** face where each of the 38 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -272,7 +281,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 35-entry table the renderer writes through, just
+The lexer reads the same 38-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.
@@ -287,6 +296,39 @@ Every value type check therefore uses `type(v) is int`, centralized in
 `values.py` so the rule is auditable in one place rather than scattered across
 twenty branches where a reflexive `isinstance` could creep back in. (`isinstance`
 on *AST node* types is correct and used freely — the ban is on value checks.)
+
+**Stage 7 reintroduced the same trap one level down.** The interpreter's
+equality guard checked `type_name(left) != type_name(right)` before ever
+touching the values, so `true + 1` and `1 == true` both raised correctly.
+But comparing lists meant comparing their elements, and the first
+implementation did that by delegating to Python's own list `==` — which
+uses `isinstance` internally, where `1 == True` is `True`. Net effect:
+`1 == true` correctly raised `cannot compare integer with boolean`, while
+`[1] == [true]` silently returned `True`. The type-name guard was real and
+it was in the wrong place; auditing `values.py` for a stray `isinstance`
+proves nothing about a comparison that recurses through `list.__eq__`
+instead. The fix, `values.equal`, reapplies `type_name` at every depth
+rather than handing elements to Python once the containers' types match.
+
+**A second "the obvious implementation is subtly wrong" story sits right
+next to it.** The Stage 7 plan's `values._equal` discarded a cycle's
+`(id, id)` pair from its seen-set in a `finally` block on the way back up
+the recursion, on the theory that leaving it in place would let "a cycle
+assumption leak into a sibling comparison." Fuzzing 20,000 random object
+graphs found zero behavioural difference with or without the discard:
+within one `equal()` call, a `False` result and an `Incomparable`
+exception both propagate straight to the outermost call without leaving a
+stale entry, so every pair that ever finishes recursing does so `True` —
+a memoized `True` is never wrong to reuse. What the discard *did* cost was
+speed: it made the seen-set path-scoped instead of a genuine memo, so
+shared (not merely cyclic) list structure was re-walked once per path to
+it. Comparing `node = [node, node]` repeated to depth 20 against a
+`copy.deepcopy` of itself took **1,195 ms with the discard** versus
+**0.017 ms without it** — and this is reachable from an ordinary `.rain`
+program, since `[n, n]` evaluates `n` once into one shared object. The
+shipped code drops the `finally`/`discard` and lets `seen` accumulate as a
+real memo for the life of one `equal()` call; the plan itself carries a
+dated correction note at Task 8 rather than being silently rewritten.
 
 ### 5.6 Testing an animation, and why content-carrying rain is harder
 
@@ -444,7 +486,7 @@ configuration.
 
 ## 8. Testing philosophy
 
-1,023 tests, ~1.6× more test code than source code, run against Python 3.11
+1,135 tests, ~1.7× more test code than source code, run against Python 3.11
 through 3.14 on every pull request. Three practices are worth describing:
 
 **Teeth-checks.** Every load-bearing guard is proven by injecting the bug and
@@ -483,7 +525,11 @@ size, and it is why every example in
 Scope discipline is part of the design, and being able to say *why* something
 isn't there is usually more convincing than a feature list:
 
-- **Collections** of any kind.
+- **String indexing, dictionaries, and sets.** Stage 7 gave the language
+  one collection type — a list — deliberately, not as a first installment.
+  `"Neo"[0]` is a runtime error (`cannot index string`), not a character; a
+  key/value or unique-membership type would need its own hashing and
+  equality story on top of the one lists already required.
 - **Floats** — see §4.
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.
 - **Logical operators** (`and` / `or` / `not`) — reachable, but not needed for
@@ -514,8 +560,8 @@ isn't there is usually more convincing than a feature list:
 > identical tree back, comments included. Second, its output device is the
 > Matrix cascade: running a program opens a window where its own source and
 > output fall as glyphs, and the transliteration is reversible, so what falls
-> can be read back rather than merely watched. About 3,600 lines of source,
-> 1,023 tests, no third-party runtime dependencies.
+> can be read back rather than merely watched. About 4,000 lines of source,
+> 1,135 tests, no third-party runtime dependencies.
 
 ## The two-minute version
 

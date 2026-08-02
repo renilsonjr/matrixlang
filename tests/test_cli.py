@@ -396,3 +396,14 @@ def test_only_run_takes_the_window_flag(source_file):
     with pytest.raises(SystemExit) as excinfo:
         main(["render", "--face", "ascii", "--no-window", source_file("trace 1\n")])
     assert excinfo.value.code == 2
+
+
+def test_parse_does_not_crash_on_a_list_program(tmp_path, capsys):
+    # treeview.py had no case for the Stage 6 nodes and this command
+    # crashed while 878 tests passed. One test per stage, forever.
+    path = tmp_path / "lists.rain"
+    path.write_text("construct xs = [1, 2]\nxs[0] = length xs\n", encoding="utf-8")
+    assert main(["parse", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "ListLiteral" in out
+    assert "IndexAssign" in out
