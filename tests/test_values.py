@@ -106,3 +106,113 @@ def test_displaying_a_cyclic_list_raises_a_named_error_not_a_recursion_error():
     xs[0] = xs
     with pytest.raises(CyclicValue):
         to_display(xs)
+
+
+# --- The rule the top-level guard could not reach ------------------------
+
+
+def test_a_bool_never_equals_an_int_at_any_depth():
+    # THE test for this task. The old code guarded operand types with
+    # type_name and then handed off to Python's ==, where 1 == True. The
+    # guard held exactly at the surface: [1] == [true] returned True.
+    from matrixlang.values import Incomparable, equal
+
+    for left, right in [
+        (1, True),
+        ([1], [True]),
+        ([0], [False]),
+        ([[1]], [[True]]),
+        ([1, [2]], [1, [True]]),
+    ]:
+        with pytest.raises(Incomparable):
+            equal(left, right)
+
+
+def test_incomparable_carries_both_type_names():
+    from matrixlang.values import Incomparable, equal
+
+    with pytest.raises(Incomparable) as caught:
+        equal([1], [True])
+    assert caught.value.left == "integer"
+    assert caught.value.right == "boolean"
+
+
+def test_lists_compare_structurally():
+    from matrixlang.values import equal
+
+    assert equal([1, 2], [1, 2]) is True
+    assert equal([], []) is True
+    assert equal([[1], [2]], [[1], [2]]) is True
+
+
+def test_lists_of_different_contents_or_length_are_not_equal():
+    from matrixlang.values import equal
+
+    assert equal([1, 2], [1, 3]) is False
+    assert equal([1], [1, 2]) is False
+    assert equal([1, 2], [1]) is False
+
+
+def test_scalars_still_compare_by_value():
+    from matrixlang.values import equal
+
+    assert equal(1, 1) is True
+    assert equal("a", "a") is True
+    assert equal(True, True) is True
+    assert equal(1, 2) is False
+
+
+def test_comparing_across_types_is_incomparable():
+    from matrixlang.values import Incomparable, equal
+
+    with pytest.raises(Incomparable):
+        equal("3", 3)
+    with pytest.raises(Incomparable):
+        equal([1], 1)
+
+
+def test_agents_compare_by_identity_inside_a_list():
+    from matrixlang.values import Function, equal
+
+    a = Function("f", [], None, None)
+    b = Function("f", [], None, None)
+    assert equal([a], [a]) is True
+    assert equal([a], [b]) is False
+
+
+# --- Cycles --------------------------------------------------------------
+
+
+def test_cyclic_lists_compare_without_blowing_the_stack():
+    # Measured: Python's per-element identity shortcut saves `a == a` but
+    # NOT two mutually referential lists, which raise RecursionError.
+    from matrixlang.values import equal
+
+    b = [None]
+    c = [None]
+    b[0] = c
+    c[0] = b
+
+    d = [None]
+    e = [None]
+    d[0] = d
+    e[0] = e
+
+    a = [1]
+    a[0] = a
+
+    assert equal(b, c) is True
+    assert equal(d, e) is True
+    assert equal(a, a) is True
+
+
+def test_a_cycle_does_not_make_unequal_lists_equal():
+    # The seen-set assumes equality on re-entry, which is the standard
+    # coinductive treatment. It must not leak into siblings.
+    from matrixlang.values import equal
+
+    a = [None, 1]
+    a[0] = a
+    b = [None, 2]
+    b[0] = b
+    assert equal(a, b) is False

@@ -79,6 +79,20 @@ class CyclicValue(Exception):
     """
 
 
+class Incomparable(Exception):
+    """Two values the language refuses to compare.
+
+    Carries both type names so the interpreter can build the message. Not
+    a MatrixLangError for the same reason as CyclicValue: this module may
+    import nothing, and has no line or column to report.
+    """
+
+    def __init__(self, left: str, right: str) -> None:
+        self.left = left
+        self.right = right
+        super().__init__(f"cannot compare {left} with {right}")
+
+
 def is_int(value: object) -> bool:
     return type(value) is int
 
@@ -147,3 +161,47 @@ def _display(value: object, nested: bool, seen: frozenset) -> str:
         seen = seen | {id(value)}
         return "[" + ", ".join(_display(v, True, seen) for v in value) + "]"
     return str(value)
+
+
+def equal(left: object, right: object) -> bool:
+    """The language's `==`, at every depth.
+
+    **Never delegates to Python's `==` for a list.** Python compares list
+    elements with its own `==`, where `1 == True` — so `[1] == [true]`
+    returned True while the top-level guard correctly rejected
+    `1 == true`. The rule held at the surface and broke at every level
+    beneath it. Recursing here with `type_name` is what makes it total.
+
+    Cycles are handled with a seen-set of id-pairs rather than left to
+    RecursionError: two mutually referential lists blow the stack under
+    Python's own comparison, and mutation is what makes such lists
+    reachable at all (Stage 7 design §3).
+    """
+    return _equal(left, right, set())
+
+
+def _equal(left: object, right: object, seen: set) -> bool:
+    if type_name(left) != type_name(right):
+        raise Incomparable(type_name(left), type_name(right))
+    if not is_list(left):
+        # Agents are identity-compared by Function.__eq__; scalars are
+        # value-compared. Both are correct here because the type check
+        # above has already ruled out the bool/int confusion.
+        return left == right
+    if len(left) != len(right):
+        return False
+    pair = (id(left), id(right))
+    if pair in seen:
+        # Already comparing this pair further up the stack. Assuming
+        # equality is the standard treatment and is what terminates.
+        return True
+    seen.add(pair)
+    try:
+        for a, b in zip(left, right):
+            if not _equal(a, b, seen):
+                return False
+        return True
+    finally:
+        # Discarded so a cycle assumption cannot leak into a sibling
+        # comparison and make two unequal lists compare equal.
+        seen.discard(pair)
