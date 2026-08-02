@@ -109,6 +109,17 @@ class Assign(Stmt):
 
 
 @dataclass
+class IndexAssign(Stmt):
+    """`xs[0] = 9`. The first statement in the language that mutates a
+    VALUE rather than rebinding a NAME — which is what makes cyclic
+    lists reachable. See the Stage 7 design §3."""
+
+    target: Expr
+    index: Expr
+    value: Expr
+
+
+@dataclass
 class Trace(Stmt):
     value: Expr
 

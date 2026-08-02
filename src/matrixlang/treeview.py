@@ -16,6 +16,7 @@ from matrixlang.nodes import (
     FunctionDef,
     If,
     Index,
+    IndexAssign,
     ListLiteral,
     Return,
     Name,
@@ -63,6 +64,11 @@ def _statement(stmt: Stmt, depth: int, lines: list[str]) -> None:
         _expression(stmt.value, depth + 1, lines)
     elif isinstance(stmt, Assign):
         lines.append(f"{pad}Assign '{stmt.name}'{tail}")
+        _expression(stmt.value, depth + 1, lines)
+    elif isinstance(stmt, IndexAssign):
+        lines.append(f"{pad}IndexAssign{tail}")
+        _expression(stmt.target, depth + 1, lines)
+        _expression(stmt.index, depth + 1, lines)
         _expression(stmt.value, depth + 1, lines)
     elif isinstance(stmt, Trace):
         lines.append(f"{pad}Trace{tail}")

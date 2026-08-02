@@ -100,3 +100,20 @@ def test_length_renders_with_a_space_and_keeps_precedence():
 def test_length_over_a_binary_gets_parens():
     tree = parse(lex("construct n = length (xs + ys)\n"))
     assert render_ascii(tree) == "construct n = length (xs + ys)\n"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "xs[0] = 9\n",
+        "xs[0][1] = 9\n",
+        "xs[n + 1] = a + b\n",
+    ],
+)
+def test_element_assignment_round_trips(source):
+    roundtrip(source)
+
+
+def test_element_assignment_renders_in_ascii():
+    tree = parse(lex("xs[0] = 9\n"))
+    assert render_ascii(tree) == "xs[0] = 9\n"

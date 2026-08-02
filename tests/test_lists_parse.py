@@ -128,3 +128,39 @@ def test_length_of_a_parenthesised_expression_parses():
 
     parsed = first("construct n = length (xs + ys)\n").value
     assert isinstance(parsed, Unary)
+
+
+def test_element_assignment_parses():
+    from matrixlang.nodes import IndexAssign
+
+    stmt = first("xs[0] = 9\n")
+    assert stmt == IndexAssign(Name("xs"), NumberLiteral(0), NumberLiteral(9))
+
+
+def test_nested_element_assignment_parses():
+    from matrixlang.nodes import IndexAssign
+
+    stmt = first("xs[0][1] = 9\n")
+    assert isinstance(stmt, IndexAssign)
+    assert stmt.target == Index(Name("xs"), NumberLiteral(0))
+    assert stmt.index == NumberLiteral(1)
+
+
+def test_assigning_to_a_call_result_is_a_parse_error():
+    with pytest.raises(ParseError) as caught:
+        first("f()[0] = 9\n")
+    assert "cannot assign" in caught.value.message
+
+
+def test_a_bare_index_is_not_a_statement():
+    # Same rule as a bare name: it computes something and throws it away,
+    # which is a mistake rather than a statement.
+    with pytest.raises(ParseError):
+        first("xs[0]\n")
+
+
+def test_plain_assignment_still_reports_the_equals_sign():
+    # Regression: the IDENT dispatch must not swallow this case.
+    with pytest.raises(ParseError) as caught:
+        first("x + 1\n")
+    assert "'='" in caught.value.message

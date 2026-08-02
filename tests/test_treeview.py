@@ -140,3 +140,12 @@ def test_an_index_has_a_treeview_case():
     out = format_tree(parse(lex("construct a = xs[0]\n")))
     assert "Index" in out
     assert "Name 'xs'" in out or "'xs'" in out
+
+
+def test_index_assignment_has_a_treeview_case():
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+    from matrixlang.treeview import format_tree
+
+    out = format_tree(parse(lex("xs[0] = 9\n")))
+    assert "IndexAssign" in out

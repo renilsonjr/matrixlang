@@ -21,6 +21,7 @@ from matrixlang.nodes import (
     ExprStmt,
     FunctionDef,
     Index,
+    IndexAssign,
     ListLiteral,
     Return,
     Assign,
@@ -130,6 +131,14 @@ def _statement(stmt: Stmt, depth: int, face: Face, lines: list[str]) -> None:
         lines.append(pad + head + _trail(stmt, face))
     elif isinstance(stmt, Assign):
         head = f"{stmt.name} {_map(face, '=')} {_expression(stmt.value, 0, face)}"
+        lines.append(pad + head + _trail(stmt, face))
+    elif isinstance(stmt, IndexAssign):
+        target = _expression(stmt.target, _CALL_LEVEL, face)
+        index = _expression(stmt.index, 0, face)
+        head = (
+            f"{target}{_map(face, '[')}{index}{_map(face, ']')} "
+            f"{_map(face, '=')} {_expression(stmt.value, 0, face)}"
+        )
         lines.append(pad + head + _trail(stmt, face))
     elif isinstance(stmt, Trace):
         head = f"{_map(face, 'trace')} {_expression(stmt.value, 0, face)}"
