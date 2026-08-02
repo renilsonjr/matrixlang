@@ -17,6 +17,8 @@ _SINGLE: dict[str, TokenType] = {
     "<": TokenType.LT,
     ">": TokenType.GT,
     ",": TokenType.COMMA,
+    "[": TokenType.LBRACKET,
+    "]": TokenType.RBRACKET,
 }
 
 _DOUBLE: dict[str, TokenType] = {

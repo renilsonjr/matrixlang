@@ -14,6 +14,8 @@ def test_all_ten_keywords_are_registered():
         # Stage 6
         "agent",
         "jackout",
+        # Stage 7
+        "length",
     }
 
 

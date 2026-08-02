@@ -25,6 +25,7 @@ class TokenType(Enum):
     FALSE = auto()
     AGENT = auto()
     JACKOUT = auto()
+    LENGTH = auto()
 
     # Operators
     PLUS = auto()
@@ -43,6 +44,8 @@ class TokenType(Enum):
     LPAREN = auto()
     RPAREN = auto()
     COMMA = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
 
     # Structural
     COMMENT = auto()
@@ -61,6 +64,7 @@ KEYWORDS: dict[str, TokenType] = {
     "false": TokenType.FALSE,
     "agent": TokenType.AGENT,
     "jackout": TokenType.JACKOUT,
+    "length": TokenType.LENGTH,
 }
 
 
