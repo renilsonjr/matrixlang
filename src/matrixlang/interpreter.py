@@ -224,6 +224,18 @@ class Interpreter:
             target = self._value_of(stmt.target, stmt)
             index = self._value_of(stmt.index, stmt)
             value = self._value_of(stmt.value, stmt)
+            # Three ways, not two. A string IS indexable — _element reads
+            # one happily — so `cannot index string` would now be a lie.
+            # And widening this to `is_list or is_str` the way _element
+            # was widened would let the assignment reach Python's own item
+            # assignment and raise TypeError, putting a Python exception
+            # name in front of someone running a .rain file.
+            if is_str(target):
+                raise RuntimeErrorML(
+                    "a string cannot be changed — build a new one with +",
+                    stmt.index.line,
+                    stmt.index.column,
+                )
             if not is_list(target):
                 raise RuntimeErrorML(
                     f"cannot index {type_name(target)}",

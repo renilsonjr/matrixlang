@@ -172,3 +172,57 @@ def test_indexing_an_empty_string_is_an_error():
 
 def test_indexing_a_boolean_is_still_an_error():
     assert fails("trace true[0]\n").message == "cannot index boolean"
+
+
+# --- Writing to a string is refused -------------------------------------
+
+
+def test_assigning_to_a_character_explains_rather_than_refusing_bare():
+    # The asymmetry with lists is real (xs[0] = 9 works) so the message
+    # has to teach it, not just say no.
+    error = fails('construct s = "Neo"\ns[0] = "X"\n')
+    assert error.message == "a string cannot be changed — build a new one with +"
+
+
+def test_assigning_to_a_character_never_raises_a_python_exception():
+    # THE test for this task. Widening this guard the way _element's was
+    # widened lets s[0] = "X" reach Python's item assignment and raise
+    # TypeError: 'str' object does not support item assignment — a Python
+    # exception name escaping into a .rain program, which technical
+    # overview §6 says cannot happen.
+    with pytest.raises(RuntimeErrorML):
+        run('construct s = "Neo"\ns[0] = "X"\n')
+
+
+def test_the_refusal_carries_a_position():
+    error = fails('construct s = "Neo"\ns[0] = "X"\n')
+    assert error.line == 2
+    assert error.column >= 1
+
+
+def test_assigning_to_a_string_literal_is_refused_at_parse_time():
+    # Verified: this never reaches the interpreter. The statement
+    # dispatcher requires an IDENT to begin an assignment, so a literal
+    # target is rejected by the parser with "expected a statement, found
+    # '"Neo"'". Pinned so a future parser change cannot silently route it
+    # into the branch this task edits without anyone noticing.
+    from matrixlang.errors import ParseError
+
+    with pytest.raises(ParseError) as caught:
+        run('"Neo"[0] = "X"\n')
+    assert "expected a statement" in caught.value.message
+
+
+def test_a_nested_string_inside_a_list_is_still_immutable():
+    error = fails('construct xs = ["Neo"]\nxs[0][0] = "X"\n')
+    assert error.message == "a string cannot be changed — build a new one with +"
+
+
+def test_assigning_to_a_list_element_still_works():
+    # The branch this task edits is the one lists go through. Regression
+    # guard: do not break Stage 7 while adding the string case.
+    assert run("construct xs = [1, 2]\nxs[0] = 9\ntrace xs[0]\n") == "9\n"
+
+
+def test_assigning_to_a_non_indexable_still_says_cannot_index():
+    assert fails("construct n = 1\nn[0] = 2\n").message == "cannot index integer"
