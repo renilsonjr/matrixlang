@@ -347,14 +347,17 @@ class Interpreter:
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
     def _element(self, target: object, index: object, node) -> object:
-        """Bounds-check and read. Shared by Index and IndexAssign so the
-        two cannot disagree about what a legal index is.
+        """Bounds-check and read. The only caller is the Index branch of
+        `_evaluate` — this method itself is not shared. What IS shared is
+        `_check_index`, called from here and from the IndexAssign branch
+        of `_execute`, so the two paths cannot disagree about what a
+        legal index is.
 
         Strings read like lists: `s[i]` is a one-character string, because
         the language has no character type. `target[index]` on a Python
         str already returns exactly that, so the read generalises for
-        free. WRITING to a string is refused separately — see the
-        IndexAssign branch in _execute.
+        free. WRITING to a string is refused separately, before it ever
+        reaches this method — see the IndexAssign branch in `_execute`.
         """
         if not (is_list(target) or is_str(target)):
             raise RuntimeErrorML(
@@ -371,8 +374,12 @@ class Interpreter:
                 node.column,
             )
         if index < 0:
+            # The placeholder name mirrors the bounds message's noun below:
+            # a list example says `xs`, a string example says `s`, so
+            # neither reader is told to fix a string with list vocabulary.
+            example = "s" if is_str(target) else "xs"
             raise RuntimeErrorML(
-                "an index cannot be negative — use xs[length xs - 1]",
+                f"an index cannot be negative — use {example}[length {example} - 1]",
                 node.line,
                 node.column,
             )

@@ -83,8 +83,9 @@ def test_the_ordering_error_points_at_the_operator():
 
 
 def test_arithmetic_still_requires_integers():
-    # _require_int has four call sites and only the two ordering ones
-    # changed. These must not have moved.
+    # _require_int has three call sites (unary minus, and the two
+    # arithmetic operands — ordering moved off it in this stage). These
+    # must not have moved.
     assert 'must be an integer' in fails('trace 1 - "a"\n').message
     assert 'must be an integer' in fails('trace -"a"\n').message
     assert 'must be an integer' in fails('trace "a" * 2\n').message
@@ -150,8 +151,19 @@ def test_the_bounds_message_differs_from_the_list_one_only_by_the_noun():
 
 
 def test_a_negative_string_index_is_an_error():
+    # The placeholder names the type: a string sees `s`, not `xs` — telling
+    # a string user to fix their code with list vocabulary would be wrong.
     assert (
         fails('trace "Neo"[-1]\n').message
+        == "an index cannot be negative — use s[length s - 1]"
+    )
+
+
+def test_a_negative_list_index_is_an_error():
+    # Pinned alongside the string case above so the two cannot drift apart
+    # again: this one keeps the original `xs` placeholder.
+    assert (
+        fails("construct xs = [1, 2, 3]\ntrace xs[-1]\n").message
         == "an index cannot be negative — use xs[length xs - 1]"
     )
 
