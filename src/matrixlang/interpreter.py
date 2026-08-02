@@ -24,6 +24,9 @@ from matrixlang.nodes import (
     ExprStmt,
     FunctionDef,
     If,
+    Index,
+    IndexAssign,
+    ListLiteral,
     Name,
     NumberLiteral,
     Program,
@@ -37,10 +40,14 @@ from matrixlang.nodes import (
 from matrixlang.tokens import TokenType
 from matrixlang.values import (
     NOTHING,
+    CyclicValue,
     Function,
+    Incomparable,
+    equal,
     is_bool,
     is_function,
     is_int,
+    is_list,
     is_str,
     to_display,
     type_name,
@@ -186,11 +193,19 @@ class Interpreter:
         self._sink.emit(Statement(node=stmt, line=stmt.line))
 
         if isinstance(stmt, Trace):
-            self._sink.emit(
-                Output(
-                    text=to_display(self._value_of(stmt.value, stmt)), line=stmt.line
-                )
-            )
+            value = self._value_of(stmt.value, stmt)
+            try:
+                text = to_display(value)
+            except CyclicValue:
+                # NOT "expression is nested too deeply", which is what the
+                # RecursionError path reports and which is false: a list
+                # that contains itself may be one element long.
+                raise RuntimeErrorML(
+                    "cannot display a list that contains a cycle",
+                    stmt.line,
+                    stmt.column,
+                ) from None
+            self._sink.emit(Output(text=text, line=stmt.line))
         elif isinstance(stmt, Declare):
             value = self._value_of(stmt.value, stmt)
             if not self._env.declare(stmt.name, value):
@@ -205,6 +220,16 @@ class Interpreter:
                     stmt.line,
                     stmt.column,
                 )
+        elif isinstance(stmt, IndexAssign):
+            target = self._value_of(stmt.target, stmt)
+            index = self._value_of(stmt.index, stmt)
+            value = self._value_of(stmt.value, stmt)
+            if not is_list(target):
+                raise RuntimeErrorML(
+                    f"cannot index {type_name(target)}", stmt.line, stmt.column
+                )
+            self._check_index(target, index, stmt)
+            target[index] = value
         elif isinstance(stmt, FunctionDef):
             agent = Function(stmt.name, stmt.params, stmt.body, self._env)
             if not self._env.declare(stmt.name, agent):
@@ -272,7 +297,16 @@ class Interpreter:
                 )
             return value
         if isinstance(expr, Unary):
-            operand = self._evaluate(expr.operand)
+            operand = self._value_of(expr.operand, expr)
+            if expr.op is TokenType.LENGTH:
+                if not (is_list(operand) or is_str(operand)):
+                    raise RuntimeErrorML(
+                        f"'length' takes a list or a string, got "
+                        f"{type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                return len(operand)
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary):
@@ -281,7 +315,48 @@ class Interpreter:
             return self._binary(expr, left, right)
         if isinstance(expr, Call):
             return self._call(expr)
+        if isinstance(expr, ListLiteral):
+            # _value_of, not _evaluate: `[f()]` where f jacks out no value
+            # must be an error, not a list holding NOTHING. Routing every
+            # position through _value_of is what keeps NOTHING from being
+            # stored, compared, printed or added to anything.
+            return [self._value_of(element, expr) for element in expr.elements]
+        if isinstance(expr, Index):
+            target = self._value_of(expr.target, expr)
+            index = self._value_of(expr.index, expr)
+            return self._element(target, index, expr)
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
+
+    def _element(self, target: object, index: object, node) -> object:
+        """Bounds-check and read. Shared by Index and IndexAssign so the
+        two cannot disagree about what a legal index is."""
+        if not is_list(target):
+            raise RuntimeErrorML(
+                f"cannot index {type_name(target)}", node.line, node.column
+            )
+        self._check_index(target, index, node)
+        return target[index]
+
+    def _check_index(self, target: list, index: object, node) -> None:
+        if not is_int(index):
+            raise RuntimeErrorML(
+                f"an index must be an integer, got {type_name(index)}",
+                node.line,
+                node.column,
+            )
+        if index < 0:
+            raise RuntimeErrorML(
+                "an index cannot be negative — use xs[length xs - 1]",
+                node.line,
+                node.column,
+            )
+        if index >= len(target):
+            raise RuntimeErrorML(
+                f"index {index} is past the end of a list of length "
+                f"{len(target)}",
+                node.line,
+                node.column,
+            )
 
     def _call(self, expr: Call) -> object:
         callee = self._value_of(expr.callee, expr)
@@ -347,6 +422,16 @@ class Interpreter:
                 node.line,
                 node.column,
             )
+        if node.op is TokenType.PLUS and is_list(left) and is_list(right):
+            # A NEW list. Concatenation copies, which is why `+` alone
+            # cannot build a cycle — element assignment is the only door.
+            return left + right
+        if node.op is TokenType.PLUS and is_list(left) != is_list(right):
+            raise RuntimeErrorML(
+                f"cannot add {type_name(left)} and {type_name(right)}",
+                node.line,
+                node.column,
+            )
         return self._arithmetic(node, left, right)
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
@@ -363,18 +448,22 @@ class Interpreter:
                 return left >= right
             raise AssertionError(f"unhandled ordering operator: {node.op.name}")
 
-        # Equality: same type only. type_name is the arbiter, so a bool can
-        # never equal an int even though Python says True == 1.
-        if type_name(left) != type_name(right):
+        # Equality routes through values.equal, which applies type_name at
+        # EVERY depth. The old code checked the operands here and then
+        # handed off to Python's ==, where 1 == True — so `1 == true` was
+        # correctly an error while `[1] == [true]` returned True.
+        try:
+            same = equal(left, right)
+        except Incomparable as mismatch:
             raise RuntimeErrorML(
-                f"cannot compare {type_name(left)} with {type_name(right)}",
+                f"cannot compare {mismatch.left} with {mismatch.right}",
                 node.line,
                 node.column,
-            )
+            ) from None
         if node.op is TokenType.EQ:
-            return left == right
+            return same
         if node.op is TokenType.NEQ:
-            return left != right
+            return not same
         raise AssertionError(f"unhandled equality operator: {node.op.name}")
 
     def _arithmetic(self, node: Binary, left: object, right: object) -> object:
