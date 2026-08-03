@@ -248,6 +248,46 @@ _Intent(
 )
 
 
+# --- Conditional intents ----------------------------------------------------
+
+
+def _compare_expr(a, op_word, b) -> Binary:
+    op = _COMPARE[op_word]
+    return Binary(left=_num_or_name(a), op=op, right=_num_or_name(b))
+
+
+def _build_if(m):
+    cond = _compare_expr(m.group("a"), m.group("op"), m.group("b"))
+    then_body = [Trace(value=_value(m.group("action")))]
+    return Program(statements=[If(condition=cond, then_body=then_body)])
+
+
+# `is` is part of the phrasing the tests feed in ("if 5 IS greater than 3")
+# and must be in the pattern. `print` is already normalized to `trace`
+# before matching, so listing it as an alternative here would be dead.
+_Intent(
+    r"if\s+(?P<a>-?\d+|\w+)\s+is\s+(?P<op>greater than|less than|equal to)"
+    r"\s+(?P<b>-?\d+|\w+)\s+trace\s+(?P<action>.+)",
+    _build_if,
+    "if <a> is greater than <b> trace <value>",
+)
+
+
+def _build_if_not(m):
+    cond = _compare_expr(m.group("a"), m.group("op"), m.group("b"))
+    cond = Unary(op=TokenType.UNPLUG, operand=cond)
+    then_body = [Trace(value=_value(m.group("action")))]
+    return Program(statements=[If(condition=cond, then_body=then_body)])
+
+
+_Intent(
+    r"if\s+not\s+(?P<a>-?\d+|\w+)\s+is\s+(?P<op>greater than|less than|equal to)"
+    r"\s+(?P<b>-?\d+|\w+)\s+trace\s+(?P<action>.+)",
+    _build_if_not,
+    "if not <a> is greater than <b> trace <value>",
+)
+
+
 # --- Trace and declare intents -------------------------------------------
 
 

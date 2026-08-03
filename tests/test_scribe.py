@@ -206,3 +206,29 @@ def test_count_down():
     from matrixlang.nodes import Binary
     assert loop.condition.op is TokenType.GTE
     assert loop.body[1].value.right.value == 1  # i = i - 1
+
+
+from matrixlang.nodes import If, Unary
+
+
+def test_if_greater_than_traces():
+    result = scribe("if 5 is greater than 3 trace bigger")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, If)
+    from matrixlang.nodes import Binary, StringLiteral
+    assert isinstance(stmt.condition, Binary)
+    assert stmt.condition.op is TokenType.GT
+    assert isinstance(stmt.then_body[0], Trace)
+    assert stmt.else_body is None
+
+
+def test_if_not_unplug():
+    result = scribe("if not 5 is equal to 6 trace no")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, Unary)
+    assert stmt.condition.op is TokenType.UNPLUG
