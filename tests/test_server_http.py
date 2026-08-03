@@ -90,10 +90,39 @@ def test_a_program_that_fails_streams_an_error_frame(base_url):
 
 def test_chat_reports_when_no_key_is_configured(base_url):
     # The server must not 500 because an optional dependency is absent.
-    status, body = post(f"{base_url}/api/chat", {"request": "count to three"})
+    # Operator is now opt-in; the default engine is Scribe (no key needed).
+    status, body = post(f"{base_url}/api/chat", {"request": "count to three", "engine": "operator"})
     assert status == 200
     assert body["ok"] is False
     assert "matrixlang[bot]" in body["error"] or "api" in body["error"].lower()
+
+
+def test_chat_scribe_produces_a_program(base_url):
+    status, body = post(f"{base_url}/api/chat", {"request": "add 5 and 3", "engine": "scribe"})
+    assert status == 200
+    assert body["ok"] is True
+    assert "trace" in body["source"]
+    assert body["attempts"][0]["stage"] == "VALID"
+
+
+def test_chat_defaults_to_scribe(base_url):
+    status, body = post(f"{base_url}/api/chat", {"request": "add 5 and 3"})
+    assert status == 200
+    assert body["ok"] is True
+
+
+def test_chat_scribe_miss_returns_hint(base_url):
+    status, body = post(f"{base_url}/api/chat", {"request": "render a 3d scene", "engine": "scribe"})
+    assert status == 200
+    assert body["ok"] is False
+    assert "hint" in body
+    assert "closest" in body
+
+
+def test_chat_unknown_engine_returns_400(base_url):
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        post(f"{base_url}/api/chat", {"request": "add 5 and 3", "engine": "telepathy"})
+    assert excinfo.value.code == 400
 
 
 # --- Errors -------------------------------------------------------------

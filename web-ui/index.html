@@ -33,6 +33,13 @@ trace "wake up, Neo"
     <article class="panel">
       <header class="panel-head">
         <span>OPERATOR</span>
+        <label class="engine-picker">
+          engine
+          <select id="engine">
+            <option value="scribe" selected>Scribe</option>
+            <option value="operator">Operator</option>
+          </select>
+        </label>
         <span class="badge" id="operator-state">idle</span>
       </header>
       <div class="panel-body chat" id="chat"></div>

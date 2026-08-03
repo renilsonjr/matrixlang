@@ -50,9 +50,10 @@ lists, cannot be written to — **logical operators** — `splice` (and),
 `fork` short-circuiting so a bounded search like `n < length xs splice
 xs[n] != target` never reads past the end of `xs` — and **Operator**, an
 assistive companion that writes MatrixLang from plain language, in the
-terminal or in a browser.
+terminal or in a browser, and **Scribe**, a keyless, deterministic
+companion that does the same without a key, an SDK, or the network.
 
-1,216 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,382 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```
@@ -280,6 +281,44 @@ deliberately out of scope.
 `server/` is not part of the installed package on purpose: a top-level
 `server` module would collide with half of PyPI. It runs from a clone,
 which is the model this project chose.
+
+## Scribe
+
+Scribe writes MatrixLang from plain language too, and it needs none of
+what Operator needs: no API key, no SDK, no network. It is a finite
+catalogue of intent patterns, matched deterministically — the same
+request always produces the same program, because nothing is asked of a
+model. It is optional, it has no dependency, and it runs on the standard
+library alone.
+
+Every program Scribe produces is parsed and dry-run before it is shown,
+through the same gate Operator answers to. Nothing unvalidated reaches
+you, and a request that matches nothing is refused with a hint at the
+closest phrasing it knows rather than a guess. When an API key is
+configured, the server also flags that Operator could take the request —
+and the browser offers the switch.
+
+A few requests Scribe understands:
+
+```
+add 5 and 3                          trace 5 + 3
+count from 1 to 10                   construct i = 1
+                                     dejavu i <= 10
+                                       trace i
+                                       i = i + 1
+                                     flatline
+make a list of 1 2 3                 construct xs = [1, 2, 3]
+if 5 is greater than 3 trace bigger  redpill 5 > 3
+                                       trace "bigger"
+                                     flatline
+```
+
+### In a browser
+
+The same chat surface, with an engine toggle. Scribe is the server's
+default: `/api/chat` answers as Scribe unless asked for `operator`, so
+the page works with no key installed. A miss shows the hint in the chat
+and, when a key is present, offers the switch to Operator.
 
 ## The glyphs
 

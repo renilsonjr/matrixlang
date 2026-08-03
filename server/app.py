@@ -97,22 +97,61 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": "a 'request' string is required"})
             return
 
-        from matrixlang.operator.client import AnthropicClient
-        from matrixlang.operator.loop import run as run_operator
+        engine = body.get("engine", "scribe")
+        if engine == "scribe":
+            from matrixlang.scribe import ScribeMiss, ScribeProgram, scribe
 
-        outcome = run_operator(request, AnthropicClient())
-        if outcome.succeeded:
-            self._json(200, {
-                "ok": True,
-                "source": outcome.source,
-                "attempts": _attempts(outcome),
-            })
-        else:
-            self._json(200, {
-                "ok": False,
-                "error": outcome.failure.message if outcome.failure else "no program",
-                "attempts": _attempts(outcome),
-            })
+            outcome = scribe(request)
+            if isinstance(outcome, ScribeProgram):
+                from matrixlang.operator.validate import Invalid, Valid, check
+
+                result = check(outcome.source)
+                if isinstance(result, Valid):
+                    self._json(200, {
+                        "ok": True,
+                        "source": outcome.source,
+                        "attempts": [{"number": 1, "stage": "VALID", "diagnostic": None}],
+                    })
+                else:
+                    self._json(200, {
+                        "ok": False,
+                        "error": result.as_diagnostic(),
+                        "attempts": _attempts_of_invalid(result),
+                    })
+            else:
+                # SC-6: offer Operator only when a key is actually
+                # configured. The browser must not have to guess.
+                import os
+
+                self._json(200, {
+                    "ok": False,
+                    "error": outcome.reason,
+                    "hint": outcome.closest,
+                    "closest": outcome.closest,
+                    "try_operator": bool(os.environ.get("ANTHROPIC_API_KEY")),
+                })
+            return
+
+        if engine == "operator":
+            from matrixlang.operator.client import AnthropicClient
+            from matrixlang.operator.loop import run as run_operator
+
+            outcome = run_operator(request, AnthropicClient())
+            if outcome.succeeded:
+                self._json(200, {
+                    "ok": True,
+                    "source": outcome.source,
+                    "attempts": _attempts(outcome),
+                })
+            else:
+                self._json(200, {
+                    "ok": False,
+                    "error": outcome.failure.message if outcome.failure else "no program",
+                    "attempts": _attempts(outcome),
+                })
+            return
+
+        self._json(400, {"error": f"unknown engine: {engine}"})
 
     def _events(self, run_id: str) -> None:
         run = _RUNS.get(run_id)
@@ -207,6 +246,15 @@ def _attempts(outcome) -> list[dict]:
         }
         for attempt in outcome.attempts
     ]
+
+
+def _attempts_of_invalid(invalid):
+    """A single failed Scribe attempt, shaped like Operator's attempts."""
+    return [{
+        "number": 1,
+        "stage": invalid.stage.name,
+        "diagnostic": invalid.as_diagnostic(),
+    }]
 
 
 def serve(port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
