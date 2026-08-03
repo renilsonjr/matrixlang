@@ -321,3 +321,28 @@ def test_list_intents_pass_check_gate():
         result = scribe(request)
         assert isinstance(result, ScribeProgram)
         assert isinstance(check(result.source), Valid)
+
+
+from matrixlang.nodes import Declare, StringLiteral, Index
+
+
+def test_make_a_string():
+    result = scribe("make a string hello")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, Declare)
+    assert stmt.name == "s"
+    assert isinstance(stmt.value, StringLiteral)
+    assert stmt.value.value == "hello"
+
+
+def test_get_character():
+    result = scribe("get character 0 of name")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0], Declare)
+    stmt = tree.statements[1]
+    assert isinstance(stmt, Trace)
+    assert isinstance(stmt.value, Index)
+    assert stmt.value.target.ident == "name"

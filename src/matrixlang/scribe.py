@@ -428,3 +428,26 @@ _Intent(
     "get element <i> of <list>",
 )
 _Intent(r"length\s+of\s+(?P<name>[a-z_]\w*)", _build_length, "length of <list>")
+
+
+# --- String intents -----------------------------------------------------------
+
+
+def _build_string(m):
+    return Program(statements=[
+        Declare(name="s", value=StringLiteral(value=m.group("v"))),
+    ])
+
+
+def _build_get_char(m):
+    # Same rule as the list intents: declare what you read, or check()
+    # rejects the program for naming an undeclared variable.
+    name = m.group("name")
+    return Program(statements=[
+        Declare(name=name, value=StringLiteral(value="neo")),
+        Trace(value=Index(target=Name(ident=name), index=_num_or_name(m.group("i")))),
+    ])
+
+
+_Intent(r"make\s+a\s+string\s+(?P<v>\w+)", _build_string, "make a string <word>")
+_Intent(r"get\s+character\s+(?P<i>-?\d+)\s+of\s+(?P<name>[a-z_]\w*)", _build_get_char, "get character <i> of <name>")
