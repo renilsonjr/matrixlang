@@ -266,7 +266,8 @@ def _build_if(m):
 # and must be in the pattern. `print` is already normalized to `trace`
 # before matching, so listing it as an alternative here would be dead.
 _Intent(
-    r"if\s+(?P<a>-?\d+|\w+)\s+is\s+(?P<op>greater than|less than|equal to)"
+    r"if\s+(?P<a>-?\d+|\w+)\s+is\s+"
+    r"(?P<op>greater than or equal to|less than or equal to|greater than|less than|equal to)"
     r"\s+(?P<b>-?\d+|\w+)\s+trace\s+(?P<action>.+)",
     _build_if,
     "if <a> is greater than <b> trace <value>",
@@ -281,7 +282,8 @@ def _build_if_not(m):
 
 
 _Intent(
-    r"if\s+not\s+(?P<a>-?\d+|\w+)\s+is\s+(?P<op>greater than|less than|equal to)"
+    r"if\s+not\s+(?P<a>-?\d+|\w+)\s+is\s+"
+    r"(?P<op>greater than or equal to|less than or equal to|greater than|less than|equal to)"
     r"\s+(?P<b>-?\d+|\w+)\s+trace\s+(?P<action>.+)",
     _build_if_not,
     "if not <a> is greater than <b> trace <value>",

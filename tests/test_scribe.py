@@ -256,6 +256,46 @@ def test_if_not_unplug():
     assert stmt.condition.op is TokenType.UNPLUG
 
 
+def test_if_greater_than_or_equal_to_traces():
+    # Without GTE in the conditional pattern this degrades, via longest
+    # match wins, to a bare `trace "bigger"` — the condition silently
+    # disappears and the action runs unconditionally.
+    result = scribe("if 5 is greater than or equal to 3 trace bigger")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, If)
+    from matrixlang.nodes import Binary
+    assert stmt.condition.op is TokenType.GTE
+    assert isinstance(stmt.then_body[0], Trace)
+    from matrixlang.operator.validate import Valid, check
+    assert isinstance(check(result.source), Valid)
+
+
+def test_if_less_than_or_equal_to_traces():
+    result = scribe("if 3 is less than or equal to 4 trace small")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, If)
+    assert stmt.condition.op is TokenType.LTE
+    assert isinstance(stmt.then_body[0], Trace)
+    from matrixlang.operator.validate import Valid, check
+    assert isinstance(check(result.source), Valid)
+
+
+def test_if_not_greater_than_or_equal_to_traces():
+    result = scribe("if not 5 is greater than or equal to 3 trace big")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, Unary)
+    assert stmt.condition.op is TokenType.UNPLUG
+    from matrixlang.nodes import Binary
+    assert stmt.condition.operand.op is TokenType.GTE
+
+
 from matrixlang.nodes import Declare, Index, ListLiteral, NumberLiteral, Trace, Unary
 
 
