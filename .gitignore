@@ -7,6 +7,11 @@ dist/
 build/
 .superpowers/
 
+# Git worktrees, e.g. .worktrees/scribe for isolated feature work. The
+# worktree contents are the repo's own files at another branch's HEAD —
+# committing them would duplicate the tree into the main checkout.
+.worktrees/
+
 # Scratch workspace for planning features and next steps. Deliberately
 # outside version control — not part of the language or its toolchain.
 matrixlang.features/
