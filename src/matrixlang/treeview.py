@@ -42,6 +42,9 @@ _OPS: dict[TokenType, str] = {
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
+    TokenType.UNPLUG: "unplug",
+    TokenType.SPLICE: "splice",
+    TokenType.FORK: "fork",
 }
 
 

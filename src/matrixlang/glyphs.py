@@ -1,4 +1,4 @@
-"""The 38-slot glyph table — D-03's fixed bijective mapping.
+"""The 41-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
@@ -30,6 +30,14 @@ GLYPHS: dict[str, str] = {
     # claim is that the only readable text in a wall of green is the
     # thing you wrote.
     "length": "ﾙ",
+    # Stage 9. `and`, `or` and `not` as crew vocabulary: splice joins two
+    # signals, fork is a branch in the path, unplug cuts it. The films
+    # have no concept of logical conjunction, so these are metaphors of
+    # connection rather than film concepts — recorded in the Stage 9
+    # design §1 rather than pretended otherwise.
+    "splice": "ﾁ",
+    "fork": "ﾂ",
+    "unplug": "ｳ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",

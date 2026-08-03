@@ -3,11 +3,11 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Current as of `feat/stage-8-strings` — 4,010 lines in the package across
-22 modules, plus a 497-line local server and a 650-line web UI. 7,092 lines of
-tests, 1,165 passing, on Python 3.11 through 3.14 in CI. Zero third-party
-runtime dependencies; `pytest` for development and the Anthropic SDK as an
-optional extra for Operator.
+Current as of `feat/stage-9-logical-operators` — 4,157 lines in the package
+across 22 modules, plus a 497-line local server and a 650-line web UI. 7,628
+lines of tests, 1,216 passing, on Python 3.11 through 3.14 in CI. Zero
+third-party runtime dependencies; `pytest` for development and the Anthropic
+SDK as an optional extra for Operator.
 
 New to this project? [LEARNING-MATRIXLANG.md](LEARNING-MATRIXLANG.md) teaches
 the language itself. This document is about the implementation.
@@ -86,16 +86,16 @@ anything about the language, which is the whole point of the split.
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 84 | Token vocabulary. Pure data |
+| `tokens.py` | 90 | Token vocabulary. Pure data |
 | `nodes.py` | 175 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
 | `values.py` | 221 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 71 | The 38-slot bijective glyph table. 18 slots left of the block |
+| `glyphs.py` | 79 | The 41-slot bijective glyph table. 15 slots left of the block |
 | `lexer.py` | 247 | Source text → token list. Handles both faces |
-| `parser.py` | 483 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 539 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 287 | AST → source text, in either face |
-| `treeview.py` | 154 | AST → indented text, for teaching |
+| `parser.py` | 507 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 599 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 307 | AST → source text, in either face |
+| `treeview.py` | 157 | AST → indented text, for teaching |
 | `repl.py` | 110 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
 | `translit.py` | 162 | The reversible display table. Pure |
@@ -104,7 +104,7 @@ anything about the language, which is the whole point of the split.
 | `window.py` | 210 | The Tk backend. The only impure module in the package |
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 230 | Command-line entry point |
-| `operator/prompt.py` | 110 | The system prompt. The language's rules, as text |
+| `operator/prompt.py` | 136 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 87 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
 | `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |
@@ -138,12 +138,14 @@ katakana literal, which keeps the glyph set genuinely swappable.
 
 ## 4. The language
 
-**Keywords (11):** `construct` (declare), `trace` (print), `redpill` / `bluepill`
+**Keywords (14):** `construct` (declare), `trace` (print), `redpill` / `bluepill`
 (if / else), `dejavu` (while), `flatline` (end block), `true` / `false`, from
-Stage 6 `agent` (define) / `jackout` (return), and from Stage 7 `length` — a
+Stage 6 `agent` (define) / `jackout` (return), from Stage 7 `length` — a
 keyword rather than a built-in `length(xs)`, because a built-in name is an
 identifier, and identifiers are the one thing D-03 keeps in Latin in the
-glyph face.
+glyph face — and from Stage 9 `splice` / `fork` / `unplug` (and / or / not),
+Matrix-themed rather than borrowed from a host language, same as the rest of
+the vocabulary.
 
 An Agent is a callable, reusable program in the films; `jackout` is leaving the
 construct and coming back with something. Both had to pass D-05's test — does it
@@ -202,12 +204,20 @@ flatline
   error; assigning to an undeclared name is an error. This is what makes
   `construct` carry meaning rather than being decoration.
 - **Conditions must be boolean.** No truthy integers or strings.
+- **`splice` and `fork` short-circuit, and that creates a real asymmetry.**
+  `a splice b` never evaluates `b` once `a` is `false`; `a fork b` never
+  evaluates `b` once `a` is `true`. An operand that is never evaluated is
+  never type-checked either, so `false splice 1` is `false` while
+  `true splice 1` is a type error — the same expression shape, differing
+  only in whether the left side decided the right side was worth looking
+  at. This is what makes the bounded-search idiom (§5.8) safe rather than
+  an accident of the operators happening to short-circuit.
 - **Integer division truncates toward zero**, not floor. Python's `//` floors:
   `-7 // 2 == -4`, but the spec requires `-3`.
 - **`+` is overloaded** for integer addition and string concatenation; mixed
   operands are an error, with no implicit stringification.
 
-## 5. The seven problems worth talking about
+## 5. The eight problems worth talking about
 
 These are the parts where the work was genuinely non-trivial. In an interview,
 these are the answers to "tell me about something hard."
@@ -249,7 +259,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 38 slots is
+and a **per-seed randomly mixed** face where each of the 41 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -290,7 +300,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 38-entry table the renderer writes through, just
+The lexer reads the same 41-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.
@@ -408,6 +418,45 @@ Two things went wrong anyway, and both are worth stating:
 Both were found by running it, not by a test — which is the recurring lesson of
 §5.6 restated at a layer boundary.
 
+### 5.8 The obvious home for `splice`/`fork` is the wrong one
+
+`_evaluate`'s `Binary` branch reads:
+
+```python
+if isinstance(expr, Binary):
+    left = self._value_of(expr.left, expr)
+    right = self._value_of(expr.right, expr)      # both, before dispatch
+    return self._binary(expr, left, right)
+```
+
+`_binary` is where `+`, `==`, the comparisons and the concatenations already
+live. It is the obvious home for two new binary operators, `splice` and
+`fork` — and putting them there produces operators that **work and do not
+short-circuit.** The failure is quiet in exactly the way that makes it
+dangerous: `true splice false` still correctly evaluates to `false`, and
+every truth-table test in the suite still passes, because none of them
+depend on which operand gets evaluated. What breaks is the idiom the whole
+stage exists for — `n < length xs splice xs[n] != target` — which now reads
+`xs[n]` at the boundary `n == length xs` and dies with an out-of-bounds
+error that looks like a bug in the caller's program rather than in the
+language.
+
+The fix is to intercept `splice`/`fork` **in `_evaluate`, before** the
+`Binary` branch evaluates both operands, so the right side is reached only
+when the left side has not already decided the answer. The guard that
+proves the interception is load-bearing rather than decorative is a
+teeth-check: route `splice`/`fork` back through `_binary` and
+`test_splice_does_not_evaluate_the_right_side_when_the_left_is_false` (an
+observable side effect on the right operand, not an inference) fails
+immediately, along with the bounded-search test itself.
+
+This is the third stage in a row with a "the obvious edit is wrong and
+looks right" story at its center — Stage 7's list-equality delegating to
+Python's own `==` (§5.5) and Stage 8's string assignment falling through to
+a Python `TypeError` (§7) are the other two. In all three, the dangerous
+version passes its own truth-table tests and only a test built around an
+*observable side effect*, not a return value, catches it.
+
 ## 6. Operator, and the local web layer
 
 Operator writes MatrixLang from plain language. The interesting decision is not
@@ -510,7 +559,7 @@ configuration.
 
 ## 8. Testing philosophy
 
-1,165 tests, ~1.8× more test code than source code, run against Python 3.11
+1,216 tests, ~1.8× more test code than source code, run against Python 3.11
 through 3.14 on every pull request. Three practices are worth describing:
 
 **Teeth-checks.** Every load-bearing guard is proven by injecting the bug and
@@ -535,6 +584,20 @@ The most instructive failure in the project: three tests with "drain" and
 green — while a third of an 80×24 terminal was still lit when the animation
 ended. The lesson is that a test's name is not its assertion.
 
+Stage 9 produced a smaller instance of the same lesson. The plan's
+`test_the_bounded_search_does_not_run_off_the_end` searched a three-element
+list for `"Tank"` — its own **last** element — so the loop exited at
+`n == 2` reading a perfectly legal index, and never reached the boundary
+`n == length crew` its name and comment claimed to pin. It passed under a
+deliberately non-short-circuiting interpreter for the same reason the drain
+tests passed with the erase mechanism deleted: the assertion did not require
+the behaviour the name promised. The fix was a one-word data change —
+searching for an absent target instead of a present one — after which the
+test genuinely could not pass without short-circuit. Short-circuit itself
+was never actually unverified: four other tests in the same task pinned it
+directly through an observable side effect. Only the one test named after
+the bounded search failed to test the bounded search's boundary.
+
 **And the standing limit of all of it: units pass while the wiring fails.** Four
 of the project's worst defects were invisible to a green suite — the cascade
 draining to a black window, the retry loop retrying an unfixable client error,
@@ -557,12 +620,22 @@ isn't there is usually more convincing than a feature list:
 - **Slicing (`name[0:2]`) and string methods** (`upper`, `split`,
   `find`, and the like). Stage 8 went as far as one character at a time
   — `name[0]` — and stopped; a range or a method table is more surface
-  than the pedagogical goal needed.
+  than the pedagogical goal needed. With Stage 9's logical operators
+  shipped, slicing is the largest remaining gap in the language: `else
+  if` is a nesting exercise, `break`/`continue` are two keywords and a
+  control-flow exception in the shape `jackout` already established, and
+  `xor` is one more entry in the same table `splice`/`fork` already
+  populate — none of those is a new kind of feature. Slicing is: it
+  needs new syntax (a colon inside `[`), a new AST node, and bounds
+  semantics for both strings and lists that the existing single-index
+  rules do not give away for free.
 - **Floats** — see §4.
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.
-- **Logical operators** (`and` / `or` / `not`) — reachable, but not needed
-  for Turing completeness or any demo. With string indexing and ordering
-  now shipped, this is the largest remaining gap in the language.
+- **`break` and `continue`.** A counter and a condition are how loops are
+  written instead (§4).
+- **`xor`.** `splice`, `fork` and `unplug` shipped in Stage 9; a fourth
+  logical operator was reachable but not needed for Turing completeness
+  or any demo, the same reasoning Stage 8 applied to slicing.
 - **Hosting, accounts, and anything a product needs.** The web layer runs on
   `127.0.0.1` for whoever cloned the repo. Deploying it would mean designing
   auth, quotas and abuse handling first, which is a separate project.
@@ -589,13 +662,13 @@ isn't there is usually more convincing than a feature list:
 > identical tree back, comments included. Second, its output device is the
 > Matrix cascade: running a program opens a window where its own source and
 > output fall as glyphs, and the transliteration is reversible, so what falls
-> can be read back rather than merely watched. About 4,000 lines of source,
-> 1,165 tests, no third-party runtime dependencies.
+> can be read back rather than merely watched. About 4,200 lines of source,
+> 1,216 tests, no third-party runtime dependencies.
 
 ## The two-minute version
 
 Lead with the pipeline (§3), then pick **one** deep problem rather than listing
-all seven. The best single choice for most interviews is §5.1 — reconstructing
+all eight. The best single choice for most interviews is §5.1 — reconstructing
 parentheses — because it is:
 
 - easy to state in one sentence ("the tree doesn't store parentheses, so the

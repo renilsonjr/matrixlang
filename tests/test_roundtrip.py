@@ -14,7 +14,7 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.nodes import Binary, Call, If, Unary
+from matrixlang.nodes import Binary, Call, If, Index, ListLiteral, Unary
 from matrixlang.parser import parse
 from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
@@ -243,3 +243,80 @@ def test_the_generator_produces_the_stage_7_shapes_too():
     assert index_of_literal, "no [1,2][0] shape in 300 seeds"
     assert length_over_binary, "no `length (a + b)` shape in 300 seeds"
     assert index_assignment, "no IndexAssign in 300 seeds"
+
+
+def test_the_generator_produces_the_stage_9_shapes_too():
+    # Same reasoning as the earlier coverage meta-tests. Stage 9
+    # renumbered every level in render._LEVEL; the round trip is the only
+    # guard on that, and it guards nothing if these operators never
+    # appear in a generated tree.
+    from matrixlang.nodes import Binary, Unary
+    from matrixlang.tokens import TokenType
+
+    splice = False
+    fork = False
+    unplug = False
+    unplug_over_binary = False
+    fork_over_splice = False
+    logical_over_comparison = False
+
+    def walk_expr(expr):
+        nonlocal splice, fork, unplug
+        nonlocal unplug_over_binary, fork_over_splice, logical_over_comparison
+        if isinstance(expr, Binary):
+            if expr.op is TokenType.SPLICE:
+                splice = True
+            if expr.op is TokenType.FORK:
+                fork = True
+                if isinstance(expr.right, Binary) and expr.right.op is TokenType.SPLICE:
+                    fork_over_splice = True
+            if expr.op in (TokenType.SPLICE, TokenType.FORK):
+                for side in (expr.left, expr.right):
+                    if isinstance(side, Binary) and side.op in (
+                        TokenType.EQ,
+                        TokenType.NEQ,
+                        TokenType.LT,
+                        TokenType.GT,
+                        TokenType.LTE,
+                        TokenType.GTE,
+                    ):
+                        logical_over_comparison = True
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, Unary):
+            if expr.op is TokenType.UNPLUG:
+                unplug = True
+                if isinstance(expr.operand, Binary):
+                    unplug_over_binary = True
+            walk_expr(expr.operand)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+
+    def walk_stmt(stmt):
+        for field in ("value", "condition", "target", "index"):
+            if hasattr(stmt, field) and getattr(stmt, field) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body"):
+            for child in getattr(stmt, name, []) or []:
+                walk_stmt(child)
+        for child in getattr(stmt, "else_body", None) or []:
+            walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    assert splice, "no splice in 300 seeds"
+    assert fork, "no fork in 300 seeds"
+    assert unplug, "no unplug in 300 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 300 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 300 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 300 seeds"

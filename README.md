@@ -35,11 +35,14 @@ closures**, **lists** — literals, indexing, element assignment, `+`
 concatenation, and `length` — **strings that are indexable and orderable**
 — `name[0]` reads a character, and `<`/`>`/`<=`/`>=` order two strings by
 codepoint, while `name[0] = "X"` is refused because strings, unlike
-lists, cannot be written to — and **Operator**, an assistive companion
-that writes MatrixLang from plain language, in the terminal or in a
-browser.
+lists, cannot be written to — **logical operators** — `splice` (and),
+`fork` (or) and `unplug` (not), boolean operands only, with `splice` and
+`fork` short-circuiting so a bounded search like `n < length xs splice
+xs[n] != target` never reads past the end of `xs` — and **Operator**, an
+assistive companion that writes MatrixLang from plain language, in the
+terminal or in a browser.
 
-1,165 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,216 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```
@@ -108,7 +111,7 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — eleven keywords, four types, and both faces —
+teaches the whole language — fourteen keywords, four types, and both faces —
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade
@@ -306,7 +309,7 @@ the suite:
 It runs on every pull request against Python 3.11, 3.12, 3.13 and 3.14.
 
 [docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md) is the fastest way
-in: the compilation pipeline, what each module owns, and the seven design
+in: the compilation pipeline, what each module owns, and the eight design
 problems that took real work — reconstructing parentheses from a tree that
 does not store them, the round-trip property, why testing an animation
 required splitting the code on a purity gradient, and how the browser gets
