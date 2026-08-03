@@ -6,6 +6,8 @@ gate; scribe only produces. The full language surface is covered here,
 pattern by pattern.
 """
 
+import pytest
+
 from matrixlang.scribe import ScribeMiss, ScribeProgram, normalize, scribe
 
 
@@ -402,3 +404,60 @@ def test_adder_factory_returns_a_function():
     assert isinstance(outer, FunctionDef)
     assert isinstance(outer.body[0], FunctionDef)  # inner agent
     assert isinstance(outer.body[1], Return)        # jackout inner
+
+
+# Every request in the §3 catalogue. Both tests below iterate this, because
+# the two properties are independent and a program can have one without the
+# other.
+CATALOGUE = [
+    "add 5 and 3",
+    "subtract 7 minus 2",
+    "multiply 4 times 6",
+    "divide 10 by 3",
+    "double 4",
+    "half of 9",
+    "is 5 greater than 3",
+    "trace hello",
+    "store 5 as total",
+    "count from 1 to 10",
+    "count down from 5 to 1",
+    "make a list of 1 2 3",
+    "get element 0 of xs",
+    "length of xs",
+    "make a string hello",
+    "get character 0 of name",
+    "define a function that doubles",
+    "define an adder factory",
+    "if 5 is greater than 3 trace bigger",
+    "if not 5 is equal to 6 trace no",
+]
+
+
+@pytest.mark.parametrize("request_text", CATALOGUE)
+def test_generated_programs_round_trip(request_text):
+    """parse(render_ascii(program)) == program for every Scribe program."""
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+    from matrixlang.render import render_ascii
+
+    result = scribe(request_text)
+    assert isinstance(result, ScribeProgram)
+    assert parse(lex(render_ascii(result.program))) == result.program
+
+
+@pytest.mark.parametrize("request_text", CATALOGUE)
+def test_every_catalogued_request_survives_the_validate_gate(request_text):
+    """Round-tripping is not enough — the program has to actually run.
+
+    This is the assertion that catches an intent which reads a variable it
+    never declared: `trace xs[0]` parses, renders, and round-trips
+    perfectly, then fails at runtime with "'xs' is not declared" — so the
+    server returns an error and the intent is dead on arrival. Only the
+    dry run sees it.
+    """
+    from matrixlang.operator.validate import Valid, check
+
+    result = scribe(request_text)
+    assert isinstance(result, ScribeProgram)
+    outcome = check(result.source)
+    assert isinstance(outcome, Valid), f"{request_text!r} -> {outcome.as_diagnostic()}"
