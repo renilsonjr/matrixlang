@@ -53,7 +53,7 @@ assistive companion that writes MatrixLang from plain language, in the
 terminal or in a browser, and **Scribe**, a keyless, deterministic
 companion that does the same without a key, an SDK, or the network.
 
-1,302 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,382 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```

@@ -8,7 +8,14 @@ pattern by pattern.
 
 import pytest
 
-from matrixlang.scribe import ScribeMiss, ScribeProgram, normalize, scribe
+from matrixlang.scribe import (
+    _MAX_LOOP_ITERATIONS,
+    ScribeMiss,
+    ScribeProgram,
+    normalize,
+    scribe,
+)
+from matrixlang.tokens import KEYWORDS
 
 
 def test_normalize_collapses_whitespace_but_never_inside_quotes():
@@ -591,3 +598,123 @@ def test_every_catalogued_request_survives_the_validate_gate(request_text):
     assert isinstance(result, ScribeProgram)
     outcome = check(result.source)
     assert isinstance(outcome, Valid), f"{request_text!r} -> {outcome.as_diagnostic()}"
+
+
+# --- The invariant, and the three ways it was breakable ---------------------
+#
+# "Every accepted input produces a program check() dry-runs as valid" is the
+# rule the list and string index bounds already existed to protect. These
+# pin the cases where it did not hold: a reserved word used as a variable
+# name, and a loop span larger than the dry run's budget. Both returned a
+# ScribeProgram whose source failed check(), so the browser showed a raw
+# compiler diagnostic where it should have shown a program or a hint.
+
+
+@pytest.mark.parametrize("keyword", sorted(KEYWORDS))
+@pytest.mark.parametrize(
+    "template",
+    ["store 5 as {}", "length of {}", "get element 0 of {}", "get character 0 of {}"],
+)
+def test_a_reserved_word_is_never_bound_as_a_name(keyword, template):
+    """`construct trace = 5` is a parse error, so it must never be built.
+
+    The name groups read from tokens.KEYWORDS rather than a retyped list,
+    so adding a keyword to the language cannot leave this stale.
+    """
+    result = scribe(template.format(keyword))
+    assert isinstance(result, ScribeMiss), f"{template.format(keyword)!r} built a program"
+
+
+def test_an_ordinary_name_still_binds():
+    # The keyword guard must not swallow legitimate names.
+    result = scribe("store 5 as total")
+    assert isinstance(result, ScribeProgram)
+    assert "construct total = 5" in result.source
+
+
+@pytest.mark.parametrize(
+    "request_text",
+    [
+        "count from 1 to 10000",
+        "count from 1 to 999999999",
+        "count down from 999999 to 1",
+        "count from -999999 to 999999",
+    ],
+)
+def test_a_loop_past_the_dry_run_budget_is_a_miss(request_text):
+    """Unbounded in the request, bounded in the dry run — so refuse it here.
+
+    Without this the user typed "count from 1 to 10000" and got
+    "[line 3, column 3] program exceeded the step limit", which reads as a
+    bug in their request rather than a limit of the preview.
+    """
+    result = scribe(request_text)
+    assert isinstance(result, ScribeMiss)
+    assert "dry run" in result.reason
+
+
+def test_a_loop_inside_the_budget_still_builds():
+    result = scribe(f"count from 1 to {_MAX_LOOP_ITERATIONS}")
+    assert isinstance(result, ScribeProgram)
+    from matrixlang.operator.validate import Valid, check
+
+    assert isinstance(check(result.source), Valid)
+
+
+def test_the_loop_ceiling_is_actually_what_the_dry_run_affords():
+    """Pins the constant to the real budget rather than to a comment.
+
+    _MAX_LOOP_ITERATIONS is hardcoded because scribe may not import
+    operator (SC-5). This is the test that catches the two drifting apart.
+    """
+    from matrixlang.operator.validate import Valid, check
+
+    result = scribe(f"count from 1 to {_MAX_LOOP_ITERATIONS}")
+    assert isinstance(result, ScribeProgram)
+    assert isinstance(check(result.source), Valid), (
+        f"_MAX_LOOP_ITERATIONS={_MAX_LOOP_ITERATIONS} no longer fits the dry run"
+    )
+
+
+@pytest.mark.parametrize(
+    "request_text,expected",
+    [
+        ("get element 9 of xs", "get element <i> of <list>"),
+        ("get character 9 of name", "get character <i> of <name>"),
+        ("make soup", "make a list of <values>"),
+    ],
+)
+def test_a_miss_suggests_the_pattern_it_nearly_matched(request_text, expected):
+    """Hints scored on identifying words, not on "a" and "of".
+
+    Matching any hint token made "render a 3d scene" suggest "make a list
+    of <values>" because both contain the letter a, and sent someone who
+    asked for element 9 to "half of <a>".
+    """
+    result = scribe(request_text)
+    assert isinstance(result, ScribeMiss)
+    assert result.closest == expected
+
+
+def test_no_accepted_request_is_ever_check_invalid():
+    """The invariant itself, fuzzed over the catalogue's own vocabulary."""
+    import random
+
+    from matrixlang.operator.validate import Valid, check
+
+    vocabulary = [
+        "add", "trace", "store", "count", "down", "from", "to", "of", "get",
+        "element", "length", "make", "list", "string", "character", "if",
+        "not", "is", "greater", "than", "less", "equal", "double", "half",
+        "define", "function", "adder", "factory", "as", "and", "agent",
+        "flatline", "construct", "xs", "name", "total", "5", "0", "-2", "10000",
+    ]
+    random.seed(20260803)
+    for _ in range(2000):
+        text = " ".join(random.choices(vocabulary, k=random.randint(1, 8)))
+        result = scribe(text)
+        if isinstance(result, ScribeProgram):
+            outcome = check(result.source)
+            assert isinstance(outcome, Valid), (
+                f"{text!r} produced {result.source!r} -> {outcome.as_diagnostic()}"
+            )

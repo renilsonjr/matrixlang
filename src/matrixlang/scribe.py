@@ -11,12 +11,11 @@ import re
 from dataclasses import dataclass
 
 from matrixlang.nodes import (
-    Assign, Binary, BoolLiteral, Call, Declare, Expr, ExprStmt, FunctionDef,
-    If, Index, IndexAssign, ListLiteral, Name, NumberLiteral, Program, Return,
-    Stmt, StringLiteral, Trace, Unary, While,
+    Assign, Binary, Declare, Expr, FunctionDef, If, Index, ListLiteral, Name,
+    NumberLiteral, Program, Return, StringLiteral, Trace, Unary, While,
 )
 from matrixlang.render import render_ascii
-from matrixlang.tokens import TokenType
+from matrixlang.tokens import KEYWORDS, TokenType
 
 
 @dataclass(frozen=True)
@@ -71,8 +70,14 @@ def scribe(request: str) -> ScribeResult:
             "conditional comparisons need numbers, like 'if 5 is greater than 3'",
             closest=_closest(text),
         )
-    program = intent.build(match)
-    return ScribeProgram(program=program, source=render_ascii(program))
+    built = intent.build(match)
+    if isinstance(built, ScribeMiss):
+        # A pattern can match text it cannot turn into a runnable program —
+        # a loop span too long for the dry run, say. Refusing here keeps the
+        # module's contract: anything that comes back as a ScribeProgram is
+        # something check() accepts.
+        return built
+    return ScribeProgram(program=built, source=render_ascii(built))
 
 
 # --- Normalization ------------------------------------------------------
@@ -118,23 +123,55 @@ _SYNONYMS = {
 _WORD = {word: re.compile(rf"\b{word}\b") for word in _SYNONYMS}
 
 
+def _hint_keywords(hint: str) -> set[str]:
+    """The words in a hint that actually identify it.
+
+    Placeholders are stripped — `<a>` and `<list>` describe the shape, not
+    the request. So are words under three letters, because the survivors
+    would otherwise be "a", "of" and "as", which appear in almost any
+    English sentence: matching on those made "render a 3d scene" suggest
+    "make a list of <values>" purely because both contain the letter a.
+    """
+    return {
+        word
+        for word in re.findall(r"[a-z]+", re.sub(r"<[^>]*>", " ", hint))
+        if len(word) >= 3
+    }
+
+
 def _closest(text: str) -> str | None:
     """A suggestion for an unmatched request, from the known intents.
 
-    The first hint whose word appears in the request wins; otherwise the
-    first registered hint stands in, so a miss always has a concrete
-    pattern to offer ("make soup" → "add <a> and <b>", say).
+    The hint sharing the most identifying words with the request wins, so
+    "get element 9 of xs" is answered with the get-element pattern rather
+    than whichever intent happens to be registered first. A request with
+    nothing in common falls back to the first hint, so a miss always has
+    something concrete to offer.
     """
+    words = set(re.findall(r"[a-z]+", text))
+    best, best_score = None, 0
     for intent in INTENTS:
-        # Reuse the catalogue's own descriptions as hints.
-        if intent.hint and any(word in text for word in intent.hint.split()):
-            return intent.hint
+        if not intent.hint:
+            continue
+        score = len(_hint_keywords(intent.hint) & words)
+        if score > best_score:
+            best, best_score = intent.hint, score
+    if best is not None:
+        return best
     return INTENTS[0].hint if INTENTS else None
 
 
 # A request that opens with a conditional prefix (`if` / `if not`) but whose
 # condition did not match must be a miss, never a bare unconditional trace.
 _CONDITIONAL_PREFIX = re.compile(r"^if(?: not)?\b")
+
+# A bindable identifier: anything the lexer would read as a name, minus the
+# reserved words. `store 5 as trace` used to build `construct trace = 5`,
+# which is a parse error — the request was accepted and the user got a
+# compiler diagnostic instead of a program. Reading the reserved list from
+# tokens.KEYWORDS rather than retyping it means a new keyword cannot leave
+# this pattern stale, the same reason operator/prompt.py reads it too.
+_NAME = rf"(?!(?:{'|'.join(sorted(KEYWORDS))})\b)[a-z_]\w*"
 
 
 # --- Intent registry ----------------------------------------------------
@@ -340,7 +377,7 @@ def _build_declare(m):
 
 
 _Intent(r"trace\s+(?P<v>.+)", _build_trace, "trace <value>")
-_Intent(r"store\s+(?P<v>.+)\s+as\s+(?P<name>[a-z_]\w*)", _build_declare, "store <value> as <name>")
+_Intent(rf"store\s+(?P<v>.+)\s+as\s+(?P<name>{_NAME})", _build_declare, "store <value> as <name>")
 
 
 # --- Loop intents ------------------------------------------------------------
@@ -374,16 +411,40 @@ def _loop(name: str, start, end_op: TokenType, end, step: int) -> Program:
     ])
 
 
+# Every accepted input must produce a program check() dry-runs as valid —
+# the same rule the list and string index bounds enforce. A loop is the one
+# intent whose cost is unbounded in the request: "count from 1 to 999999999"
+# renders fine, parses fine, and then dies on the dry run's step limit, so
+# the user gets a raw "exceeded the step limit" diagnostic instead of either
+# a program or a hint. Bounding the span here turns that into an honest miss.
+#
+# The ceiling is expressed in ITERATIONS, not steps. Each one costs a trace
+# plus an increment, so the dry run's budget (operator/validate's
+# DRY_RUN_MAX_STEPS, 20_000 at the time of writing) is spent at roughly three
+# statements per iteration. 5_000 leaves headroom for that ratio to change
+# without this constant silently becoming wrong. It is deliberately NOT
+# imported from validate: scribe may not import operator (SC-5), so the
+# coupling is a documented number plus the test that pins it.
+_MAX_LOOP_ITERATIONS = 5_000
+
+
+def _bounded_loop(m, end_op: TokenType, step: int):
+    a, b = int(m.group("a")), int(m.group("b"))
+    if abs(b - a) + 1 > _MAX_LOOP_ITERATIONS:
+        return ScribeMiss(
+            f"that loop runs {abs(b - a) + 1} times, past the "
+            f"{_MAX_LOOP_ITERATIONS} a dry run will check",
+            closest="count from 1 to 10",
+        )
+    return _loop("i", _num_or_name(m.group("a")), end_op, _num_or_name(m.group("b")), step)
+
+
 def _build_count_up(m):
-    start = _num_or_name(m.group("a"))
-    end = _num_or_name(m.group("b"))
-    return _loop("i", start, TokenType.LTE, end, 1)
+    return _bounded_loop(m, TokenType.LTE, 1)
 
 
 def _build_count_down(m):
-    start = _num_or_name(m.group("a"))
-    end = _num_or_name(m.group("b"))
-    return _loop("i", start, TokenType.GTE, end, -1)
+    return _bounded_loop(m, TokenType.GTE, -1)
 
 
 _Intent(r"count\s+down\s+from\s+(?P<a>-?\d+)\s+to\s+(?P<b>-?\d+)", _build_count_down, "count down from <a> to <b>")
@@ -446,11 +507,11 @@ _Intent(
     "make a list of <values>",
 )
 _Intent(
-    rf"get\s+element\s+(?P<i>[0-{_INDEX_MAX}])\s+of\s+(?P<name>[a-z_]\w*)",
+    rf"get\s+element\s+(?P<i>[0-{_INDEX_MAX}])\s+of\s+(?P<name>{_NAME})",
     _build_get_element,
     "get element <i> of <list>",
 )
-_Intent(r"length\s+of\s+(?P<name>[a-z_]\w*)", _build_length, "length of <list>")
+_Intent(rf"length\s+of\s+(?P<name>{_NAME})", _build_length, "length of <list>")
 
 
 # --- String intents -----------------------------------------------------------
@@ -487,7 +548,7 @@ def _build_get_char(m):
 
 
 _Intent(r"make\s+a\s+string\s+(?P<v>\w+)", _build_string, "make a string <word>")
-_Intent(rf"get\s+character\s+(?P<i>[0-{_CHAR_MAX}])\s+of\s+(?P<name>[a-z_]\w*)", _build_get_char, "get character <i> of <name>")
+_Intent(rf"get\s+character\s+(?P<i>[0-{_CHAR_MAX}])\s+of\s+(?P<name>{_NAME})", _build_get_char, "get character <i> of <name>")
 
 
 # --- Function intents -----------------------------------------------------------
