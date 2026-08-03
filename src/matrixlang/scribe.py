@@ -465,3 +465,34 @@ def _build_get_char(m):
 
 _Intent(r"make\s+a\s+string\s+(?P<v>\w+)", _build_string, "make a string <word>")
 _Intent(rf"get\s+character\s+(?P<i>[0-{_CHAR_MAX}])\s+of\s+(?P<name>[a-z_]\w*)", _build_get_char, "get character <i> of <name>")
+
+
+# --- Function intents -----------------------------------------------------------
+
+
+def _build_double_fn(m):
+    return Program(statements=[
+        FunctionDef(
+            name="double",
+            params=["n"],
+            body=[Return(value=Binary(left=Name(ident="n"), op=TokenType.STAR, right=NumberLiteral(value=2)))],
+        ),
+    ])
+
+
+def _build_adder_factory(m):
+    inner = FunctionDef(
+        name="add",
+        params=["m"],
+        body=[Return(value=Binary(left=Name(ident="n"), op=TokenType.PLUS, right=Name(ident="m")))],
+    )
+    outer = FunctionDef(
+        name="adder",
+        params=["n"],
+        body=[inner, Return(value=Name(ident="add"))],
+    )
+    return Program(statements=[outer])
+
+
+_Intent(r"define\s+an?\s+adder\s+factory", _build_adder_factory, "define an adder factory")
+_Intent(r"define\s+a\s+function\s+that\s+doubles", _build_double_fn, "define a function that doubles")

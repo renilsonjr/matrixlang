@@ -375,3 +375,30 @@ def test_string_intents_pass_check_gate():
         result = scribe(request)
         assert isinstance(result, ScribeProgram)
         assert isinstance(check(result.source), Valid)
+
+
+from matrixlang.nodes import FunctionDef, Return, Call, Declare, Trace
+
+
+def test_define_a_double_function():
+    result = scribe("define a function that doubles")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    fn = tree.statements[0]
+    assert isinstance(fn, FunctionDef)
+    assert fn.name == "double"
+    assert fn.params == ["n"]
+    assert isinstance(fn.body[0], Return)
+    from matrixlang.nodes import Binary
+    assert isinstance(fn.body[0].value, Binary)
+    assert fn.body[0].value.op is TokenType.STAR
+
+
+def test_adder_factory_returns_a_function():
+    result = scribe("define an adder factory")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    outer = tree.statements[0]
+    assert isinstance(outer, FunctionDef)
+    assert isinstance(outer.body[0], FunctionDef)  # inner agent
+    assert isinstance(outer.body[1], Return)        # jackout inner
