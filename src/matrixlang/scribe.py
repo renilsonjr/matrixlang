@@ -108,12 +108,17 @@ _WORD = {word: re.compile(rf"\b{word}\b") for word in _SYNONYMS}
 
 
 def _closest(text: str) -> str | None:
-    """A suggestion for an unmatched request, from the known intents."""
+    """A suggestion for an unmatched request, from the known intents.
+
+    The first hint whose word appears in the request wins; otherwise the
+    first registered hint stands in, so a miss always has a concrete
+    pattern to offer ("make soup" → "add <a> and <b>", say).
+    """
     for intent in INTENTS:
         # Reuse the catalogue's own descriptions as hints.
         if intent.hint and any(word in text for word in intent.hint.split()):
             return intent.hint
-    return None
+    return INTENTS[0].hint if INTENTS else None
 
 
 # --- Intent registry ----------------------------------------------------
@@ -241,3 +246,35 @@ _Intent(
     _build_compare,
     "is <a> greater than <b>",
 )
+
+
+# --- Trace and declare intents -------------------------------------------
+
+
+def _value(token: str) -> Expr:
+    """A value: a number literal, or a string literal (quoted or bare).
+
+    A bare word is a string literal, not a Name — "trace hello" outputs
+    the string "hello". Names are reserved for explicit "store X as Y"
+    bindings and arithmetic operands (via _num_or_name).
+    """
+    token = token.strip()
+    if token.startswith('"') and token.endswith('"'):
+        return StringLiteral(value=token[1:-1])
+    if token.lstrip("-").isdigit():
+        return _num_or_name(token)
+    return StringLiteral(value=token)
+
+
+def _build_trace(m):
+    return Program(statements=[Trace(value=_value(m.group("v")))])
+
+
+def _build_declare(m):
+    return Program(statements=[
+        Declare(name=m.group("name"), value=_value(m.group("v"))),
+    ])
+
+
+_Intent(r"trace\s+(?P<v>.+)", _build_trace, "trace <value>")
+_Intent(r"store\s+(?P<v>.+)\s+as\s+(?P<name>[a-z_]\w*)", _build_declare, "store <value> as <name>")

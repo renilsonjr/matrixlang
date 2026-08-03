@@ -136,3 +136,43 @@ def test_comparison_less_than_or_equal():
     stmt = _binary_of("is 3 less than or equal to 4")
     from matrixlang.nodes import Binary
     assert stmt.value.op is TokenType.LTE
+
+
+from matrixlang.lexer import lex
+from matrixlang.nodes import Declare, Name, NumberLiteral, StringLiteral, Trace
+from matrixlang.parser import parse
+
+
+def test_trace_a_string_literal():
+    result = scribe("trace hello")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, Trace)
+    assert isinstance(stmt.value, StringLiteral)
+    assert stmt.value.value == "hello"
+
+
+def test_trace_a_quoted_string():
+    result = scribe('trace "wake up"')
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0].value, StringLiteral)
+
+
+def test_trace_a_number():
+    result = scribe("trace 42")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0].value, NumberLiteral)
+
+
+def test_declare_and_trace_a_name():
+    # "store as total" binds a name, then traces it.
+    result = scribe("store 5 as total")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, Declare)
+    assert stmt.name == "total"
+    assert stmt.value.value == 5
