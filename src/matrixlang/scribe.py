@@ -61,6 +61,16 @@ def scribe(request: str) -> ScribeResult:
         return ScribeMiss("no pattern matched this request", closest=_closest(text))
 
     intent, match = best
+    if _CONDITIONAL_PREFIX.match(text) and not intent.conditional:
+        # The request opens with a conditional prefix but the conditional
+        # regexes did not win — longest-match-wins fell through to the bare
+        # `trace <value>` intent, which always matches. Silently returning
+        # `trace "bigger"` drops the condition and runs unconditionally, so
+        # this is a miss, not a check()-valid-but-wrong program.
+        return ScribeMiss(
+            "conditional comparisons need numbers, like 'if 5 is greater than 3'",
+            closest=_closest(text),
+        )
     program = intent.build(match)
     return ScribeProgram(program=program, source=render_ascii(program))
 
@@ -122,6 +132,11 @@ def _closest(text: str) -> str | None:
     return INTENTS[0].hint if INTENTS else None
 
 
+# A request that opens with a conditional prefix (`if` / `if not`) but whose
+# condition did not match must be a miss, never a bare unconditional trace.
+_CONDITIONAL_PREFIX = re.compile(r"^if(?: not)?\b")
+
+
 # --- Intent registry ----------------------------------------------------
 
 INTENTS: list["_Intent"] = []
@@ -131,13 +146,16 @@ class _Intent:
     """One pattern: a regex, a builder, and a human hint.
 
     Registration order carries no meaning — `scribe()` picks the widest
-    match, not the first. Intents are free to overlap.
+    match, not the first. Intents are free to overlap. A conditional
+    intent marks itself so `scribe()` can turn a request that opens with
+    `if`/`if not` but matches nothing conditional into a miss.
     """
 
-    def __init__(self, regex: str, build, hint: str):
+    def __init__(self, regex: str, build, hint: str, conditional: bool = False):
         self.regex = re.compile(regex)
         self.build = build
         self.hint = hint
+        self.conditional = conditional
         INTENTS.append(self)
 
 
@@ -272,6 +290,7 @@ _Intent(
     r"\s+(?P<b>-?\d+)\s+trace\s+(?P<action>.+)",
     _build_if,
     "if <a> is greater than <b> trace <value>",
+    conditional=True,
 )
 
 
@@ -288,6 +307,7 @@ _Intent(
     r"\s+(?P<b>-?\d+)\s+trace\s+(?P<action>.+)",
     _build_if_not,
     "if not <a> is greater than <b> trace <value>",
+    conditional=True,
 )
 
 

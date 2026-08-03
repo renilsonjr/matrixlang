@@ -322,16 +322,48 @@ def test_if_not_greater_than_or_equal_to_traces():
 def test_if_word_operand_is_a_miss():
     # A word operand could never resolve — no such name is declared — so the
     # conditional must not build `redpill five > three` (check() rejects it).
-    # Longest-match-wins degrades it to a bare, valid `trace "bigger"` instead.
-    from matrixlang.operator.validate import Valid, check
+    # Nor may it degrade to a bare unconditional `trace "bigger"`: a request
+    # that opens with a conditional prefix is a miss, never a silent trace.
     result = scribe("if five is greater than three trace bigger")
-    assert isinstance(check(result.source), Valid)
+    assert isinstance(result, ScribeMiss)
+    assert result.reason
 
 
 def test_if_not_word_operand_is_a_miss():
-    from matrixlang.operator.validate import Valid, check
+    # Same guard for the negated form: unmatched `if not ...` is a miss, not
+    # a silent unconditional `trace "smaller"`.
     result = scribe("if not five is less than three trace smaller")
-    assert isinstance(check(result.source), Valid)
+    assert isinstance(result, ScribeMiss)
+    assert result.reason
+
+
+def test_if_numeric_condition_still_builds_if():
+    # The guard only fires when the conditional regexes failed. A numeric
+    # condition still produces the real `If` program.
+    result = scribe("if 5 is greater than 3 trace bigger")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0], If)
+    from matrixlang.nodes import Binary
+    assert isinstance(tree.statements[0].condition, Binary)
+
+
+def test_if_not_numeric_condition_still_builds_if():
+    result = scribe("if not 3 is less than 4 trace smaller")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, If)
+    assert isinstance(stmt.condition, Unary)
+    assert stmt.condition.op is TokenType.UNPLUG
+
+
+def test_bare_trace_still_works():
+    # The guard must not fire for a plain trace request — no `if` prefix.
+    result = scribe("trace x")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0], Trace)
 
 
 from matrixlang.nodes import Declare, Index, ListLiteral, NumberLiteral, Trace, Unary
