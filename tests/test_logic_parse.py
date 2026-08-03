@@ -185,6 +185,7 @@ def test_both_are_left_associative():
         "construct b = a fork c\n",
         "construct b = a fork b splice c\n",
         "construct b = (a fork b) splice c\n",
+        "construct b = a splice (c fork d)\n",
         "construct b = unplug a splice c\n",
         "construct b = unplug (a fork c)\n",
         "construct b = n < 3 splice m > 1\n",

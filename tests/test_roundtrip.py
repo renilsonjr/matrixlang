@@ -259,13 +259,19 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     unplug_over_binary = False
     fork_over_splice = False
     logical_over_comparison = False
+    splice_over_fork = False
+    unplug_under_eq = False
+    unplug_over_splice = False
 
     def walk_expr(expr):
         nonlocal splice, fork, unplug
         nonlocal unplug_over_binary, fork_over_splice, logical_over_comparison
+        nonlocal splice_over_fork, unplug_under_eq, unplug_over_splice
         if isinstance(expr, Binary):
             if expr.op is TokenType.SPLICE:
                 splice = True
+                if isinstance(expr.right, Binary) and expr.right.op is TokenType.FORK:
+                    splice_over_fork = True
             if expr.op is TokenType.FORK:
                 fork = True
                 if isinstance(expr.right, Binary) and expr.right.op is TokenType.SPLICE:
@@ -281,6 +287,10 @@ def test_the_generator_produces_the_stage_9_shapes_too():
                         TokenType.GTE,
                     ):
                         logical_over_comparison = True
+            if expr.op in (TokenType.EQ, TokenType.NEQ):
+                for side in (expr.left, expr.right):
+                    if isinstance(side, Unary) and side.op is TokenType.UNPLUG:
+                        unplug_under_eq = True
             walk_expr(expr.left)
             walk_expr(expr.right)
         elif isinstance(expr, Unary):
@@ -288,6 +298,8 @@ def test_the_generator_produces_the_stage_9_shapes_too():
                 unplug = True
                 if isinstance(expr.operand, Binary):
                     unplug_over_binary = True
+                if isinstance(expr.operand, Binary) and expr.operand.op is TokenType.SPLICE:
+                    unplug_over_splice = True
             walk_expr(expr.operand)
         elif isinstance(expr, ListLiteral):
             for element in expr.elements:
@@ -320,3 +332,6 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     assert unplug_over_binary, "no `unplug (a == b)` shape in 300 seeds"
     assert fork_over_splice, "no `a fork (b splice c)` shape in 300 seeds"
     assert logical_over_comparison, "no logical-over-comparison shape in 300 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 300 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 300 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 300 seeds"
