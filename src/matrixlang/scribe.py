@@ -384,6 +384,14 @@ def _build_list(m):
 # runnable; _DEMO_LIST is the stand-in the request did not supply.
 _DEMO_LIST = [10, 20, 30]
 
+# Every accepted input must produce a program check() dry-runs as valid.
+# The demo list fixes the list at len(_DEMO_LIST) elements, so an index at
+# or past that length dies at runtime (`index N is past the end of a list`).
+# The get-element regex below bounds its `i` group to this range so an
+# out-of-bounds request is a ScribeMiss instead of a check()-invalid
+# program. Single-digit assumption is safe for a 3-element demo list.
+_INDEX_MAX = len(_DEMO_LIST) - 1
+
 
 def _demo_list(name: str) -> Declare:
     return Declare(
@@ -415,7 +423,7 @@ _Intent(
     "make a list of <values>",
 )
 _Intent(
-    r"get\s+element\s+(?P<i>\d+)\s+of\s+(?P<name>[a-z_]\w*)",
+    rf"get\s+element\s+(?P<i>[0-{_INDEX_MAX}])\s+of\s+(?P<name>[a-z_]\w*)",
     _build_get_element,
     "get element <i> of <list>",
 )

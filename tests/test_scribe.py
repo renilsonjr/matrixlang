@@ -297,11 +297,25 @@ def test_get_element_rejects_negative_index():
     assert isinstance(result, ScribeMiss)
 
 
+def test_get_element_index_bound_matches_demo_list():
+    # The demo list is fixed at 3 elements, so only indices 0-2 survive
+    # the check() dry-run. An index at or past the length must be a miss —
+    # never a program check() would reject at runtime.
+    for i in range(3):
+        result = scribe(f"get element {i} of xs")
+        assert isinstance(result, ScribeProgram)
+        assert isinstance(check(result.source), Valid)
+    for i in (3, 5, 100):
+        result = scribe(f"get element {i} of xs")
+        assert isinstance(result, ScribeMiss)
+
+
 def test_list_intents_pass_check_gate():
     for request in [
         "make a list of 1 2 3",
         "make a list of -1 2 3",
         "get element 0 of xs",
+        "get element 2 of xs",
         "length of xs",
     ]:
         result = scribe(request)
