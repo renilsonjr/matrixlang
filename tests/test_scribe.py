@@ -346,3 +346,32 @@ def test_get_character():
     assert isinstance(stmt, Trace)
     assert isinstance(stmt.value, Index)
     assert stmt.value.target.ident == "name"
+
+
+def test_get_character_rejects_negative_index():
+    result = scribe("get character -1 of name")
+    assert isinstance(result, ScribeMiss)
+
+
+def test_get_character_index_bound_matches_demo_string():
+    # The demo string is fixed at 3 characters, so only indices 0-2 survive
+    # the check() dry-run. An index at or past the length must be a miss —
+    # never a program check() would reject at runtime.
+    for i in range(3):
+        result = scribe(f"get character {i} of name")
+        assert isinstance(result, ScribeProgram)
+        assert isinstance(check(result.source), Valid)
+    for i in (3, 5, 100):
+        result = scribe(f"get character {i} of name")
+        assert isinstance(result, ScribeMiss)
+
+
+def test_string_intents_pass_check_gate():
+    for request in [
+        "make a string hello",
+        "get character 0 of name",
+        "get character 2 of name",
+    ]:
+        result = scribe(request)
+        assert isinstance(result, ScribeProgram)
+        assert isinstance(check(result.source), Valid)

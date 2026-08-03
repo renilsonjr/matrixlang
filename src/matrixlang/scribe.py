@@ -439,15 +439,29 @@ def _build_string(m):
     ])
 
 
+# A Scribe program is the whole program, so an intent that reads a name must
+# also declare it. The demo string is the stand-in the request did not supply.
+_DEMO_STRING = "neo"
+
+# Every accepted input must produce a program check() dry-runs as valid.
+# The demo string fixes the string at len(_DEMO_STRING) characters, so an
+# index at or past that length dies at runtime (`index N is past the end of
+# a string of length 3`) and a negative index is rejected outright. The
+# get-character regex below bounds its `i` group to this range so an
+# out-of-bounds request is a ScribeMiss instead of a check()-invalid
+# program. Single-digit assumption is safe for a 3-character demo string.
+_CHAR_MAX = len(_DEMO_STRING) - 1
+
+
 def _build_get_char(m):
     # Same rule as the list intents: declare what you read, or check()
     # rejects the program for naming an undeclared variable.
     name = m.group("name")
     return Program(statements=[
-        Declare(name=name, value=StringLiteral(value="neo")),
+        Declare(name=name, value=StringLiteral(value=_DEMO_STRING)),
         Trace(value=Index(target=Name(ident=name), index=_num_or_name(m.group("i")))),
     ])
 
 
 _Intent(r"make\s+a\s+string\s+(?P<v>\w+)", _build_string, "make a string <word>")
-_Intent(r"get\s+character\s+(?P<i>-?\d+)\s+of\s+(?P<name>[a-z_]\w*)", _build_get_char, "get character <i> of <name>")
+_Intent(rf"get\s+character\s+(?P<i>[0-{_CHAR_MAX}])\s+of\s+(?P<name>[a-z_]\w*)", _build_get_char, "get character <i> of <name>")
