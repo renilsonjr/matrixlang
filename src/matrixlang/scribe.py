@@ -278,3 +278,50 @@ def _build_declare(m):
 
 _Intent(r"trace\s+(?P<v>.+)", _build_trace, "trace <value>")
 _Intent(r"store\s+(?P<v>.+)\s+as\s+(?P<name>[a-z_]\w*)", _build_declare, "store <value> as <name>")
+
+
+# --- Loop intents ------------------------------------------------------------
+
+
+def _counter_step(name: str, step: int) -> Assign:
+    """The loop's increment: `i = i + 1` up, `i = i - 1` down.
+
+    Negative steps use the MINUS op with a positive literal — render.py
+    keeps NumberLiteral non-negative (§6.2), so `-1` must never be a
+    literal value.
+    """
+    op = TokenType.MINUS if step < 0 else TokenType.PLUS
+    return Assign(
+        name=name,
+        value=Binary(
+            left=Name(ident=name),
+            op=op,
+            right=NumberLiteral(value=abs(step)),
+        ),
+    )
+
+
+def _loop(name: str, start, end_op: TokenType, end, step: int) -> Program:
+    return Program(statements=[
+        Declare(name=name, value=start),
+        While(
+            condition=Binary(left=Name(ident=name), op=end_op, right=end),
+            body=[Trace(value=Name(ident=name)), _counter_step(name, step)],
+        ),
+    ])
+
+
+def _build_count_up(m):
+    start = _num_or_name(m.group("a"))
+    end = _num_or_name(m.group("b"))
+    return _loop("i", start, TokenType.LTE, end, 1)
+
+
+def _build_count_down(m):
+    start = _num_or_name(m.group("a"))
+    end = _num_or_name(m.group("b"))
+    return _loop("i", start, TokenType.GTE, end, -1)
+
+
+_Intent(r"count\s+down\s+from\s+(?P<a>-?\d+)\s+to\s+(?P<b>-?\d+)", _build_count_down, "count down from <a> to <b>")
+_Intent(r"count\s+from\s+(?P<a>-?\d+)\s+to\s+(?P<b>-?\d+)", _build_count_up, "count from <a> to <b>")

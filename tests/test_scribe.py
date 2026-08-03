@@ -176,3 +176,33 @@ def test_declare_and_trace_a_name():
     assert isinstance(stmt, Declare)
     assert stmt.name == "total"
     assert stmt.value.value == 5
+
+
+from matrixlang.nodes import Assign, Declare, Name, NumberLiteral, Trace, While
+
+
+def test_count_from_one_to_ten():
+    result = scribe("count from 1 to 10")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0], Declare)  # i = 1
+    loop = tree.statements[1]
+    assert isinstance(loop, While)
+    from matrixlang.nodes import Binary
+    assert loop.condition.left.ident == "i"
+    assert loop.condition.op is TokenType.LTE
+    assert loop.condition.right.value == 10
+    assert isinstance(loop.body[0], Trace)
+    assert isinstance(loop.body[1], Assign)
+    assert loop.body[1].name == "i"
+
+
+def test_count_down():
+    result = scribe("count down from 5 to 1")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    loop = tree.statements[1]
+    assert isinstance(loop, While)
+    from matrixlang.nodes import Binary
+    assert loop.condition.op is TokenType.GTE
+    assert loop.body[1].value.right.value == 1  # i = i - 1
