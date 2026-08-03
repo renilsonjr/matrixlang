@@ -325,6 +325,14 @@ class Interpreter:
             operand = self._value_of(expr.operand, expr)
             if expr.op is TokenType.UNPLUG:
                 if not is_bool(operand):
+                    # Reports the OPERATOR's position (expr.column), unlike
+                    # _require_bool below which reports the OPERAND's
+                    # (node.column) for splice/fork. Both are defensible —
+                    # this matches `length`, unplug's fellow word-unary,
+                    # while `-` and _require_bool point at the operand —
+                    # but the two operators shipped this stage disagree,
+                    # so it is worth saying so rather than leaving it to
+                    # look like an oversight.
                     raise RuntimeErrorML(
                         f"'unplug' takes a boolean, got {type_name(operand)}",
                         expr.line,
