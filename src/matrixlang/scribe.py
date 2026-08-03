@@ -365,3 +365,58 @@ def _build_count_down(m):
 
 _Intent(r"count\s+down\s+from\s+(?P<a>-?\d+)\s+to\s+(?P<b>-?\d+)", _build_count_down, "count down from <a> to <b>")
 _Intent(r"count\s+from\s+(?P<a>-?\d+)\s+to\s+(?P<b>-?\d+)", _build_count_up, "count from <a> to <b>")
+
+
+# --- List intents ------------------------------------------------------------
+
+
+def _build_list(m):
+    elems = [_num_or_name(t) for t in m.group("elems").split()]
+    return Program(statements=[
+        Declare(name="xs", value=ListLiteral(elements=elems)),
+    ])
+
+
+# A Scribe program is the whole program, so an intent that reads `xs` must
+# also declare it. `trace xs[0]` alone parses fine and then dies at runtime
+# with "'xs' is not declared" — which means check() rejects it and the user
+# gets an error instead of a program. The declaration is what makes these
+# runnable; _DEMO_LIST is the stand-in the request did not supply.
+_DEMO_LIST = [10, 20, 30]
+
+
+def _demo_list(name: str) -> Declare:
+    return Declare(
+        name=name,
+        value=ListLiteral(elements=[NumberLiteral(value=v) for v in _DEMO_LIST]),
+    )
+
+
+def _build_get_element(m):
+    name = m.group("name")
+    index = _num_or_name(m.group("i"))
+    return Program(statements=[
+        _demo_list(name),
+        Trace(value=Index(target=Name(ident=name), index=index)),
+    ])
+
+
+def _build_length(m):
+    name = m.group("name")
+    return Program(statements=[
+        _demo_list(name),
+        Trace(value=Unary(op=TokenType.LENGTH, operand=Name(ident=name))),
+    ])
+
+
+_Intent(
+    r"make\s+a\s+list\s+of\s+(?P<elems>(?:-?\d+|\w+)(?:\s+(?:-?\d+|\w+))*)",
+    _build_list,
+    "make a list of <values>",
+)
+_Intent(
+    r"get\s+element\s+(?P<i>-?\d+)\s+of\s+(?P<name>[a-z_]\w*)",
+    _build_get_element,
+    "get element <i> of <list>",
+)
+_Intent(r"length\s+of\s+(?P<name>[a-z_]\w*)", _build_length, "length of <list>")

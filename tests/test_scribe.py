@@ -232,3 +232,41 @@ def test_if_not_unplug():
     assert isinstance(stmt, If)
     assert isinstance(stmt.condition, Unary)
     assert stmt.condition.op is TokenType.UNPLUG
+
+
+from matrixlang.nodes import Declare, Index, ListLiteral, NumberLiteral, Trace, Unary
+
+
+def test_make_a_list():
+    result = scribe("make a list of 1 2 3")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    stmt = tree.statements[0]
+    assert isinstance(stmt, Declare)
+    assert stmt.name == "xs"
+    assert isinstance(stmt.value, ListLiteral)
+    assert [e.value for e in stmt.value.elements] == [1, 2, 3]
+
+
+def test_get_element():
+    result = scribe("get element 0 of xs")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    # The list is declared first — a program that only reads `xs` is
+    # rejected by check() for naming an undeclared variable.
+    assert isinstance(tree.statements[0], Declare)
+    stmt = tree.statements[1]
+    assert isinstance(stmt, Trace)
+    assert isinstance(stmt.value, Index)
+    assert stmt.value.index.value == 0
+
+
+def test_length_of_list():
+    result = scribe("length of xs")
+    assert isinstance(result, ScribeProgram)
+    tree = parse(lex(result.source))
+    assert isinstance(tree.statements[0], Declare)
+    stmt = tree.statements[1]
+    assert isinstance(stmt, Trace)
+    assert isinstance(stmt.value, Unary)
+    assert stmt.value.op is TokenType.LENGTH
