@@ -2,6 +2,7 @@
 name = "matrixlang"
 version = "0.6.0"
 description = "A programming language whose output is the Matrix cascade."
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = []
 
