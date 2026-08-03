@@ -18,7 +18,12 @@ fail() {
 
 # --- Preferred: gitleaks on the staged tree ---------------------------------
 if command -v gitleaks >/dev/null 2>&1; then
-  if ! gitleaks git --staged -q 2>/dev/null; then
+  # --no-banner only: `-q`/`--quiet` does not exist on `gitleaks git` (8.x)
+  # and was silently swallowed by the stderr redirect below, so every
+  # commit failed with "found a possible secret" regardless of content
+  # until this was noticed. Not redirecting stderr now is deliberate: a
+  # future CLI-compatibility break should say so, not read as a leak.
+  if ! gitleaks git --staged --no-banner; then
     fail "gitleaks found a possible secret in your staged changes."
   fi
   exit 0
