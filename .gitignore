@@ -14,3 +14,12 @@ matrixlang.features/
 # macOS Finder droppings. Never useful, and once committed they are in
 # history forever and show up in every diff.
 .DS_Store
+
+# A contributor running Operator locally may drop ANTHROPIC_API_KEY in a
+# .env file rather than exporting it — the README shows export, but .env
+# is the more common habit. Nothing reads one today (the SDK takes the
+# key from the real environment), so this is a guard against a future
+# mistake, not a fix for a current one.
+.env
+.env.*
+!.env.example
