@@ -6,7 +6,13 @@ gate; scribe only produces. The full language surface is covered here,
 pattern by pattern.
 """
 
-from matrixlang.scribe import ScribeMiss, ScribeProgram, scribe
+from matrixlang.scribe import ScribeMiss, ScribeProgram, normalize, scribe
+
+
+def test_normalize_collapses_whitespace_but_never_inside_quotes():
+    assert normalize('print  hello   world') == "trace hello world"
+    assert normalize('trace "Hello  World"') == 'trace "Hello  World"'
+    assert normalize('print "  padded  "') == 'trace "  padded  "'
 
 
 def test_an_empty_request_is_a_miss():

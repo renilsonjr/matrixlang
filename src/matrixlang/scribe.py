@@ -89,8 +89,9 @@ def normalize(request: str) -> str:
         part = part.lower()
         for synonym, canonical in _SYNONYMS.items():
             part = _WORD[synonym].sub(canonical, part)
+        part = re.sub(r"\s+", " ", part)
         parts[i] = part
-    return " ".join('"'.join(parts).split())
+    return '"'.join(parts).strip()
 
 
 _SYNONYMS = {
