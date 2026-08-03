@@ -26,6 +26,7 @@ license covers this repository's code and nothing beyond it.
 | | |
 | --- | --- |
 | **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)** | Learn to read and write the language. Start here if you want to *use* it |
+| **[docs/NON_TECHNICAL_EXPLANATION.md](docs/NON_TECHNICAL_EXPLANATION.md)** | Explain the project to someone who does not know programming |
 | **[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md)** | How the implementation works — the pipeline, the module map, the problems that took real effort |
 | **[Clone it and run it](#clone-it-and-run-it)** | A handful of commands and a window full of falling glyphs |
 
