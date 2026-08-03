@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Reject commits that contain a secret. Runs before each commit.
+#
+# Uses gitleaks when installed; otherwise a tiny entropy-based grep that
+# catches the common shapes (Anthropic/OpenAI keys, AWS IDs, GitHub
+# tokens). The fallback is deliberately conservative: it never blocks the
+# README placeholder `sk-ant-...`.
+set -euo pipefail
+
+staged=$(git diff --cached --name-only -z)
+[ -n "$staged" ] || exit 0
+
+fail() {
+  echo "PRE-COMMIT: $1" >&2
+  echo "If this is a false positive, skip the hook: git commit --no-verify" >&2
+  exit 1
+}
+
+# --- Preferred: gitleaks on the staged tree ---------------------------------
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks git --staged -q 2>/dev/null; then
+    fail "gitleaks found a possible secret in your staged changes."
+  fi
+  exit 0
+fi
+
+# --- Fallback: entropy/pattern scan of staged file contents -----------------
+scan_file() {
+  local file="$1"
+  # sk-ant- prefix placeholder is expected and harmless.
+  while IFS= read -r line; do
+    if printf '%s' "$line" | grep -qEi 'sk-ant-[A-Za-z0-9_-]{12,}'; then
+      # The README teaches this exact string with "..."; allow it.
+      printf '%s' "$line" | grep -q 'sk-ant-\.\.\.' && continue
+      echo "  $file: 'sk-ant-...' looks like a real Anthropic key"
+      return 1
+    fi
+    if printf '%s' "$line" | grep -qE 'AKIA[0-9A-Z]{16}'; then
+      echo "  $file: possible AWS access key"
+      return 1
+    fi
+    if printf '%s' "$line" | grep -qE 'ghp_[A-Za-z0-9]{36}'; then
+      echo "  $file: possible GitHub token"
+      return 1
+    fi
+  done
+  return 0
+}
+
+status=0
+while IFS= read -r -d '' file; do
+  scan_file "$file" || status=1
+done < <(git diff --cached --name-only -z -- '*.py' '*.md' '*.json' '*.toml' '*.yml' '*.yaml' '*.sh' '*.js' '*.rain' '*.*env')
+if [ "$status" -ne 0 ]; then
+  fail "a possible secret is staged. Review and remove it, then commit again."
+fi
+exit 0
