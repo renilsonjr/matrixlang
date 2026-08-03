@@ -46,3 +46,72 @@ def test_scribe_never_touches_a_key():
         check=True,
     )
     assert out.stdout.strip() == "ScribeProgram"
+
+
+from matrixlang.scribe import ScribeProgram, scribe
+from matrixlang.tokens import TokenType
+
+
+def _binary_of(request):
+    result = scribe(request)
+    assert isinstance(result, ScribeProgram)
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+    tree = parse(lex(result.source))
+    assert tree.statements
+    return tree.statements[0]
+
+
+def test_add_two_numbers():
+    stmt = _binary_of("add 5 and 3")
+    from matrixlang.nodes import Trace
+    assert isinstance(stmt, Trace)
+    from matrixlang.nodes import Binary, NumberLiteral
+    assert isinstance(stmt.value, Binary)
+    assert stmt.value.op is TokenType.PLUS
+    assert stmt.value.left.value == 5
+    assert stmt.value.right.value == 3
+
+
+def test_subtract():
+    stmt = _binary_of("subtract 7 minus 2")
+    from matrixlang.nodes import Binary
+    assert stmt.value.op is TokenType.MINUS
+
+
+def test_multiply():
+    stmt = _binary_of("multiply 4 times 6")
+    from matrixlang.nodes import Binary
+    assert stmt.value.op is TokenType.STAR
+
+
+def test_divide_truncates_toward_zero():
+    stmt = _binary_of("divide 10 by 3")
+    from matrixlang.nodes import Binary
+    assert stmt.value.op is TokenType.SLASH
+
+
+def test_double():
+    stmt = _binary_of("double 4")
+    from matrixlang.nodes import Binary, NumberLiteral
+    assert stmt.value.op is TokenType.STAR
+    assert stmt.value.right.value == 2
+
+
+def test_half():
+    stmt = _binary_of("half of 9")
+    from matrixlang.nodes import Binary, NumberLiteral
+    assert stmt.value.op is TokenType.SLASH
+    assert stmt.value.right.value == 2
+
+
+def test_comparison_greater_than():
+    stmt = _binary_of("is 5 greater than 3")
+    from matrixlang.nodes import Binary
+    assert stmt.value.op is TokenType.GT
+
+
+def test_comparison_less_than_or_equal():
+    stmt = _binary_of("is 3 less than or equal to 4")
+    from matrixlang.nodes import Binary
+    assert stmt.value.op is TokenType.LTE

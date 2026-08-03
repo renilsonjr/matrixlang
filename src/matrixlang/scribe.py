@@ -133,3 +133,107 @@ class _Intent:
         self.build = build
         self.hint = hint
         INTENTS.append(self)
+
+
+# --- Arithmetic intents ---------------------------------------------------
+
+
+def _num_or_name(token: str) -> Expr:
+    """A captured token is a number literal or a name.
+
+    Negative numbers are a Unary MINUS over a positive literal — render.py
+    keeps NumberLiteral non-negative (§6.2), so `-5` is
+    `Unary(MINUS, NumberLiteral(5))`, never a literal -5. (Not `unplug`:
+    that is logical negation over a boolean, a different operator.)
+    """
+    token = token.strip()
+    if token.lstrip("-").isdigit():
+        value = int(token)
+        if value < 0:
+            return Unary(op=TokenType.MINUS, operand=NumberLiteral(value=-value))
+        return NumberLiteral(value=value)
+    return Name(ident=token)
+
+
+def _trace_binary(m, op: TokenType, left_g, right_g):
+    left = _num_or_name(m.group(left_g))
+    right = _num_or_name(m.group(right_g))
+    return Program(statements=[Trace(value=Binary(left=left, op=op, right=right))])
+
+
+def _build_add(m):
+    return _trace_binary(m, TokenType.PLUS, "a", "b")
+
+
+def _build_sub(m):
+    return _trace_binary(m, TokenType.MINUS, "a", "b")
+
+
+def _build_mul(m):
+    return _trace_binary(m, TokenType.STAR, "a", "b")
+
+
+def _build_div(m):
+    return _trace_binary(m, TokenType.SLASH, "a", "b")
+
+
+_Intent(
+    r"add\s+(?P<a>-?\d+|\w+)\s+and\s+(?P<b>-?\d+|\w+)",
+    _build_add,
+    "add <a> and <b>",
+)
+_Intent(
+    r"subtract\s+(?P<a>-?\d+|\w+)\s+(minus|from)\s+(?P<b>-?\d+|\w+)",
+    _build_sub,
+    "subtract <a> minus <b>",
+)
+_Intent(
+    r"multiply\s+(?P<a>-?\d+|\w+)\s+times\s+(?P<b>-?\d+|\w+)",
+    _build_mul,
+    "multiply <a> times <b>",
+)
+_Intent(
+    r"divide\s+(?P<a>-?\d+|\w+)\s+by\s+(?P<b>-?\d+|\w+)",
+    _build_div,
+    "divide <a> by <b>",
+)
+
+
+def _build_double(m):
+    a = _num_or_name(m.group("a"))
+    expr = Binary(left=a, op=TokenType.STAR, right=NumberLiteral(value=2))
+    return Program(statements=[Trace(value=expr)])
+
+
+def _build_half(m):
+    a = _num_or_name(m.group("a"))
+    expr = Binary(left=a, op=TokenType.SLASH, right=NumberLiteral(value=2))
+    return Program(statements=[Trace(value=expr)])
+
+
+_Intent(r"double\s+(?P<a>-?\d+|\w+)", _build_double, "double <a>")
+_Intent(r"half\s+of\s+(?P<a>-?\d+|\w+)", _build_half, "half of <a>")
+
+
+_COMPARE = {
+    "greater than": TokenType.GT,
+    "less than": TokenType.LT,
+    "greater than or equal to": TokenType.GTE,
+    "less than or equal to": TokenType.LTE,
+    "equal to": TokenType.EQ,
+}
+
+
+def _build_compare(m):
+    op = _COMPARE[m.group("op")]
+    left = _num_or_name(m.group("a"))
+    right = _num_or_name(m.group("b"))
+    return Program(statements=[Trace(value=Binary(left=left, op=op, right=right))])
+
+
+_Intent(
+    r"is\s+(?P<a>-?\d+|\w+)\s+(?P<op>greater than or equal to|less than or equal to|"
+    r"greater than|less than|equal to)\s+(?P<b>-?\d+|\w+)",
+    _build_compare,
+    "is <a> greater than <b>",
+)
