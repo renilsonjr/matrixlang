@@ -36,6 +36,9 @@ _ALLOWED: dict[str, set[str]] = {
     "lexer": {"errors", "glyphs", "tokens"},
     "parser": {"errors", "nodes", "tokens"},
     "render": {"glyphs", "nodes", "tokens"},
+    # The pure-contract half of the guard: scribe may reach nodes, render
+    # and tokens (for TokenType) and nothing else — no operator, no SDK.
+    "scribe": {"nodes", "render", "tokens"},
     "treeview": {"nodes", "tokens"},
     "cli": {
         "display", "errors", "events", "interpreter", "lexer", "parser",
