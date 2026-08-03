@@ -72,8 +72,9 @@ def normalize(request: str) -> str:
     """Collapse whitespace and map synonyms, leaving quoted text alone.
 
     "print hello world" and "show hello world" both become the canonical
-    phrasing the patterns look for. Written numbers stay as words; the
-    number patterns handle both.
+    phrasing the patterns look for. Number operands are digits only —
+    the patterns match `-?\\d+`, so a word operand ("add five and three")
+    is a miss rather than a program that names an undeclared variable.
 
     **Quoted spans are never rewritten.** They are the user's literal
     output, not phrasing to canonicalize — lowercasing or substituting
@@ -187,22 +188,22 @@ def _build_div(m):
 
 
 _Intent(
-    r"add\s+(?P<a>-?\d+|\w+)\s+and\s+(?P<b>-?\d+|\w+)",
+    r"add\s+(?P<a>-?\d+)\s+and\s+(?P<b>-?\d+)",
     _build_add,
     "add <a> and <b>",
 )
 _Intent(
-    r"subtract\s+(?P<a>-?\d+|\w+)\s+(?P<conn>minus|from)\s+(?P<b>-?\d+|\w+)",
+    r"subtract\s+(?P<a>-?\d+)\s+(?P<conn>minus|from)\s+(?P<b>-?\d+)",
     _build_sub,
     "subtract <a> minus <b>",
 )
 _Intent(
-    r"multiply\s+(?P<a>-?\d+|\w+)\s+times\s+(?P<b>-?\d+|\w+)",
+    r"multiply\s+(?P<a>-?\d+)\s+times\s+(?P<b>-?\d+)",
     _build_mul,
     "multiply <a> times <b>",
 )
 _Intent(
-    r"divide\s+(?P<a>-?\d+|\w+)\s+by\s+(?P<b>-?\d+|\w+)",
+    r"divide\s+(?P<a>-?\d+)\s+by\s+(?P<b>-?\d+)",
     _build_div,
     "divide <a> by <b>",
 )
@@ -220,8 +221,8 @@ def _build_half(m):
     return Program(statements=[Trace(value=expr)])
 
 
-_Intent(r"double\s+(?P<a>-?\d+|\w+)", _build_double, "double <a>")
-_Intent(r"half\s+of\s+(?P<a>-?\d+|\w+)", _build_half, "half of <a>")
+_Intent(r"double\s+(?P<a>-?\d+)", _build_double, "double <a>")
+_Intent(r"half\s+of\s+(?P<a>-?\d+)", _build_half, "half of <a>")
 
 
 _COMPARE = {
@@ -241,8 +242,8 @@ def _build_compare(m):
 
 
 _Intent(
-    r"is\s+(?P<a>-?\d+|\w+)\s+(?P<op>greater than or equal to|less than or equal to|"
-    r"greater than|less than|equal to)\s+(?P<b>-?\d+|\w+)",
+    r"is\s+(?P<a>-?\d+)\s+(?P<op>greater than or equal to|less than or equal to|"
+    r"greater than|less than|equal to)\s+(?P<b>-?\d+)",
     _build_compare,
     "is <a> greater than <b>",
 )

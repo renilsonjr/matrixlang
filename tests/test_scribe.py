@@ -117,6 +117,29 @@ def test_half():
     assert stmt.value.right.value == 2
 
 
+def test_add_rejects_word_operands():
+    # A Scribe program can never declare "five", so a word operand must be
+    # a miss — never a program check() rejects for 'five' is not declared.
+    result = scribe("add five and three")
+    assert isinstance(result, ScribeMiss)
+
+
+def test_double_rejects_word_operands():
+    result = scribe("double five")
+    assert isinstance(result, ScribeMiss)
+
+
+def test_compare_rejects_word_operands():
+    result = scribe("is five greater than three")
+    assert isinstance(result, ScribeMiss)
+
+
+def test_subtract_rejects_word_operands():
+    # A miss, never the wrong program `trace five - three`.
+    result = scribe("subtract five from three")
+    assert isinstance(result, ScribeMiss)
+
+
 def test_negative_operand_is_unary_minus_over_positive_literal():
     stmt = _binary_of("add -5 and 3")
     from matrixlang.nodes import Binary, NumberLiteral, Unary
