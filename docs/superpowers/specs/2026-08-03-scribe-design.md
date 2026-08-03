@@ -43,7 +43,7 @@ The purity gradient the Operator design established extends to Scribe.
 
 | Module | Responsibility | Imports |
 | --- | --- | --- |
-| `src/matrixlang/scribe.py` | Pattern matching + `nodes.*` AST construction. Pure. | `matrixlang.nodes`, `matrixlang.parser` (node types only) |
+| `src/matrixlang/scribe.py` | Pattern matching + `nodes.*` AST construction. Pure. | `matrixlang.nodes`, `matrixlang.render` |
 | `src/matrixlang/operator/validate.py` | **Reused unchanged.** Scribe output passes the same parse + bounded dry-run gate as Operator's. | existing |
 | `server/app.py` | `engine` field on `POST /api/chat`; dispatches scribe vs operator; turns `ScribeMiss` into a hint. | `matrixlang.scribe`, `matrixlang.operator` (lazy, only when selected) |
 | `web-ui/` | Mode toggle in the Operator panel: **Scribe (free)** / **Operator (AI)**. | none |
@@ -68,15 +68,23 @@ The pipeline:
 request text
   → normalize phrasing (synonyms: "print"/"show"/"display" → trace; written numbers → digits)
   → intent patterns, longest-match first
-      → matched → build nodes.* AST directly → validate.py check(source)
-          → Valid → return (program, source)
-          → Invalid → ScribeMiss (rare: AST is structured by construction)
+      → matched → build nodes.* AST directly
+          → render_ascii(program) → source text
+          → validate.py check(source)
+              → Valid → return (program, source)
+              → Invalid → ScribeMiss (rare: AST is structured by construction)
       → no match → ScribeMiss(reason, closest_pattern)
 ```
 
-**No string interpolation.** Each intent constructs the actual `nodes.*` tree. A generated
-program is a tree, never a formatted string, so the round-trip guarantee (parse a generated
-program → the AST Scribe built) holds by construction and is asserted in tests.
+`check()` takes a **string**, not a tree, so `render.render_ascii()` is the required step
+between the two — the same one Operator's output already goes through. This is why
+`scribe.py` imports `render`.
+
+**No string interpolation.** Each intent constructs the actual `nodes.*` tree, and the
+source text is rendered from that tree rather than formatted by hand. So the round-trip
+`parse(render_ascii(t)) == t` — already established and property-tested in
+`tests/test_roundtrip.py` — is what guarantees the program Scribe validates is the program
+Scribe built. Scribe inherits that guarantee; it does not need a second one.
 
 ### Intent catalogue (full current language)
 
