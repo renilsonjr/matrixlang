@@ -152,7 +152,7 @@ def _num_or_name(token: str) -> Expr:
     that is logical negation over a boolean, a different operator.)
     """
     token = token.strip()
-    if token.lstrip("-").isdigit():
+    if re.fullmatch(r"-?\d+", token):
         value = int(token)
         if value < 0:
             return Unary(op=TokenType.MINUS, operand=NumberLiteral(value=-value))
@@ -301,7 +301,7 @@ def _value(token: str) -> Expr:
     token = token.strip()
     if token.startswith('"') and token.endswith('"'):
         return StringLiteral(value=token[1:-1])
-    if token.lstrip("-").isdigit():
+    if re.fullmatch(r"-?\d+", token):
         return _num_or_name(token)
     return StringLiteral(value=token)
 

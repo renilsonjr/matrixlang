@@ -128,6 +128,26 @@ def test_negative_operand_is_unary_minus_over_positive_literal():
     assert left.operand.value == 5
 
 
+def test_multi_minus_values_never_raise_and_pass_check():
+    # Regression: "--5" crashed int() with a ValueError, violating scribe's
+    # never-raises contract. In value contexts it becomes a string literal
+    # the dry run accepts, instead of a crash that kills the request.
+    from matrixlang.lexer import lex
+    from matrixlang.operator.validate import Valid, check
+    from matrixlang.parser import parse
+
+    result = scribe("trace --5")
+    assert isinstance(result, ScribeProgram)
+    from matrixlang.nodes import StringLiteral
+    assert isinstance(parse(lex(result.source)).statements[0].value, StringLiteral)
+    assert isinstance(check(result.source), Valid)
+
+    for request in ["store --5 as total", "if 5 is greater than 3 trace --5"]:
+        result = scribe(request)
+        assert isinstance(result, ScribeProgram), request
+        assert isinstance(check(result.source), Valid), request
+
+
 def test_comparison_greater_than():
     stmt = _binary_of("is 5 greater than 3")
     from matrixlang.nodes import Binary
