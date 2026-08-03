@@ -12,6 +12,15 @@ Matrix-style glyphs, with a working interpreter, a REPL, and a test suite.
 
 Source files use the `.rain` extension.
 
+MatrixLang is an independent, non-commercial project made by a fan, for
+learning. It is not affiliated with, sponsored by, or endorsed by Warner
+Bros. Entertainment Inc. or any other rights holder connected to *The
+Matrix*. "The Matrix" and related marks belong to their respective owners;
+nothing here uses their trademarks, logos, footage, or the film's own glyph
+designs — the falling text is ordinary Unicode katakana, explained in
+[The glyphs](#the-glyphs) below. Code is [MIT licensed](LICENSE); that
+license covers this repository's code and nothing beyond it.
+
 **Three ways in, depending on what you want:**
 
 | | |
