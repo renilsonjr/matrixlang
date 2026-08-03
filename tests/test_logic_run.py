@@ -52,9 +52,13 @@ def test_unplug_requires_a_boolean():
 
 
 def test_unplug_carries_a_position():
+    # Measured directly from a real run: "trace unplug 1\n" places the
+    # 'u' of unplug at column 7 (t-r-a-c-e-space = 6 characters, then
+    # unplug starts). unplug reports the OPERATOR's position (expr.column
+    # in interpreter.py), not the operand's — see the comment in
+    # interpreter.py contrasting this with splice/fork.
     error = fails("trace unplug 1\n")
-    assert error.line == 1
-    assert error.column >= 1
+    assert (error.line, error.column) == (1, 7)
 
 
 # --- splice and fork ----------------------------------------------------
@@ -80,8 +84,15 @@ def test_they_compose_with_comparisons():
 
 
 def test_unplug_composes_with_them():
-    assert run("trace unplug true splice true\n") == "false\n"
-    assert run("trace unplug (true splice true)\n") == "false\n"
+    # With both operands true, (unplug true) splice true and
+    # unplug (true splice true) are BOTH false -- the pair could not
+    # distinguish the two groupings. With both false they disagree:
+    # (unplug false) splice false is true splice false = false, while
+    # unplug (false splice false) is unplug false = true. Only operands
+    # that make the groupings disagree can prove which one the
+    # unparenthesised form actually uses.
+    assert run("trace unplug false splice false\n") == "false\n"
+    assert run("trace unplug (false splice false)\n") == "true\n"
 
 
 # --- Short-circuit: the reason this stage exists ------------------------
@@ -188,6 +199,9 @@ def test_a_non_boolean_left_operand_is_always_an_error():
 
 
 def test_the_error_carries_a_position():
+    # Measured directly from a real run: "trace 1 splice true\n" places
+    # the failing operand '1' at column 7 (t-r-a-c-e-space = 6
+    # characters). splice/fork report the OPERAND's position
+    # (node.column in _require_bool), not the operator's.
     error = fails("trace 1 splice true\n")
-    assert error.line == 1
-    assert error.column >= 1
+    assert (error.line, error.column) == (1, 7)
