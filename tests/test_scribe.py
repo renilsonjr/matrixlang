@@ -270,3 +270,40 @@ def test_length_of_list():
     assert isinstance(stmt, Trace)
     assert isinstance(stmt.value, Unary)
     assert stmt.value.op is TokenType.LENGTH
+
+
+from matrixlang.operator.validate import Valid, check
+
+
+def test_make_a_list_rejects_word_elements():
+    # A word element could never resolve — the only declared name is the
+    # list's own `xs` — so such a request must not produce a program that
+    # check() would reject.
+    result = scribe("make a list of a b c")
+    assert isinstance(result, ScribeMiss)
+
+
+def test_make_a_list_rejects_trailing_undeclared_name():
+    # Same root cause: `xs` is the list's own name, not an element. The
+    # numbers still match; the trailing name is simply not part of the
+    # element list. Whatever the match produces must pass check().
+    result = scribe("make a list of 1 2 xs")
+    assert isinstance(result, ScribeProgram)
+    assert isinstance(check(result.source), Valid)
+
+
+def test_get_element_rejects_negative_index():
+    result = scribe("get element -1 of xs")
+    assert isinstance(result, ScribeMiss)
+
+
+def test_list_intents_pass_check_gate():
+    for request in [
+        "make a list of 1 2 3",
+        "make a list of -1 2 3",
+        "get element 0 of xs",
+        "length of xs",
+    ]:
+        result = scribe(request)
+        assert isinstance(result, ScribeProgram)
+        assert isinstance(check(result.source), Valid)

@@ -410,12 +410,12 @@ def _build_length(m):
 
 
 _Intent(
-    r"make\s+a\s+list\s+of\s+(?P<elems>(?:-?\d+|\w+)(?:\s+(?:-?\d+|\w+))*)",
+    r"make\s+a\s+list\s+of\s+(?P<elems>-?\d+(?:\s+-?\d+)*)",
     _build_list,
     "make a list of <values>",
 )
 _Intent(
-    r"get\s+element\s+(?P<i>-?\d+)\s+of\s+(?P<name>[a-z_]\w*)",
+    r"get\s+element\s+(?P<i>\d+)\s+of\s+(?P<name>[a-z_]\w*)",
     _build_get_element,
     "get element <i> of <list>",
 )
