@@ -2,7 +2,7 @@
 
 This is NOT the language's glyph face. The distinction matters:
 
-  glyphs.GLYPHS   the LANGUAGE's face. 38 slots, bijective, round-trips
+  glyphs.GLYPHS   the LANGUAGE's face. 41 slots, bijective, round-trips
                   through the lexer. Governed by D-03 and spec section 4.3.
   this module     a DISPLAY dictionary. Its output is never lexed, so it
                   owes nothing to D-03 and may reuse glyphs the language

@@ -145,7 +145,11 @@ primary     := NUMBER | STRING | "true" | "false" | IDENT | "(" expression ")"
 
 Precedence, loosest to tightest: equality → comparison → term → factor → unary → primary.
 This satisfies the parent spec's Stage 2 criterion — `2 + 3 * 4` yields 14, with `*` below
-`+` in the tree.
+`+` in the tree. (Stage 9 adds two further rungs and one word-unary not shown in this
+Stage 1 grammar: `fork` is loosest of all, `splice` sits directly tighter than `fork`, and
+`unplug` — despite being unary — binds looser than every binary operator except those two,
+sitting between `splice` and `equality` rather than at the `unary` rung; see `render.py`'s
+`_LEVEL` table for the current, authoritative numbering.)
 
 The shape is deliberately close to *Crafting Interpreters* Ch. 4–6 so the reference
 material lines up with the episodes rather than diverging from them.
@@ -247,7 +251,12 @@ associativity, or rendering silently changes meaning:
   `1 + (2 + 3)`, not `1 + 2 + 3`; likewise for `-` and `/`.
 - **R-PAREN-3 (unary operand):** parenthesize a binary operand of a unary —
   `Unary(-, Binary(2, *, 3))` naively renders `-2 * 3`, which changes the meaning; it
-  must emit `-(2 * 3)`.
+  must emit `-(2 * 3)`. (Stage 9 carve-out: this rule holds for `-` and `length`, whose
+  operand binds tighter than everything else in the unary's context. It does NOT hold
+  for `unplug`, which binds looser than comparison — `unplug n == 1` needs no parens
+  around `n == 1` to mean `unplug (n == 1)`. R-PAREN-3 as stated applies to `-` and
+  `length` only; `unplug`'s own operand precedence is documented where `_LEVEL` is
+  defined in `render.py`.)
 
 Each is a named requirement with its own directed test. The §4.3 property test only
 catches violations if the tree generator produces these shapes, so the generator must

@@ -454,8 +454,13 @@ This is the third stage in a row with a "the obvious edit is wrong and
 looks right" story at its center — Stage 7's list-equality delegating to
 Python's own `==` (§5.5) and Stage 8's string assignment falling through to
 a Python `TypeError` (§7) are the other two. In all three, the dangerous
-version passes its own truth-table tests and only a test built around an
-*observable side effect*, not a return value, catches it.
+version passes its own truth-table tests. What differs is how each was
+actually caught: Stage 7's leaked through a *return value* (`[1] ==
+[true]` silently returning `True`), and Stage 8's through a *Python
+exception class name* reaching the user. Only Stage 9's is silent on both
+channels — the return value is correct and nothing raises — so it alone
+needed a test built around an *observable side effect* on the unevaluated
+operand, rather than either of those, to be caught.
 
 ## 6. Operator, and the local web layer
 
