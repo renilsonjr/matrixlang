@@ -80,7 +80,7 @@ async function ask(request) {
 
   let reply;
   try {
-    reply = await post("/api/chat", { request });
+    reply = await post("/api/chat", { request, engine: el("engine").value });
   } catch (error) {
     say("operator", escape(String(error)));
     idle();
@@ -107,7 +107,17 @@ async function ask(request) {
     idle();
     run();
   } else {
-    say("operator", escape(reply.error || "no program"));
+    // Escape ONCE, at the end. Hints contain angle brackets ("add <a> and
+    // <b>"), so escaping the hint and then escaping the whole message again
+    // renders a literal "&lt;a&gt;" in the panel.
+    let message = reply.error || "no program";
+    if (reply.hint) {
+      message += ` — try: ${reply.hint}`;
+    }
+    if (reply.try_operator) {
+      message += " (or switch the engine to Operator)";
+    }
+    say("operator", escape(message));
     idle();
   }
 }
