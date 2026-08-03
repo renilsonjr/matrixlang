@@ -319,6 +319,21 @@ def test_if_not_greater_than_or_equal_to_traces():
     assert stmt.condition.operand.op is TokenType.GTE
 
 
+def test_if_word_operand_is_a_miss():
+    # A word operand could never resolve — no such name is declared — so the
+    # conditional must not build `redpill five > three` (check() rejects it).
+    # Longest-match-wins degrades it to a bare, valid `trace "bigger"` instead.
+    from matrixlang.operator.validate import Valid, check
+    result = scribe("if five is greater than three trace bigger")
+    assert isinstance(check(result.source), Valid)
+
+
+def test_if_not_word_operand_is_a_miss():
+    from matrixlang.operator.validate import Valid, check
+    result = scribe("if not five is less than three trace smaller")
+    assert isinstance(check(result.source), Valid)
+
+
 from matrixlang.nodes import Declare, Index, ListLiteral, NumberLiteral, Trace, Unary
 
 
