@@ -62,7 +62,9 @@ Rules that differ from most languages:
 - `construct` declares a name. Plain `=` assigns and requires the name to
   have been declared already. Re-declaring in the same scope is an error.
 - Conditions must be a boolean. `redpill 1` is an error, not a taken
-  branch. There is no truthiness.
+  branch. There is no truthiness. `redpill` may be followed by an
+  optional `bluepill` block, which runs when the condition is false —
+  MatrixLang's else.
 - Types are integer, boolean, string and list. No floats, no
   dictionaries, no null.
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one

@@ -4,8 +4,8 @@ Pure. No network, no SDK, no key. The whole point of separating this from
 `client.py` is that what the model is told can be tested.
 """
 
-from matrixlang.operator.prompt import build
-from matrixlang.operator.validate import Invalid, Stage
+from matrixlang.operator.prompt import _EXAMPLE, _RULES, build
+from matrixlang.operator.validate import Invalid, Stage, check
 from matrixlang.tokens import KEYWORDS
 from matrixlang.values import Function, type_name
 
@@ -14,14 +14,17 @@ def test_the_request_appears_in_the_prompt():
     assert "count down from three" in build("count down from three")
 
 
-def test_every_keyword_is_described():
-    # Read from KEYWORDS rather than retyped. A hardcoded list is how the
-    # deleted web/interpreter.js drifted from the language it claimed to
-    # implement, and a prompt that lies about the grammar is worse than
-    # one that is merely stale.
-    prompt = build("anything")
-    for keyword in KEYWORDS:
-        assert keyword in prompt
+def test_every_keyword_is_explained_or_demonstrated():
+    # NOT build(): build() always appends a derived "Keywords: ..." line
+    # from tokens.KEYWORDS, so any test that checks `keyword in build(...)`
+    # is satisfied by construction regardless of what _RULES or _EXAMPLE
+    # actually say. That is why the previous guard (test_every_keyword_is_
+    # described, now removed) stayed green when Stage 9 added three
+    # keywords with no rule or example covering them. Asserting against
+    # _RULES + _EXAMPLE directly is the only way this can go red.
+    body = _RULES + _EXAMPLE
+    missing = sorted(k for k in KEYWORDS if k not in body)
+    assert not missing, f"never explained or shown: {missing}"
 
 
 def test_every_type_name_is_mentioned():
@@ -45,23 +48,31 @@ def test_every_type_name_is_mentioned():
     )
 
 
-def test_the_stage_6_keywords_are_present_without_being_retyped():
-    prompt = build("anything")
-    assert "agent" in prompt
-    assert "jackout" in prompt
-
-
 def test_the_prompt_carries_a_worked_example():
-    prompt = build("anything")
-    assert "flatline" in prompt
-    assert "trace" in prompt
+    # Assert that _EXAMPLE's own text is embedded in build()'s output --
+    # not just that some keyword like "flatline" or "trace" occurs
+    # somewhere in it. Both of those are entries in KEYWORDS and would
+    # appear via build()'s derived "Keywords: ..." line even if the
+    # "A complete example:\n\n" + _EXAMPLE line were deleted from build()
+    # entirely, which is exactly the mutation this test exists to catch.
+    assert _EXAMPLE in build("anything")
+
+
+def test_the_worked_example_is_a_valid_program():
+    # _EXAMPLE is never parsed by anything else. A prompt that ships a
+    # broken example teaches the model to write broken programs.
+    result = check(_EXAMPLE + "\n")
+    assert not isinstance(result, Invalid), result
 
 
 def test_the_rules_a_model_gets_wrong_are_stated():
-    prompt = build("anything")
-    lowered = prompt.lower()
-    # Each of these is a real way MatrixLang differs from what a model
-    # will assume by default.
+    # Assert against _RULES directly, not build(): build()'s derived
+    # "Keywords: ..." line already contains "construct" and "flatline"
+    # regardless of what _RULES says, so checking `x in build(...)` for a
+    # keyword proves nothing about whether the RULE explaining it exists.
+    # "boolean" is not a keyword, so it is the one part of the original
+    # test that was not already tautological.
+    lowered = _RULES.lower()
     assert "boolean" in lowered          # conditions are not truthy
     assert "construct" in lowered        # declare before assign
     assert "flatline" in lowered         # blocks are keyword-delimited
