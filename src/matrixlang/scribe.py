@@ -166,6 +166,10 @@ def _build_add(m):
 
 
 def _build_sub(m):
+    # "subtract 7 from 2" means 2 - 7, while "subtract 7 minus 2" means
+    # 7 - 2 — the connector decides which operand comes first.
+    if m.group("conn") == "from":
+        return _trace_binary(m, TokenType.MINUS, "b", "a")
     return _trace_binary(m, TokenType.MINUS, "a", "b")
 
 
@@ -183,7 +187,7 @@ _Intent(
     "add <a> and <b>",
 )
 _Intent(
-    r"subtract\s+(?P<a>-?\d+|\w+)\s+(minus|from)\s+(?P<b>-?\d+|\w+)",
+    r"subtract\s+(?P<a>-?\d+|\w+)\s+(?P<conn>minus|from)\s+(?P<b>-?\d+|\w+)",
     _build_sub,
     "subtract <a> minus <b>",
 )

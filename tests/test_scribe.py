@@ -75,8 +75,18 @@ def test_add_two_numbers():
 
 def test_subtract():
     stmt = _binary_of("subtract 7 minus 2")
-    from matrixlang.nodes import Binary
+    from matrixlang.nodes import Binary, NumberLiteral
     assert stmt.value.op is TokenType.MINUS
+    assert stmt.value.left.value == 7
+    assert stmt.value.right.value == 2
+
+
+def test_subtract_from_swaps_operands():
+    stmt = _binary_of("subtract 7 from 2")
+    from matrixlang.nodes import Binary, NumberLiteral
+    assert stmt.value.op is TokenType.MINUS
+    assert stmt.value.left.value == 2
+    assert stmt.value.right.value == 7
 
 
 def test_multiply():
@@ -103,6 +113,17 @@ def test_half():
     from matrixlang.nodes import Binary, NumberLiteral
     assert stmt.value.op is TokenType.SLASH
     assert stmt.value.right.value == 2
+
+
+def test_negative_operand_is_unary_minus_over_positive_literal():
+    stmt = _binary_of("add -5 and 3")
+    from matrixlang.nodes import Binary, NumberLiteral, Unary
+    assert stmt.value.op is TokenType.PLUS
+    left = stmt.value.left
+    assert isinstance(left, Unary)
+    assert left.op is TokenType.MINUS
+    assert isinstance(left.operand, NumberLiteral)
+    assert left.operand.value == 5
 
 
 def test_comparison_greater_than():
