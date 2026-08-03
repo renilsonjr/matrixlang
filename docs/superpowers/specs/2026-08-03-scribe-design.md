@@ -15,7 +15,7 @@ paid upgrade for the long tail. **Scribe never replaces Operator; it is a second
 | # | Question | Decision |
 | --- | --- | --- |
 | SC-1 | Replacement or companion | **Companion.** Operator stays. Scribe is a second engine behind the same chat UX. |
-| SC-2 | How generated code becomes trusted | **Same as Operator.** Scribe output goes through `operator/validate.py`'s `parse()` + bounded dry-run. |
+| SC-2 | How generated code becomes trusted | **Same as Operator.** Scribe output goes through `operator/validate.py`'s `parse()` + bounded dry-run — called by the **server**, not by `scribe()`, so the pure module never imports `operator` (SC-5). |
 | SC-3 | How ASTs are built | **Directly from `nodes.*`** — no string interpolation, no format-string codegen. Structured by construction. |
 | SC-4 | How Scribe is exposed | `engine: "scribe" \| "operator"` on `POST /api/chat` (default `scribe`). Mode toggle in the web UI. |
 | SC-5 | Dependencies | **None.** No SDK, no key, no network. `scribe.py` is pure; core modules never import it. |
@@ -65,20 +65,35 @@ def scribe(request: str) -> ScribeResult  # Valid(program, source) | ScribeMiss(
 The pipeline:
 
 ```
+scribe.py (pure)                          server/app.py (impure edge)
+─────────────────                         ───────────────────────────
 request text
-  → normalize phrasing (synonyms: "print"/"show"/"display" → trace; written numbers → digits)
-  → intent patterns, longest-match first
+  → normalize phrasing (synonyms: "print"/"show"/"display" → trace)
+  → intent patterns, longest match wins
       → matched → build nodes.* AST directly
-          → render_ascii(program) → source text
-          → validate.py check(source)
-              → Valid → return (program, source)
-              → Invalid → ScribeMiss (rare: AST is structured by construction)
-      → no match → ScribeMiss(reason, closest_pattern)
+          → render_ascii(program) → source
+          → ScribeProgram(program, source) ──→ validate.py check(source)
+                                                  → Valid   → 200 {ok: true, source}
+                                                  → Invalid → 200 {ok: false, error}
+      → no match → ScribeMiss(reason, closest) ──→ 200 {ok: false, hint, closest}
 ```
 
 `check()` takes a **string**, not a tree, so `render.render_ascii()` is the required step
-between the two — the same one Operator's output already goes through. This is why
-`scribe.py` imports `render`.
+before it — the same one Operator's output already goes through. This is why `scribe.py`
+imports `render`.
+
+**The gate lives in the server, not in `scribe()`.** SC-5 forbids `scribe.py` from
+importing any `operator` module, and `check()` is `operator/validate.py` — so calling it
+from inside the pipeline would break the purity rule the architecture test enforces. The
+split is the same one Operator already uses: the pure module proposes, the impure edge
+validates. `scribe()` therefore returns a `ScribeProgram` that has not yet been dry-run,
+and the server is what decides whether it is trustworthy.
+
+**Longest match, not first registered.** The catalogue is built up over many tasks and its
+patterns overlap — `if 5 is greater than 3 trace bigger` matches both the conditional
+intent and the bare `trace <value>` intent. Scoring by match width keeps registration order
+from becoming load-bearing; a first-match loop would let whichever pattern was added
+earliest shadow every longer one added later.
 
 **No string interpolation.** Each intent constructs the actual `nodes.*` tree, and the
 source text is rendered from that tree rather than formatted by hand. So the round-trip
@@ -123,7 +138,7 @@ AI path is available.
 | --- | --- |
 | `tests/test_scribe.py` | Pure. Per intent: happy path, phrasing variants, malformed input, name handling, no-match → `ScribeMiss`. |
 | Round-trip | Every generated program `parse()`s to the AST Scribe claims to have built. |
-| Validate gate | A generated program that would loop forever is rejected by the dry-run limit, same as Operator. |
+| Validate gate | **Every catalogued intent passes `check()`**, parametrized one case per intent — not just a sample. Round-tripping is a weaker property and passes on programs that cannot run: `trace xs[0]` renders and re-parses perfectly, then fails the dry run because `xs` was never declared. An intent that reads a name must also declare it. Separately: a program that would loop forever is rejected by the dry-run limit, same as Operator. |
 | Architecture | No core module imports `scribe`; `scribe` imports no `operator`; `scribe` is pure. |
 | Server | `engine` dispatch; miss → hint shape; default is `scribe`. |
 
