@@ -64,8 +64,8 @@ programming language:
 - Run in an interactive prompt.
 - Display output as text or as a cascade window.
 - Run through a local browser interface.
-- Use an optional AI helper, called Operator, to generate MatrixLang from plain
-  language.
+- Write MatrixLang for you from a plain-English description, in two ways: a free
+  offline one called Scribe, and an optional paid AI helper called Operator.
 
 ## What makes it special
 
@@ -112,8 +112,10 @@ A useful analogy:
 | Renderer | Converts programs between normal text and glyph form. |
 | Cascade display | Shows source and output as falling glyphs. |
 | Local server | Runs a small local-only web service for the browser interface. |
-| Web UI | Provides a browser screen with a program editor, Operator prompt, and cascade. |
-| Operator | Optional AI assistant that writes MatrixLang from plain language, then validates it before showing it to the user. |
+| Web UI | Provides a browser screen with a program editor, a prompt box, and cascade. A switch chooses Scribe or Operator. |
+| Scribe | Writes MatrixLang from plain English with no AI, no account, and no internet. It knows a fixed list of phrasings and says so when a request falls outside it. |
+| Operator | Optional AI assistant that writes MatrixLang from plain language. It costs money and needs an account, and it handles requests Scribe does not know. |
+| The validator | The gate both writers answer to. Neither is allowed to decide its own output is correct — every generated program is run once, in private, before anyone sees it. |
 | Tests | Automated checks that protect the language behavior and architecture. |
 
 ## Technical information
@@ -137,10 +139,10 @@ A useful analogy:
 
 Approximate current size:
 
-- About 4,200 lines in the installable MatrixLang package.
-- About 500 lines in the local server.
-- About 650 lines in the browser UI.
-- About 7,700 lines of tests.
+- About 4,800 lines in the installable MatrixLang package.
+- About 570 lines in the local server.
+- About 680 lines in the browser UI.
+- About 8,400 lines of tests.
 
 ## Important files and folders
 
@@ -157,7 +159,8 @@ Approximate current size:
 | `src/matrixlang/render.py` | Converts between normal text and glyph form. |
 | `src/matrixlang/cascade.py` | Builds the falling cascade behavior. |
 | `src/matrixlang/window.py` | Opens the desktop cascade window. |
-| `src/matrixlang/operator/` | Optional AI helper that writes and validates programs. |
+| `src/matrixlang/scribe.py` | Writes programs from plain English, offline and without AI. |
+| `src/matrixlang/operator/` | Optional AI helper that writes programs, and the validator both writers answer to. |
 | `server/` | Local browser server. |
 | `web-ui/` | Browser interface. |
 | `tests/` | Automated tests. |
@@ -231,9 +234,12 @@ The project includes several safeguards:
 - The local browser server binds to `127.0.0.1`, meaning it is intended for the
   user's own machine, not the public internet.
 - The core language has no third-party runtime dependencies.
-- Operator, the AI helper, is optional.
-- Operator is not trusted blindly: its generated program must parse and dry-run
-  before the user sees it as accepted.
+- Operator, the AI helper, is optional. Scribe does the same job offline and for
+  free, so nothing about describing a program in English depends on it.
+- Neither writer is trusted blindly: a generated program must parse and run once,
+  privately, before the user sees it as accepted. Scribe is held to the same gate
+  as Operator despite being the deterministic one.
+- Scribe refuses a request it does not recognise instead of guessing at it.
 - The tests check language behavior, rendering, server behavior, display
   decisions, and architectural boundaries.
 
@@ -268,19 +274,28 @@ Then the plain test command:
 .venv/bin/python -m pytest -q
 ```
 
-ran and reported:
+Re-checked on 2026-08-04, after Scribe was added, it reports:
 
-- 1,212 passed.
-- 5 failed.
+- 1,382 passed.
+- 0 failed.
 
-The five failing tests are all in `tests/test_cli.py` and relate to the command
-line choosing or simulating the desktop cascade window. Most of the language,
-parser, interpreter, renderer, server, web event, Operator, and value behavior
-tests passed in that local run.
+That resolves what this section previously recorded. The earlier run showed
+1,212 passed and 5 failed, all five in `tests/test_cli.py` and all about the
+command line choosing or simulating the desktop cascade window. Those now pass —
+`tests/test_cli.py` is green on its own, 38 of 38 — so the suite matches what the
+rest of the documentation claims about CI rather than contradicting it.
 
-The existing project documentation says the suite passes in CI on Python 3.11
-through 3.14. The local failures should be treated as something to investigate
-before presenting the project as fully green on this machine.
+One more local-environment note, separate from the hidden-flag issue above and
+easier to misread. If the test run suddenly fails to import `matrixlang` at all,
+check whether `pip install -e` was ever run from inside a Git worktree — for
+example a folder under `.worktrees/`. Doing that repoints the whole virtual
+environment at the worktree's copy of the source, and deleting the worktree later
+leaves every test unable to find the package. Reinstalling from the main folder
+fixes it:
+
+```bash
+.venv/bin/pip install -e ".[dev]"
+```
 
 ## Common questions
 
@@ -300,8 +315,32 @@ No. The cascade is built from the program's own source and output.
 
 ### Does it require AI?
 
-No. The language, command-line tool, interpreter, and cascade do not require AI.
-The AI helper, Operator, is optional.
+No, and this is worth stating carefully, because it is the question people ask
+most.
+
+The language, command-line tool, interpreter, and cascade have never involved
+AI. Neither does Scribe, which turns a plain-English description into a working
+program using nothing but a fixed list of phrasings it was taught in advance —
+no account, no payment, no internet connection. Type "count from 1 to 10" and it
+writes the loop.
+
+Operator, the AI helper, is the optional part. It exists for requests Scribe does
+not recognise, and it is the only piece of the project that costs money or sends
+anything over a network.
+
+So the honest answer is that the *convenience* of describing a program in English
+does not require AI. Only the open-ended version of it does.
+
+### What happens if Scribe does not understand my request?
+
+It says so, and suggests the closest phrasing it does know, rather than guessing
+and handing back a program that might be wrong. Asking it to "sort a list" — a
+thing it was never taught — returns a note pointing at "make a list of
+&lt;values&gt;" instead.
+
+That refusal is deliberate. A tool that quietly produces something plausible when
+it did not understand you is worse than one that admits the gap, because you have
+no way to tell the two cases apart.
 
 ### Is it hosted online?
 

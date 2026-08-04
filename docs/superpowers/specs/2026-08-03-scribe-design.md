@@ -1,6 +1,7 @@
 # Scribe Design — a keyless, deterministic companion to Operator
 
-Status: **Approved as a design. Nothing is implemented.**
+Status: **Implemented and merged** (PR #67, 2026-08-03), with one decision not
+delivered as written — see the note under SC-8.
 Inputs: `2026-08-01-operator-design.md` (the purity gradient, validate gate, OP-1…OP-13),
 `2026-08-01-stage-6-functions-design.md` (functions, closures, lists), GitHub #59 (this feature).
 
@@ -21,8 +22,28 @@ paid upgrade for the long tail. **Scribe never replaces Operator; it is a second
 | SC-5 | Dependencies | **None.** No SDK, no key, no network. `scribe.py` is pure; core modules never import it. |
 | SC-6 | Unmatched request | **`ScribeMiss(reason, closest_pattern)`** returned by the pure module; the server turns it into a hint (+ "try Operator" when a key exists). |
 | SC-7 | Name handling | **Explicit + auto.** Names come only from phrases like "store as total"/"call it sum"; otherwise auto-named `x`, `y`, `n`. No noun inference. |
-| SC-8 | Coverage | **Full current language**, one pass: arithmetic, loops, conditionals, lists, strings, functions, logic. |
+| SC-8 | Coverage | **Full current language**, one pass: arithmetic, loops, conditionals, lists, strings, functions, logic. **Not delivered as written — see below.** |
 | SC-9 | Scope creep guard | Public hosting, cost caps, replacing Operator, noun inference — all out of scope. |
+
+### SC-8 as shipped
+
+§8 called SC-8 "the whole risk" and estimated 30–40 intents. What merged is
+**20**, and four things the catalogue in §3 lists are absent:
+
+| Promised in §3 | Shipped |
+| --- | --- |
+| `splice` / `fork` — "and", "or" | **no** — only `unplug`, and only inside `if not` |
+| list element assignment `xs[0] = v` | **no** |
+| boolean literals | **no** |
+| calling a function you defined | **no** — `agent` definitions are two fixed shapes |
+| arithmetic, comparisons, `trace`, loops, conditionals, list literal/index/`length`, string literal/index, closures | yes |
+
+The risk §8 named is exactly the one that materialised, which is worth leaving on
+the record rather than quietly editing §3 to match the code. Everything that did
+ship holds the invariant; the gap is breadth, not correctness.
+
+Stage 9's logical operators being the omission is the notable part: they are the
+most recent language feature and have the least generator coverage.
 
 ## 1. Why Scribe exists
 
