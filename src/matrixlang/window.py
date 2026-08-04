@@ -92,7 +92,6 @@ class CascadeWindow:
         self._root = None
         self._canvas = None
         self._status = None
-        self._closed = False
 
     # --- Display protocol ------------------------------------------------
 
@@ -159,8 +158,16 @@ class CascadeWindow:
         Safe before `open()` and safe twice: the CLI calls it in a finally,
         and a window that failed to open must not turn into a failed
         program.
+
+        **Deliberately a no-op.** It used to set a `_closed` flag that
+        `step()` read to hand over to a "settled" view — the cascade
+        stopping and holding the output as a still image once the program
+        ended and the field drained. `3384ccb` replaced that with looping,
+        because a screen that stops is not a cascade, and the flag was left
+        behind writing to nobody. There is nothing for this to record: the
+        end of execution changes nothing about what the window does.
         """
-        self._closed = True
+
 
     # --- for tests -------------------------------------------------------
 

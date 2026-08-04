@@ -3,13 +3,49 @@ import io
 from matrixlang.repl import Repl, repl
 
 
-def feed_all(lines: list[str]) -> str:
-    """Feed lines to a Repl and return everything it printed."""
-    buffer = io.StringIO()
-    session = Repl(out=buffer)
+def feed_streams(lines: list[str]) -> tuple[str, str]:
+    """Feed lines to a Repl and return (stdout, stderr) separately."""
+    out, err = io.StringIO(), io.StringIO()
+    session = Repl(out=out, err=err)
     for line in lines:
         session.feed(line)
-    return buffer.getvalue()
+    return out.getvalue(), err.getvalue()
+
+
+def feed_all(lines: list[str]) -> str:
+    """Feed lines to a Repl and return both streams, interleaved.
+
+    Kept for the tests that only care that something was reported. The
+    ones that care *which* stream it went to use `feed_streams`.
+    """
+    out, err = feed_streams(lines)
+    return out + err
+
+
+def test_diagnostics_go_to_stderr_not_stdout():
+    """README: diagnostics "appear as plain text ... on stderr".
+
+    The CLI honours that in every one of its eight error paths; the REPL
+    sent them to stdout, so `matrixlang repl > session.txt` swallowed the
+    errors into the file and left the terminal silent about them.
+    """
+    out, err = feed_streams(["trace nope"])
+    assert "not declared" in err
+    assert "not declared" not in out
+
+
+def test_program_output_stays_on_stdout():
+    """The split must not send ordinary output to stderr along with it."""
+    out, err = feed_streams(["trace 1"])
+    assert out == "1\n"
+    assert err == ""
+
+
+def test_output_and_diagnostics_are_separable_in_one_session():
+    """A failing line then a working one: each stream carries only its own."""
+    out, err = feed_streams(["trace nope", "trace 2"])
+    assert out == "2\n"
+    assert "not declared" in err
 
 
 def test_a_single_statement_executes_immediately():
@@ -48,23 +84,23 @@ def test_nested_blocks_need_both_flatlines():
 
 
 def test_a_syntax_error_is_reported_and_the_session_continues():
-    printed = feed_all(["construct = 5", "trace 1"])
-    assert "line 1" in printed
-    assert printed.endswith("1\n")
+    out, err = feed_streams(["construct = 5", "trace 1"])
+    assert "line 1" in err
+    assert out == "1\n"
 
 
 def test_a_runtime_error_is_reported_and_the_session_continues():
-    printed = feed_all(["trace nope", "trace 2"])
-    assert "not declared" in printed
-    assert printed.endswith("2\n")
+    out, err = feed_streams(["trace nope", "trace 2"])
+    assert "not declared" in err
+    assert out == "2\n"
 
 
 def test_an_error_inside_a_block_clears_the_buffer():
     # After a failed block the next line must be treated as fresh input,
     # not appended to the wreckage.
-    printed = feed_all(["redpill 1", "  trace 1", "flatline", "trace 7"])
-    assert "must be a boolean" in printed
-    assert printed.endswith("7\n")
+    out, err = feed_streams(["redpill 1", "  trace 1", "flatline", "trace 7"])
+    assert "must be a boolean" in err
+    assert out == "7\n"
 
 
 def test_blank_lines_and_comments_are_harmless():
@@ -74,9 +110,9 @@ def test_blank_lines_and_comments_are_harmless():
 def test_a_bare_expression_is_a_syntax_error_not_a_crash():
     # The grammar has no expression statement; the REPL must report that
     # cleanly rather than raise.
-    printed = feed_all(["1 + 1", "trace 2"])
-    assert "line 1" in printed
-    assert printed.endswith("2\n")
+    out, err = feed_streams(["1 + 1", "trace 2"])
+    assert "line 1" in err
+    assert out == "2\n"
 
 
 def test_repl_reads_until_eof_and_returns_zero():
@@ -122,9 +158,9 @@ def test_a_face_command_mid_block_is_just_source():
 
 def test_echo_still_prints_when_execution_fails():
     # The echo shows what was ABOUT to run; a runtime error follows it.
-    output = feed_all([":glyph", "trace nope"])
-    assert output.startswith("ﾄ nope\n")
-    assert "not declared" in output
+    out, err = feed_streams([":glyph", "trace nope"])
+    assert out.startswith("ﾄ nope\n")
+    assert "not declared" in err
 
 
 # --- I-1: RecursionError must not kill the session -------------------------
@@ -138,9 +174,9 @@ def test_a_deeply_nested_expression_is_reported_and_the_session_continues():
     # measured implementation detail, not something to hand-pick a
     # literal for.
     line = "trace " + "(" * 120 + "1" + ")" * 120
-    printed = feed_all([line, "trace 2"])
-    assert "matrixlang:" in printed
-    assert printed.endswith("2\n")
+    out, err = feed_streams([line, "trace 2"])
+    assert "matrixlang:" in err
+    assert out == "2\n"
 
 
 def test_a_deeply_nested_render_echo_is_reported_and_the_session_continues():
@@ -150,6 +186,6 @@ def test_a_deeply_nested_render_echo_is_reported_and_the_session_continues():
     # chain, not per element) but renders recursively, so it can blow
     # render's stack in cases the parser never even notices.
     line = "trace " + " + ".join(["1"] * 2000)
-    printed = feed_all([":glyph", line, "trace 2"])
-    assert "matrixlang:" in printed
-    assert printed.endswith("2\n")
+    out, err = feed_streams([":glyph", line, "trace 2"])
+    assert "matrixlang:" in err
+    assert out.endswith("2\n")
