@@ -26,8 +26,13 @@ _FACE_COMMANDS: dict[str, str] = {":ascii": "ascii", ":glyph": "glyph"}
 
 
 class Repl:
-    def __init__(self, out: TextIO | None = None) -> None:
+    def __init__(self, out: TextIO | None = None, err: TextIO | None = None) -> None:
         self._out = sys.stdout if out is None else out
+        # Diagnostics go to stderr, matching the CLI and what the README
+        # promises. Sharing one stream with program output meant
+        # `matrixlang repl > session.txt` captured the errors into the file
+        # and left the terminal with no sign anything had gone wrong.
+        self._err = sys.stderr if err is None else err
         self.interpreter = Interpreter(out=self._out)
         self._buffer: list[str] = []
         self._face = "ascii"
@@ -78,7 +83,7 @@ class Repl:
         return False
 
     def _fail(self, error: MatrixLangError) -> None:
-        print(f"matrixlang: {error}", file=self._out)
+        print(f"matrixlang: {error}", file=self._err)
         self._buffer.clear()
 
 
@@ -93,11 +98,15 @@ def _open_blocks(source: str) -> int:
     return max(depth, 0)
 
 
-def repl(in_: TextIO | None = None, out: TextIO | None = None) -> int:
+def repl(
+    in_: TextIO | None = None,
+    out: TextIO | None = None,
+    err: TextIO | None = None,
+) -> int:
     """Run an interactive session until end of input."""
     source = sys.stdin if in_ is None else in_
     sink = sys.stdout if out is None else out
-    session = Repl(out=sink)
+    session = Repl(out=sink, err=sys.stderr if err is None else err)
     needs_more = False
 
     while True:
