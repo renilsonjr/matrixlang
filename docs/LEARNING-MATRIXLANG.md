@@ -946,6 +946,78 @@ wake up, Neo
 
 ---
 
+## 16. Having it written for you — Scribe
+
+Everything above teaches you to write MatrixLang. **Scribe** goes the other
+way: you describe what you want in English and get MatrixLang back. It
+needs no API key and no network — it is a fixed catalogue of phrasings, so
+the same request always produces the same program.
+
+Open the browser UI (`python -m server`, then
+<http://127.0.0.1:8420>) and type into the chat panel with the engine set
+to **Scribe**. Or call it directly:
+
+```python
+from matrixlang.scribe import scribe
+
+print(scribe("count down from 3 to 1").source)
+```
+
+```
+construct i = 3
+dejavu i >= 1
+  trace i
+  i = i - 1
+flatline
+```
+
+Some of what it knows, and what each one produces:
+
+| You type | You get |
+| --- | --- |
+| `add 5 and 3` | `trace 5 + 3` |
+| `double 7` | `trace 7 * 2` |
+| `divide 10 by 3` | `trace 10 / 3` |
+| `is 4 less than 9` | `trace 4 < 9` |
+| `store 42 as answer` | `construct answer = 42` |
+| `make a list of 1 2 3` | `construct xs = [1, 2, 3]` |
+| `get element 1 of xs` | a three-element list, then `trace xs[1]` |
+| `get character 0 of name` | `construct name = "neo"`, then `trace name[0]` |
+| `define a function that doubles` | `agent double(n)` … `jackout n * 2` |
+| `define an adder factory` | the nested closure from §9 |
+
+`print`, `show` and `display` all mean `trace`, so "print 42" works as well
+as "trace 42".
+
+### It says no rather than guessing
+
+Scribe recognises a fixed set of phrasings. Anything outside it comes back
+as a **miss** with the nearest pattern it does know, rather than a program
+that might not be what you meant:
+
+```python
+>>> scribe("sort a list").closest
+'make a list of <values>'
+>>> scribe("add five and three").closest
+'add <a> and <b>'
+```
+
+That second one is the rule worth remembering: **numbers must be digits.**
+"add five and three" is a miss; "add 5 and 3" is a program.
+
+Two more refusals are deliberate. A loop longer than 5,000 iterations is
+declined, because every generated program is dry-run before you see it and
+a longer one would blow the preview's step budget. And a reserved word
+cannot be a variable name — `store 5 as trace` is a miss, because
+`construct trace = 5` would not parse.
+
+Everything Scribe hands you has already been parsed and executed once, so
+it runs. What it does **not** cover yet: `splice` and `fork` (§8), writing
+to a list element (§6), and calling a function you just defined. Write
+those by hand — which, having read this far, you can.
+
+---
+
 ## What the language does not have
 
 Being clear about this saves more time than any feature list:

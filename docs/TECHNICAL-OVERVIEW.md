@@ -3,11 +3,11 @@
 A reference for explaining this project: what it is, how it works, and how to
 talk about it in an interview.
 
-Current as of `feat/stage-9-logical-operators` — 4,157 lines in the package
-across 22 modules, plus a 497-line local server and a 650-line web UI. 7,628
-lines of tests, 1,216 passing, on Python 3.11 through 3.14 in CI. Zero
-third-party runtime dependencies; `pytest` for development and the Anthropic
-SDK as an optional extra for Operator.
+Current as of `main`, through Scribe — 4,772 lines in the package across 23
+modules, plus a 568-line local server and a 680-line web UI. 8,421 lines of
+tests, 1,382 passing, on Python 3.11 through 3.14 in CI. Zero third-party
+runtime dependencies; `pytest` for development and the Anthropic SDK as an
+optional extra for Operator, which is the only part that needs one.
 
 New to this project? [LEARNING-MATRIXLANG.md](LEARNING-MATRIXLANG.md) teaches
 the language itself. This document is about the implementation.
@@ -104,6 +104,7 @@ anything about the language, which is the whole point of the split.
 | `window.py` | 210 | The Tk backend. The only impure module in the package |
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 230 | Command-line entry point |
+| `scribe.py` | 582 | Plain language → AST, by pattern. Pure, keyless, and imports no `operator` |
 | `operator/prompt.py` | 136 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 87 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
@@ -115,9 +116,9 @@ Outside the package, and deliberately not installable:
 | --- | --- | --- |
 | `server/sse.py` | 91 | Event → wire payload, and the SSE framing. One source of truth for both |
 | `server/runs.py` | 147 | A run's lifecycle: worker thread, queue, wall-clock deadline |
-| `server/app.py` | 214 | Three endpoints and static file serving. Binds `127.0.0.1` only |
+| `server/app.py` | 262 | Three endpoints and static file serving. Binds `127.0.0.1` only. Dispatches `/api/chat` to Scribe or Operator |
 | `web-ui/cascade.js` | 211 | The cascade again, in a canvas. Mirrors `cascade.py` decision for decision |
-| `web-ui/app.js` | 182 | Wiring only: post, read the event stream, hand events to the cascade |
+| `web-ui/app.js` | 192 | Wiring only: post, read the event stream, hand events to the cascade. Carries the engine toggle |
 
 ### The dependency graph is a test, not a convention
 
@@ -462,7 +463,13 @@ channels — the return value is correct and nothing raises — so it alone
 needed a test built around an *observable side effect* on the unevaluated
 operand, rather than either of those, to be caught.
 
-## 6. Operator, and the local web layer
+## 6. Two generators, one gate, and the local web layer
+
+Two things turn plain language into MatrixLang. **Operator** asks a model.
+**Scribe** asks a regex table. They share the property that matters: neither is
+trusted, and both answer to the same validator.
+
+### Operator
 
 Operator writes MatrixLang from plain language. The interesting decision is not
 that it calls a model; it is what it is **not** allowed to do.
@@ -488,6 +495,51 @@ Three consequences that make it work:
 - **The SDK is imported inside the function that calls it.** `pip install
   matrixlang` stays dependency-free and `import matrixlang.operator` works
   without the extra installed.
+
+### Scribe, and the invariant that shaped it
+
+Operator costs money and needs a key, which made the only path from "describe a
+program" to a working `.rain` file a paid one. Scribe is the keyless answer: a
+finite catalogue of ~20 intent patterns that build `nodes.*` trees directly and
+render them with `render_ascii`. No model, no network, no SDK — the same request
+always produces the same program.
+
+Three decisions carry the weight:
+
+- **It builds trees, never strings.** Each intent constructs the actual AST, so
+  the round-trip property (§5.2) is what guarantees the source Scribe validates
+  is the program Scribe built. There is no format-string codegen to drift.
+- **Longest match wins, not first registered.** The patterns overlap — "if 5 is
+  greater than 3 trace bigger" matches both the conditional intent and the bare
+  `trace <value>` one, because `.search()` finds that tail. Scoring by match
+  width is what stops registration order from becoming load-bearing as the
+  catalogue grows.
+- **Scribe may not import `operator`.** `check()` lives in `operator/validate.py`,
+  so calling it from inside `scribe()` would breach the purity rule the import
+  graph enforces. The gate therefore runs in `server/app.py`: the pure module
+  proposes, the impure edge validates. Same split Operator already had.
+
+The invariant that turned out to be load-bearing: **every request Scribe accepts
+must produce a program that survives the dry run.** It is easy to state and easy
+to breach, because a program can be perfectly well-formed and still fail at
+runtime. Three ways it broke, all found by running the thing rather than reading
+it:
+
+- `trace xs[0]` — renders, parses, round-trips, then dies with "'xs' is not
+  declared". An intent that *reads* a name must also declare it.
+- `construct trace = 5`, from "store 5 as trace" — a reserved word is a valid
+  identifier to a regex and a parse error to the parser. The name patterns are
+  built from `tokens.KEYWORDS` so a new keyword cannot leave them stale.
+- "count from 1 to 10000" — the one intent whose cost is unbounded in the
+  request, against a dry run deliberately capped well below the CLI's limit.
+
+Each is now a refusal with a hint instead of a program, and the invariant is
+fuzzed over the catalogue's own vocabulary rather than asserted case by case.
+The lesson is the one §8 keeps repeating: **round-tripping is a weaker property
+than running,** and a test that only checks the former goes green on a feature
+that cannot work.
+
+### The web layer
 
 The server is `http.server` and Server-Sent Events rather than a framework, for
 the same reason the package has no dependencies. Three endpoints — run, chat,
@@ -564,7 +616,7 @@ configuration.
 
 ## 8. Testing philosophy
 
-1,216 tests, ~1.8× more test code than source code, run against Python 3.11
+1,382 tests, ~1.8× more test code than source code, run against Python 3.11
 through 3.14 on every pull request. Three practices are worth describing:
 
 **Teeth-checks.** Every load-bearing guard is proven by injecting the bug and
@@ -667,8 +719,10 @@ isn't there is usually more convincing than a feature list:
 > identical tree back, comments included. Second, its output device is the
 > Matrix cascade: running a program opens a window where its own source and
 > output fall as glyphs, and the transliteration is reversible, so what falls
-> can be read back rather than merely watched. About 4,200 lines of source,
-> 1,216 tests, no third-party runtime dependencies.
+> can be read back rather than merely watched. It also writes itself from
+> plain English two ways — an LLM, or a keyless pattern engine — and neither
+> is allowed to declare its own output valid; the parser decides. About 4,800
+> lines of source, 1,382 tests, no third-party runtime dependencies.
 
 ## The two-minute version
 
@@ -794,7 +848,15 @@ matrixlang render --face ascii glyph.rain   # ...and back; also a formatter
 matrixlang repl                             # :glyph toggles live echo
 
 python -m server                            # the browser version, on 127.0.0.1
+
+# Scribe, with no key and no network — plain English in, MatrixLang out
+python -c "from matrixlang.scribe import scribe; print(scribe('count from 1 to 5').source)"
 ```
 
 The strongest 20-second live demo is the round trip: render a file to glyphs,
 save it, render it back, and diff against the original.
+
+If the audience wants the plain-language angle instead, run the Scribe line
+above and then ask for something it does not know ("sort a list") — the refusal,
+with its nearest-pattern hint, makes the point that a deterministic generator
+says no rather than guessing.
