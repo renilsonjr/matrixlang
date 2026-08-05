@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MatrixLang — the language the film pretended to have</title>
+<script src="layout.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,6 +14,12 @@
   <h1>The code in <i>The Matrix</i> was never a programming language.</h1>
   <p class="premise">This is the one it pretended to have — invented, written down,
   and made to run.</p>
+
+  <div id="layout-switch" role="group" aria-label="Layout">
+    <button data-layout-choice="auto" aria-pressed="true">Auto</button>
+    <button data-layout-choice="desktop" aria-pressed="false">Desktop</button>
+    <button data-layout-choice="mobile" aria-pressed="false">Mobile</button>
+  </div>
 </header>
 
 <main>
@@ -99,12 +106,19 @@ flatline</pre>
   produced by running the real interpreter, and a test compares this page
   against a fresh run, so an example cannot quietly go stale.</p>
 
+  <p><code>construct</code> names a value, <code>trace</code> prints one,
+  <code>dejavu</code> loops, <code>redpill</code> is <i>if</i>,
+  <code>agent</code> defines a function, <code>jackout</code> returns from one,
+  and <code>flatline</code> closes whichever of those you opened. There are
+  fourteen keywords in total.</p>
+</section>
+
+<div class="examples band">
   <div class="example">
     <p class="request">add 5 and 3</p>
     <pre class="source">trace 5 + 3</pre>
     <pre class="output">8</pre>
   </div>
-
   <div class="example">
     <p class="request">count from 1 to 5</p>
     <pre class="source">construct i = 1
@@ -118,14 +132,12 @@ flatline</pre>
 4
 5</pre>
   </div>
-
   <div class="example">
     <p class="request">make a list of 1 2 3</p>
     <pre class="source">construct xs = [1, 2, 3]</pre>
     <p class="declares">This one declares rather than prints: it binds a list to
     the name <code>xs</code>, and printing is what <code>trace</code> does.</p>
   </div>
-
   <div class="example">
     <p class="request">if 5 is greater than 3 trace bigger</p>
     <pre class="source">redpill 5 > 3
@@ -133,7 +145,6 @@ flatline</pre>
 flatline</pre>
     <pre class="output">bigger</pre>
   </div>
-
   <div class="example">
     <p class="request">define a function that doubles</p>
     <pre class="source">agent double(n)
@@ -143,13 +154,7 @@ flatline</pre>
     but nothing has called it yet, and a function that is never called has
     nothing to say.</p>
   </div>
-
-  <p><code>construct</code> names a value, <code>trace</code> prints one,
-  <code>dejavu</code> loops, <code>redpill</code> is <i>if</i>,
-  <code>agent</code> defines a function, <code>jackout</code> returns from one,
-  and <code>flatline</code> closes whichever of those you opened. There are
-  fourteen keywords in total.</p>
-</section>
+</div>
 
 <section class="prose">
   <h2>Now run one yourself</h2>
@@ -171,19 +176,24 @@ flatline</pre>
   and watch it fall.</p>
 </section>
 
-<section id="playground">
+<section id="playground" class="band">
   <button id="boot">Load the interpreter and try it</button>
   <div id="live" hidden>
-    <label for="request">Describe a program</label>
-    <input id="request" placeholder="count from 1 to 10" autocomplete="off">
-    <button id="write">Write it</button>
-    <p id="miss" hidden></p>
+    <div class="playground-grid">
+      <div class="editor-pane">
+        <label for="request">Describe a program</label>
+        <input id="request" placeholder="count from 1 to 10" autocomplete="off">
+        <button id="write">Write it</button>
+        <p id="miss" hidden></p>
 
-    <label for="editor">MatrixLang</label>
-    <textarea id="editor" rows="10" spellcheck="false"></textarea>
-    <button id="run">Run it</button>
-
-    <canvas id="cascade" width="640" height="360"></canvas>
+        <label for="editor">MatrixLang</label>
+        <textarea id="editor" rows="10" spellcheck="false"></textarea>
+        <button id="run">Run it</button>
+      </div>
+      <div class="cascade-pane">
+        <canvas id="cascade" width="640" height="360"></canvas>
+      </div>
+    </div>
 
     <details id="operator-panel">
       <summary>Use Operator instead (needs your own API key)</summary>

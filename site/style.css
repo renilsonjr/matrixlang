@@ -37,11 +37,23 @@ body {
 
 /* ---- the reading column ---- */
 
+/* The reading column keeps its measure; the band joins it until wide. */
 .masthead,
 .prose,
-#playground {
+.band {
   max-width: var(--measure);
   margin: 0 auto;
+}
+
+.examples {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.75rem;
+  margin: 0 0 2rem;
+}
+
+.playground-grid {
+  display: block; /* stacked until the wide band applies */
 }
 
 .masthead { padding: 3.5rem 0 2.5rem; }
@@ -303,4 +315,61 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
   color: var(--muted);
   font-size: 0.85rem;
   line-height: 1.6;
+}
+
+/* ---- the layout band ---- */
+
+:root {
+  /* The layout switch. `--layout` is the single flag both the media query
+     and the [data-layout] override flip; @container style() consumes it
+     below, so the wide band is written once. */
+  container-type: style;
+  --layout: mobile;
+}
+
+/* Auto: the viewport decides, unless the reader is pinned to Mobile. */
+@media (min-width: 60rem) {
+  :root:not([data-layout="mobile"]) { --layout: desktop; }
+}
+/* Forced: Desktop wins regardless of width, Mobile loses the media query. */
+:root[data-layout="desktop"] { --layout: desktop; }
+
+/* THE wide band — written exactly once. */
+@container style(--layout: desktop) {
+  .band { max-width: none; }
+  .examples {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.75rem;
+  }
+  .playground-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 1.75rem;
+    align-items: start;
+  }
+}
+
+#layout-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 0 1.25rem;
+  padding: 2px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+}
+#layout-switch button {
+  margin: 0;
+  padding: 0.3rem 0.7rem;
+  border: none;
+  border-radius: 3px;
+  font: 11px/1.2 var(--mono);
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+#layout-switch button:hover { color: var(--head); background: #08120c; }
+#layout-switch button.active {
+  color: var(--green);
+  background: #0a1a0f;
 }
