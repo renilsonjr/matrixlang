@@ -47,6 +47,24 @@ def write(request: str) -> dict:
     return {"ok": False, "error": result.reason, "hint": result.closest}
 
 
+def operator_prompt(request: str) -> str:
+    """The full context Operator is asked with, built by the package.
+
+    `prompt.build` reads the keyword list from `tokens` so the prompt
+    cannot drift from the language; assembling it in JavaScript would
+    undo that. It returns one string with the request already in it —
+    there is no separate system prompt — so the caller sends it as the
+    only user message.
+
+    Importing `operator.prompt` pulls in no SDK: `operator/client.py` is
+    the only module that touches `anthropic`, and it imports it inside
+    the function that calls it.
+    """
+    from matrixlang.operator.prompt import build
+
+    return build(request)
+
+
 def run(source: str, max_steps: int = BROWSER_MAX_STEPS) -> list[dict]:
     """Execute `source`, returning every event in wire shape. Never raises.
 

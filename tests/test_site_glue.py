@@ -57,3 +57,28 @@ def test_run_reports_the_step_limit_rather_than_hanging():
     events = glue.run(source, max_steps=500)
     assert events[-1]["kind"] == "error"
     assert "step limit" in events[-1]["message"]
+
+
+def test_operator_prompt_comes_from_the_package():
+    prompt = glue.operator_prompt("count from 1 to 10")
+    # The request is embedded, not appended by the caller.
+    assert "count from 1 to 10" in prompt
+    # Keywords are read from tokens.py, not retyped — spot-check two that
+    # arrived in different stages.
+    assert "jackout" in prompt and "splice" in prompt
+
+
+def test_operator_prompt_pulls_in_no_sdk():
+    """The page must stay usable without the optional `anthropic` extra."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; sys.path.insert(0, 'site');"
+        "import glue; glue.operator_prompt('add 1 and 2');"
+        "print('anthropic' in sys.modules)"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert out.stdout.strip() == "False"

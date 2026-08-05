@@ -116,6 +116,65 @@ function runProgram() {
   }
 }
 
+// The key is a local, never stored — not in browser storage, not in a
+// cookie, not in the URL: a persisted key is one XSS away from being
+// someone else's, and this page cannot offer the isolation that would
+// make storing it reasonable. The named APIs are absent from this file
+// deliberately, and a check greps for them, so this comment describes
+// the rule without spelling them out.
+//
+// `anthropic-dangerous-direct-browser-access` is what makes the API answer
+// a browser at all — it opts the request into CORS. The header is named
+// the way it is on purpose: sending a key from a page is a real risk, and
+// the only reason it is defensible here is that the key is the reader's
+// own and Scribe already works without one.
+async function askOperator() {
+  const key = el("api-key").value.trim();
+  const miss = el("miss");
+  if (!key) {
+    miss.textContent = "Operator needs your own Anthropic API key. Scribe needs nothing.";
+    miss.hidden = false;
+    return;
+  }
+
+  const button = el("ask-operator");
+  button.disabled = true;
+  button.textContent = "Asking…";
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-opus-5",
+        max_tokens: 4096,
+        // `build()` returns the whole context with the request already in
+        // it — role, keyword list, rules, worked example. There is no
+        // separate system prompt to send, and nothing here assembles one.
+        messages: [{ role: "user", content: glue.operator_prompt(el("request").value) }],
+      }),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error(detail?.error?.message || `HTTP ${response.status}`);
+    }
+    const body = await response.json();
+    const text = body.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+    el("editor").value = text.trim();
+    miss.hidden = true;
+  } catch (error) {
+    miss.textContent = `Operator failed: ${error.message}`;
+    miss.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Ask Operator";
+  }
+}
+
 // No start() call: Cascade begins its own requestAnimationFrame loop in
 // its constructor and runs a fixed 33ms timestep, so speed is a property
 // of the design rather than of the viewer's refresh rate (§5.7).
@@ -126,5 +185,6 @@ el("run").addEventListener("click", runProgram);
 el("request").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); writeProgram(); }
 });
+el("ask-operator").addEventListener("click", askOperator);
 
 window.__playground = { boot, write: writeProgram, run: runProgram };
