@@ -21,18 +21,18 @@
   --mono: "SF Mono", Menlo, Consolas, monospace;
   --prose: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --measure: 34rem;
-  /* The desktop pair. A phone reads at 34rem; a desktop reader has the room
-     for a longer line, and this page spends it. Measured across the six long
-     paragraphs, counting rendered lines rather than estimating: 48rem runs
-     about 93 characters, 64rem about 111, 72rem about 132. All are past the
-     45–75 typography calls comfortable, so the choice was never between
-     comfortable and not — it was where to stop. 64rem is that stop, picked
-     by reading the real copy at each width rather than by picking a number.
-     Note 56rem measures 108, barely different from 64: line breaks quantize
-     to word lengths, so the two read almost alike and the wider one wastes
-     less of the screen. --page stays wider than the column, so prose never
-     outruns the examples band beside it. */
-  --measure-wide: 64rem;
+  /* The desktop width. ONE token, deliberately: on a wide screen the reading
+     column and the bands below it share an edge, and a page whose paragraphs
+     start 128px inside the examples they introduce looks like two documents
+     shuffled together. A second token set to the same number would drift the
+     first time one of them moved, so prose and bands read this one.
+
+     A phone still reads at 34rem. The cost of the desktop setting is real and
+     worth stating: measured by counting rendered lines across the six long
+     paragraphs, 90rem runs about 151 characters against the 45–75 typography
+     calls comfortable. Every width considered — 48rem measured 93 — was
+     already past that range, so the choice was never comfortable versus not.
+     It was alignment against line length, and alignment won. */
   --page: 90rem;
 }
 
@@ -62,7 +62,12 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1.75rem;
-  margin: 0 0 2rem;
+  /* `auto`, not 0: this rule comes after the one that centres .band and has
+     the same specificity, so a plain `0` here silently won and left the
+     examples flush against the padding while the prose above them stayed
+     centred. Invisible on a phone, where the band is wider than the screen
+     anyway, and plain to see the moment a desktop reader picks Mobile. */
+  margin: 0 auto 2rem;
 }
 
 .playground-grid {
@@ -362,12 +367,13 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
 
 /* THE wide band — written exactly once. */
 @container style(--layout: desktop) {
-  /* The reading column widens with the screen instead of staying a ribbon in
-     an empty field; the bands widen further, to the page cap. Both are set
-     here rather than by rewriting --measure on :root, because :root is the
-     style container itself and a container query cannot restyle it. */
+  /* The reading column and the bands widen together to the same edge. One
+     declaration rather than two, so they cannot be given different widths by
+     accident. Set here rather than by rewriting --measure on :root, because
+     :root is the style container itself and a container query cannot
+     restyle it. */
   .masthead,
-  .prose { max-width: var(--measure-wide); }
+  .prose,
   .band { max-width: var(--page); }
   /* The canvas fills its column now that the column is wide. The cap existed
      to stop a 640-wide drawing being stretched across a whole screen; inside
