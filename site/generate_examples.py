@@ -40,9 +40,11 @@ def build() -> dict:
         assert written["ok"], f"{request!r} is no longer a request Scribe knows"
         source = written["source"]
         events = glue.run(source)
+        glyph_result = glue.glyph(source)
+        assert glyph_result["ok"], f"{request!r} source no longer renders a glyph face"
         built[request] = {
             "source": source,
-            "glyph": glue.glyph(source)["glyph"],
+            "glyph": glyph_result["glyph"],
             "output": [e["text"] for e in events if e["kind"] == "output"],
         }
     return built

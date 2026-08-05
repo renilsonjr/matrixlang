@@ -44,7 +44,7 @@ async function boot() {
     // Showing the controls dead is worse than not showing them, so they
     // are disabled rather than merely present.
     el("live").hidden = false;
-    for (const id of ["write", "run", "ask-operator"]) {
+    for (const id of ["write", "run", "ask-operator", "editor-face"]) {
       const control = el(id);
       if (control) control.disabled = true;
     }

@@ -172,7 +172,7 @@ pre {
 
 /* ---- the examples ---- */
 
-.example { margin: 0 0 1.75rem; }
+.example { margin: 0; }
 
 /* What a person asked for, in their own words, above what came back. */
 .request {
