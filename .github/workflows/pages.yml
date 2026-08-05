@@ -92,5 +92,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # v5 rather than v4: v4 targets Node 20, which is deprecated, so the
+      # first deploy ran with a warning that GitHub was force-running it on
+      # Node 24 anyway. v5's changelog is that runtime bump — pinning it
+      # makes the version we ask for the version that runs, instead of
+      # relying on a fallback that will eventually be withdrawn.
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
