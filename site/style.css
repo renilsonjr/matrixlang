@@ -21,6 +21,12 @@
   --mono: "SF Mono", Menlo, Consolas, monospace;
   --prose: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --measure: 34rem;
+  /* The desktop pair. A phone reads at 34rem; a desktop reader has the room
+     for a longer line, but not an unlimited one — 48rem holds a paragraph
+     near 90 characters, which is the far edge of comfortable, and --page
+     stops the bands short of the bezel on a very wide monitor. */
+  --measure-wide: 48rem;
+  --page: 90rem;
 }
 
 * { box-sizing: border-box; }
@@ -349,7 +355,19 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
 
 /* THE wide band — written exactly once. */
 @container style(--layout: desktop) {
-  .band { max-width: none; }
+  /* The reading column widens with the screen instead of staying a ribbon in
+     an empty field; the bands widen further, to the page cap. Both are set
+     here rather than by rewriting --measure on :root, because :root is the
+     style container itself and a container query cannot restyle it. */
+  .masthead,
+  .prose { max-width: var(--measure-wide); }
+  .band { max-width: var(--page); }
+  /* The canvas fills its column now that the column is wide. The cap existed
+     to stop a 640-wide drawing being stretched across a whole screen; inside
+     a bounded band it only left dead space to the right of the wall.
+     `aspect-ratio` above is what holds the ResizeObserver loop shut, and it
+     is untouched. */
+  #cascade { max-width: none; }
   .examples {
     grid-template-columns: 1fr 1fr;
     gap: 1.75rem;
