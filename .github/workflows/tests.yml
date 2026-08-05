@@ -41,3 +41,24 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+  # The page's own half. site/checks/ pins what playground.js must not do;
+  # these pin what it must. Its own job rather than a step in the matrix
+  # above: it has nothing to do with the Python version, and running it four
+  # times would only make one failure look like four.
+  javascript:
+    runs-on: ubuntu-latest
+    name: javascript
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # No install step, and no package.json: `node --test` is built in and
+      # the harness has no dependencies. The glob is left unquoted so the
+      # shell expands it, which works on every Node that has --test at all.
+      - name: Run tests
+        run: node --test site/tests/*.test.mjs
