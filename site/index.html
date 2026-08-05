@@ -117,6 +117,8 @@ flatline</pre>
   <div class="example">
     <p class="request">add 5 and 3</p>
     <pre class="source">trace 5 + 3</pre>
+    <pre class="example-glyph glyph" hidden>ﾄ ｫ ﾀ ｩ</pre>
+    <button class="face-toggle">Show glyphs</button>
     <pre class="output">8</pre>
   </div>
   <div class="example">
@@ -126,6 +128,12 @@ dejavu i <= 5
   trace i
   i = i + 1
 flatline</pre>
+    <pre class="example-glyph glyph" hidden>ｱ i ﾅ ｧ
+ﾃ i ｾ ｫ
+  ﾄ i
+  i ﾅ i ﾀ ｧ
+ﾗ</pre>
+    <button class="face-toggle">Show glyphs</button>
     <pre class="output">1
 2
 3
@@ -135,6 +143,8 @@ flatline</pre>
   <div class="example">
     <p class="request">make a list of 1 2 3</p>
     <pre class="source">construct xs = [1, 2, 3]</pre>
+    <pre class="example-glyph glyph" hidden>ｱ xs ﾅ ﾍｧﾈ ｨﾈ ｩﾎ</pre>
+    <button class="face-toggle">Show glyphs</button>
     <p class="declares">This one declares rather than prints: it binds a list to
     the name <code>xs</code>, and printing is what <code>trace</code> does.</p>
   </div>
@@ -143,6 +153,10 @@ flatline</pre>
     <pre class="source">redpill 5 > 3
   trace "bigger"
 flatline</pre>
+    <pre class="example-glyph glyph" hidden>ﾚ ｫ ｿ ｩ
+  ﾄ "bigger"
+ﾗ</pre>
+    <button class="face-toggle">Show glyphs</button>
     <pre class="output">bigger</pre>
   </div>
   <div class="example">
@@ -150,6 +164,10 @@ flatline</pre>
     <pre class="source">agent double(n)
   jackout n * 2
 flatline</pre>
+    <pre class="example-glyph glyph" hidden>ｴ doubleｸnｹ
+  ﾖ n ｶ ｨ
+ﾗ</pre>
+    <button class="face-toggle">Show glyphs</button>
     <p class="declares">This one declares too: <code>double</code> now exists,
     but nothing has called it yet, and a function that is never called has
     nothing to say.</p>
@@ -188,9 +206,12 @@ flatline</pre>
 
         <label for="editor">MatrixLang</label>
         <textarea id="editor" rows="10" spellcheck="false"></textarea>
+        <button id="editor-face">Show glyphs</button>
+        <pre id="editor-glyph" class="glyph" hidden></pre>
         <button id="run">Run it</button>
       </div>
       <div class="cascade-pane">
+        <button id="cascade-face">Latin</button>
         <canvas id="cascade" width="640" height="360"></canvas>
       </div>
     </div>

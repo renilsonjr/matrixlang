@@ -12,6 +12,7 @@ const WHEEL = "matrixlang-0.6.0-py3-none-any.whl";
 let pyodide = null;
 let glue = null;
 let cascade = null;
+let face = "glyph"; // "glyph" | "latin" — the cascade's face for both source and output
 
 const el = (id) => document.getElementById(id);
 
@@ -99,13 +100,11 @@ function runProgram() {
   el("miss").hidden = true;
   for (const event of events) {
     if (event.kind === "statement") {
-      // `source` is the glyph face, `latin` the readable one. web-ui
-      // offers a toggle; this page shows the glyph wall, which is the
-      // thing worth seeing.
-      cascade.add(event.source, "source");
+      // `source` is the pure glyph wall, `latin` keeps identifiers readable.
+      // One toggle governs both faces — output too — per FL-7.
+      cascade.add(face === "glyph" ? event.source : event.latin, "source");
     } else if (event.kind === "output") {
-      // Already transliterated in Python. The browser owns no glyph table.
-      cascade.add(event.glyphs, "output");
+      cascade.add(face === "glyph" ? event.glyphs : event.text, "output");
     } else if (event.kind === "error") {
       // Diagnostics are never transliterated — an error is the moment a
       // reader's fluency has failed, and glyphs are the worst possible
@@ -185,5 +184,47 @@ el("request").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); writeProgram(); }
 });
 el("ask-operator").addEventListener("click", askOperator);
+
+function toggleCascadeFace() {
+  face = face === "glyph" ? "latin" : "glyph";
+  const button = el("cascade-face");
+  button.textContent = face === "glyph" ? "Latin" : "Glyph wall";
+  // Applies to the next run: the wall is cleared per run by design, and
+  // toggling mid-fall would need cascade.js to re-render its history —
+  // presentation, not worth touching the copied file for.
+}
+
+function toggleEditorFace() {
+  const pre = el("editor-glyph");
+  const button = el("editor-face");
+  if (pre.hidden === false) {
+    pre.hidden = true;
+    button.textContent = "Show glyphs";
+    return;
+  }
+  // Ask Python, never transliterate here. A parse failure shows the real
+  // diagnostic in the shared miss slot rather than a broken face.
+  const result = glue.glyph(el("editor").value).toJs({ dict_converter: Object.fromEntries });
+  if (result.ok) {
+    pre.textContent = result.glyph;
+    pre.hidden = false;
+    button.textContent = "Hide glyphs";
+  } else {
+    el("miss").textContent = result.error;
+    el("miss").hidden = false;
+  }
+}
+
+function toggleExampleFace(button) {
+  const pre = button.previousElementSibling;
+  pre.hidden = pre.hidden === false;
+  button.textContent = pre.hidden ? "Show glyphs" : "Hide glyphs";
+}
+
+el("cascade-face").addEventListener("click", toggleCascadeFace);
+el("editor-face").addEventListener("click", toggleEditorFace);
+document.querySelectorAll(".face-toggle").forEach((button) => {
+  button.addEventListener("click", () => toggleExampleFace(button));
+});
 
 window.__playground = { boot, write: writeProgram, run: runProgram };
