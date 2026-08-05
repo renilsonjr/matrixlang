@@ -22,10 +22,17 @@
   --prose: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --measure: 34rem;
   /* The desktop pair. A phone reads at 34rem; a desktop reader has the room
-     for a longer line, but not an unlimited one — 48rem holds a paragraph
-     near 90 characters, which is the far edge of comfortable, and --page
-     stops the bands short of the bezel on a very wide monitor. */
-  --measure-wide: 48rem;
+     for a longer line, and this page spends it. Measured across the six long
+     paragraphs, counting rendered lines rather than estimating: 48rem runs
+     about 93 characters, 64rem about 111, 72rem about 132. All are past the
+     45–75 typography calls comfortable, so the choice was never between
+     comfortable and not — it was where to stop. 64rem is that stop, picked
+     by reading the real copy at each width rather than by picking a number.
+     Note 56rem measures 108, barely different from 64: line breaks quantize
+     to word lengths, so the two read almost alike and the wider one wastes
+     less of the screen. --page stays wider than the column, so prose never
+     outruns the examples band beside it. */
+  --measure-wide: 64rem;
   --page: 90rem;
 }
 
