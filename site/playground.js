@@ -116,12 +116,11 @@ function runProgram() {
   }
 }
 
-// The key is a local, never stored — not in browser storage, not in a
-// cookie, not in the URL: a persisted key is one XSS away from being
-// someone else's, and this page cannot offer the isolation that would
-// make storing it reasonable. The named APIs are absent from this file
-// deliberately, and a check greps for them, so this comment describes
-// the rule without spelling them out.
+// The key is a local, never stored. Not localStorage, not a cookie, not a
+// URL parameter: a persisted key is one XSS away from being someone
+// else's, and this page cannot offer the isolation that would make
+// storing it reasonable. site/checks/key_handling.py enforces that, and
+// enforces that this file talks to exactly one host.
 //
 // `anthropic-dangerous-direct-browser-access` is what makes the API answer
 // a browser at all — it opts the request into CORS. The header is named

@@ -672,8 +672,10 @@ async function askOperator() {
       body: JSON.stringify({
         model: "claude-opus-5",
         max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: el("request").value }],
+        // `build()` returns the whole context with the request already in
+        // it — role, keyword list, rules, worked example. There is no
+        // separate system prompt to send, and nothing here assembles one.
+        messages: [{ role: "user", content: glue.operator_prompt(el("request").value) }],
       }),
     });
     if (!response.ok) {
@@ -696,49 +698,80 @@ async function askOperator() {
 el("ask-operator").addEventListener("click", askOperator);
 ```
 
-- [ ] **Step 2: Supply the system prompt from the package, not by hand**
+- [ ] **Step 2: Supply the prompt from the package, not by hand**
 
-`src/matrixlang/operator/prompt.py` builds Operator's system prompt, and it reads the keyword list from `tokens` rather than retyping it — precisely so the prompt cannot drift from the language. Retyping it into JavaScript would reintroduce that drift.
+`src/matrixlang/operator/prompt.py` builds Operator's context, and it reads
+the keyword list from `tokens` rather than retyping it — precisely so the
+prompt cannot drift from the language. Retyping it into JavaScript would
+reintroduce exactly that drift.
 
-Add to `site/generate_examples.py`'s `build()`, and regenerate:
+Note its real shape before writing anything: the export is **`build(request)`**,
+not a `SYSTEM` constant, and it returns the *entire* context with the request
+already embedded — role, keywords, rules, worked example, and the ask. There is
+no static system prompt to extract, so there is nothing to precompute into
+`examples.json`.
+
+Since `glue.py` already runs inside Pyodide with the whole package importable,
+expose it there instead. Add to `site/glue.py`:
 
 ```python
-    from matrixlang.operator.prompt import SYSTEM  # exact name: read prompt.py first
-    built["__system_prompt__"] = {"source": SYSTEM, "output": []}
+def operator_prompt(request: str) -> str:
+    """The full context Operator is asked with, built by the package.
+
+    `prompt.build` reads the keyword list from `tokens` so the prompt
+    cannot drift from the language; assembling it in JavaScript would
+    undo that. It returns one string with the request already in it —
+    there is no separate system prompt — so the caller sends it as the
+    only user message.
+
+    Importing `operator.prompt` pulls in no SDK: `operator/client.py` is
+    the only module that touches `anthropic`, and it imports it inside
+    the function that calls it.
+    """
+    from matrixlang.operator.prompt import build
+
+    return build(request)
 ```
 
-Then in `playground.js`, load it rather than embedding it:
+And add to `tests/test_site_glue.py`:
 
-```javascript
-let SYSTEM_PROMPT = "";
-// Fetched with the examples so the browser never holds a second copy of
-// the prompt — prompt.py reads the keyword list from tokens.py for the
-// same reason.
-fetch("examples.json")
-  .then((r) => r.json())
-  .then((data) => { SYSTEM_PROMPT = data.__system_prompt__.source; });
+```python
+def test_operator_prompt_comes_from_the_package():
+    prompt = glue.operator_prompt("count from 1 to 10")
+    # The request is embedded, not appended by the caller.
+    assert "count from 1 to 10" in prompt
+    # Keywords are read from tokens.py, not retyped — spot-check two that
+    # arrived in different stages.
+    assert "jackout" in prompt and "splice" in prompt
+
+
+def test_operator_prompt_pulls_in_no_sdk():
+    """The page must stay usable without the optional `anthropic` extra."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; sys.path.insert(0, 'site');"
+        "import glue; glue.operator_prompt('add 1 and 2');"
+        "print('anthropic' in sys.modules)"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert out.stdout.strip() == "False"
 ```
-
-Read `src/matrixlang/operator/prompt.py` to get the real exported name before writing this — do not assume it is `SYSTEM`. No test change is needed for the `__system_prompt__` key: the freshness
-test compares it like any other entry, and `test_every_example_generated_source`
-asserts source rather than output, which the prompt text satisfies.
 
 - [ ] **Step 3: Verify the key is never persisted**
 
-Run:
-```bash
-python - <<'PY'
-import pathlib
-js = pathlib.Path("site/playground.js").read_text()
-for banned in ["localStorage", "sessionStorage", "document.cookie", "history.pushState"]:
-    assert banned not in js, f"the key could be persisted via {banned}"
-# The key may go to exactly one host.
-hosts = [line for line in js.split("\n") if "fetch(" in line and "http" in line]
-assert all("api.anthropic.com" in h for h in hosts), f"unexpected fetch target: {hosts}"
-print("key is memory-only, and goes to exactly one host")
-PY
-```
+Run: `python site/checks/key_handling.py`
 Expected: `key is memory-only, and goes to exactly one host`
+
+It strips comments first, for the same reason `no_semantics.py` does: an
+earlier version grepped the raw file, so the comment explaining "never
+localStorage" tripped the check that exists to enforce it. It fails on any
+persistence sink, on a `fetch` to any host but `api.anthropic.com`, and on
+a missing `anthropic-dangerous-direct-browser-access` header — verified by
+injecting each violation and watching it exit non-zero.
 
 - [ ] **Step 4: Run the suite**
 
