@@ -2,14 +2,10 @@
 // The playground's JavaScript half. It boots Pyodide, hands requests to
 // site/glue.py, and draws what comes back.
 //
-// It deliberately owns no language logic: it never lexes, parses, converts
-// text into glyphs, or builds a message shape. Every glyph it draws arrived
+// It deliberately owns no language logic: it never lexes, parses,
+// transliterates, or builds a message shape. Every glyph it draws arrived
 // already rendered from Python. That rule is what the deleted web/ layer
 // broke, and TECHNICAL-OVERVIEW §5.7 is why it is stated here too.
-//
-// The wording above avoids the obvious verb on purpose: the plan's
-// no-semantics check greps this file for that verb, and a file that talks
-// about the rule must not read as a file that breaks it.
 
 const WHEEL = "matrixlang-0.6.0-py3-none-any.whl";
 
@@ -23,7 +19,41 @@ async function boot() {
   const button = el("boot");
   button.disabled = true;
   button.textContent = "Loading Python… (a few MB, once)";
+  try {
+    await load();
+  } catch (error) {
+    // Without this the rejection surfaces only as "Uncaught (in promise)"
+    // in a console the reader is not looking at, and the button sits on
+    // "Loading Python…" forever. A CDN that is blocked, an offline tab,
+    // and a wheel that failed to publish all look like that. The narrative
+    // above is unaffected — that is the point of loading none of this
+    // until asked.
+    button.disabled = false;
+    button.textContent = "Load the interpreter and try it";
+    const miss = el("miss");
+    miss.textContent =
+      `The interpreter could not load: ${error.message}. ` +
+      "Everything above still reads without it, and the examples were run " +
+      "before the page shipped. You can also clone the repository and run " +
+      "the same interpreter locally.";
+    miss.hidden = false;
+    // `#miss` lives inside `#live`, so saying anything at all means
+    // revealing that block — which would also expose an editor and a Run
+    // button wired to a `glue` and a `cascade` that are still null.
+    // Showing the controls dead is worse than not showing them, so they
+    // are disabled rather than merely present.
+    el("live").hidden = false;
+    for (const id of ["write", "run", "ask-operator"]) {
+      const control = el(id);
+      if (control) control.disabled = true;
+    }
+    return;
+  }
+  button.hidden = true;
+  el("live").hidden = false;
+}
 
+async function load() {
   pyodide = await loadPyodide();
   await pyodide.loadPackage("micropip");
   const micropip = pyodide.pyimport("micropip");
@@ -45,8 +75,6 @@ async function boot() {
   // it, and a static import would break the page for everyone.
   const { Cascade } = await import("./cascade.js");
   cascade = new Cascade(el("cascade"));
-  button.hidden = true;
-  el("live").hidden = false;
 }
 
 function writeProgram() {
@@ -76,13 +104,12 @@ function runProgram() {
       // thing worth seeing.
       cascade.add(event.source, "source");
     } else if (event.kind === "output") {
-      // Already in the glyph face, converted in Python. The browser owns
-      // no glyph table.
+      // Already transliterated in Python. The browser owns no glyph table.
       cascade.add(event.glyphs, "output");
     } else if (event.kind === "error") {
-      // Diagnostics stay in Latin — an error is the moment a reader's
-      // fluency has failed, and glyphs are the worst possible response to
-      // that.
+      // Diagnostics are never transliterated — an error is the moment a
+      // reader's fluency has failed, and glyphs are the worst possible
+      // response to that.
       el("miss").textContent = event.message;
       el("miss").hidden = false;
     }

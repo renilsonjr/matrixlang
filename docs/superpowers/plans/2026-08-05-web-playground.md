@@ -456,9 +456,16 @@ In `site/index.html`, immediately before `</body>`:
 
 ```html
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
-<script src="cascade.js"></script>
 <script src="playground.js"></script>
 ```
+
+**`cascade.js` is deliberately not a `<script>` tag.** It is an ES module
+(`export class Cascade`), and it is copied in by the workflow rather than
+living in `site/`, so during local development it is simply absent. A
+static `import` would fail at parse time and take the whole narrative down
+with it. `playground.js` therefore stays a classic script and pulls the
+module in with a dynamic `import()` inside `boot()` — which is also
+exactly the laziness WP-3 asks for.
 
 The version is pinned deliberately — tracking `latest` means the page can break on someone else's release. Upgrading is a one-line edit plus a manual pass over Step 6.
 
@@ -478,7 +485,7 @@ const WHEEL = "matrixlang-0.6.0-py3-none-any.whl";
 
 let pyodide = null;
 let glue = null;
-let field = null;
+let cascade = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -504,7 +511,10 @@ async function boot() {
   pyodide.runPython("import sys; sys.path.insert(0, '/')");
   glue = pyodide.pyimport("glue");
 
-  field = new CascadeField(el("cascade"));
+  // Dynamic, not static: cascade.js is absent until the workflow copies
+  // it, and a static import would break the page for everyone.
+  const { Cascade } = await import("./cascade.js");
+  cascade = new Cascade(el("cascade"));
   button.hidden = true;
   el("live").hidden = false;
 }
@@ -533,20 +543,30 @@ function writeProgram() {
 
 function runProgram() {
   const events = glue.run(el("editor").value).toJs({ dict_converter: Object.fromEntries });
-  field.reset();
+  cascade.clear();
+  el("miss").hidden = true;
   for (const event of events) {
-    if (event.kind === "error") {
+    if (event.kind === "statement") {
+      // `source` is the glyph face, `latin` the readable one. web-ui
+      // offers a toggle; this page shows the glyph wall, which is the
+      // thing worth seeing.
+      cascade.add(event.source, "source");
+    } else if (event.kind === "output") {
+      // Already transliterated in Python. The browser owns no glyph table.
+      cascade.add(event.glyphs, "output");
+    } else if (event.kind === "error") {
       // Diagnostics are never transliterated — an error is the moment a
       // reader's fluency has failed, and glyphs are the worst possible
       // response to that.
       el("miss").textContent = event.message;
       el("miss").hidden = false;
-      continue;
     }
-    field.consume(event);
   }
-  field.start();
 }
+
+// No start() call: Cascade begins its own requestAnimationFrame loop in
+// its constructor and runs a fixed 33ms timestep, so speed is a property
+// of the design rather than of the viewer's refresh rate (§5.7).
 
 el("boot").addEventListener("click", boot);
 el("write").addEventListener("click", writeProgram);
@@ -558,27 +578,30 @@ el("request").addEventListener("keydown", (e) => {
 window.__playground = { boot, write: writeProgram, run: runProgram };
 ```
 
-- [ ] **Step 4: Adapt to `cascade.js`'s real interface**
+- [ ] **Step 4: Confirm the interface against the real file**
 
-`cascade.js` was written to be driven by the SSE reader in `web-ui/app.js`, not by this file. Open `web-ui/cascade.js`, find how `app.js` constructs it and feeds it events, and adjust the three calls above (`new CascadeField(...)`, `.reset()`, `.consume(event)`, `.start()`) to match the real names and arguments.
+The calls above were written against `web-ui/cascade.js` as it actually
+is: `export class Cascade`, `new Cascade(canvas)`, `.clear()`,
+`.add(text, kind)` with `kind` of `"source"` or `"output"`, and a
+`requestAnimationFrame` loop the constructor starts on its own. Re-read
+the file and confirm each one still matches before moving on.
 
-**Do not modify `cascade.js`.** It is copied verbatim by the workflow in Task 6, and editing it here forks the file this plan exists to avoid forking. If the interface genuinely cannot be driven without a change, stop and raise it rather than editing.
+**Do not modify `cascade.js`.** It is copied verbatim by the workflow in
+Task 6, and editing it here forks the file this plan exists to avoid
+forking. If the interface genuinely cannot be driven without a change,
+stop and raise it rather than editing.
 
 - [ ] **Step 5: Verify the no-semantics rule holds**
 
-Run:
-```bash
-python - <<'PY'
-import pathlib, re
-js = pathlib.Path("site/playground.js").read_text()
-# The page must never transliterate, lex, or parse in JavaScript.
-for banned in ["ｱ", "transliterate", "GLYPH", "function lex", "function parse"]:
-    assert banned not in js, f"playground.js contains language logic: {banned!r}"
-assert not re.search(r"[ｦ-ﾝ]", js), "playground.js contains a katakana literal"
-print("no semantics in the browser half")
-PY
-```
+Run: `python site/checks/no_semantics.py`
 Expected: `no semantics in the browser half`
+
+The check strips comments before looking, and tests for *logic* — katakana
+literals, a call to `transliterate()`, a locally defined `lex`/`parse`, a
+glyph table — rather than for vocabulary. An earlier version grepped the
+raw file, so a comment explaining the rule tripped it and the only way to
+pass was to write around the obvious verb. A guard that forces bad prose
+is a guard that will eventually be deleted.
 
 - [ ] **Step 6: Verify by hand in a browser**
 
