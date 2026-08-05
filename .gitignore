@@ -28,3 +28,9 @@ matrixlang.features/
 .env
 .env.*
 !.env.example
+
+# Assembled by .github/workflows/pages.yml from site/, the built wheel, and
+# the two files copied rather than forked (web-ui/cascade.js, server/sse.py).
+# Everything in here is derived; the sources are tracked.
+_site/
+dist/

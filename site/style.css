@@ -240,9 +240,16 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
 
 #cascade {
   display: block;
-  width: 640px;
-  max-width: 100%;
-  height: auto;
+  width: 100%;
+  max-width: 640px;
+  /* An explicit ratio, NOT `height: auto`.
+     `Cascade.resize()` writes canvas.width/height from getBoundingClientRect(),
+     and `height: auto` derives the rendered height from those same attributes —
+     so the ResizeObserver fed its own output back in and the box crept from
+     16:9 to a 1:1 square, thinning the wall over a taller area. web-ui avoids
+     this by giving the canvas a definite height inside a sized flex parent;
+     this page has no such parent, so the ratio is stated here instead. */
+  aspect-ratio: 16 / 9;
   margin-top: 1.5rem;
   background: #000;
   border: 1px solid var(--edge);
