@@ -21,10 +21,11 @@ designs — the falling text is ordinary Unicode katakana, explained in
 [The glyphs](#the-glyphs) below. Code is [MIT licensed](LICENSE); that
 license covers this repository's code and nothing beyond it.
 
-**Three ways in, depending on what you want:**
+**Four ways in, depending on what you want:**
 
 | | |
 | --- | --- |
+| **[Open it in a browser](https://renilsonjr.github.io/matrixlang/)** | Read what it is, then run the real interpreter in your own tab. Nothing to install |
 | **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)** | Learn to read and write the language. Start here if you want to *use* it |
 | **[docs/NON_TECHNICAL_EXPLANATION.md](docs/NON_TECHNICAL_EXPLANATION.md)** | Explain the project to someone who does not know programming |
 | **[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md)** | How the implementation works — the pipeline, the module map, the problems that took real effort |
@@ -53,7 +54,7 @@ assistive companion that writes MatrixLang from plain language, in the
 terminal or in a browser, and **Scribe**, a keyless, deterministic
 companion that does the same without a key, an SDK, or the network.
 
-1,382 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,395 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```
@@ -319,6 +320,39 @@ The same chat surface, with an engine toggle. Scribe is the server's
 default: `/api/chat` answers as Scribe unless asked for `operator`, so
 the page works with no key installed. A miss shows the hint in the chat
 and, when a key is present, offers the switch to Operator.
+
+## In a browser, with nothing installed
+
+<https://renilsonjr.github.io/matrixlang/>
+
+The page explains what the project is, and then runs the language in your
+own browser tab. There is no server on the other end of it: it fetches
+Python compiled to WebAssembly along with this project's wheel, built by
+CI from the same commit the page is published from, and executes
+`src/matrixlang/` locally. Whatever you type stays on your machine,
+because the page has nowhere to send it.
+
+That is also why hosting this needed no login, no rate limiting, and no
+answer to running strangers' code — the property that made clone-and-run
+acceptable is unchanged. **Nobody's code runs on anybody else's computer.**
+
+Reading it costs about 24&nbsp;KB. Pressing the button costs roughly
+13&nbsp;MB — Pyodide's WebAssembly build is 10 of that, the Python
+standard library another 2, and this project's wheel 66&nbsp;KB — fetched
+once, then cached, and about three seconds to a working editor on a fast
+connection. Nothing loads until you ask, so a reader who only wants the
+explanation pays none of it.
+
+[Scribe](#scribe) works there with no key. [Operator](#operator) is
+present but needs an Anthropic API key you supply yourself; it is held in
+the tab's memory, never stored, and sent nowhere but Anthropic. Pasting an
+API key into a web page is a habit worth being suspicious of, which is
+why the page says so plainly and links to the file that makes the call.
+
+There is one thing the browser cannot do: `tkinter` is not there, so the
+native cascade window has no equivalent. The page draws the same cascade
+on a canvas from the same events, which is what `web-ui/` already did for
+the local server.
 
 ## The glyphs
 
