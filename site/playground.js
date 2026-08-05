@@ -44,7 +44,7 @@ async function boot() {
     // Showing the controls dead is worse than not showing them, so they
     // are disabled rather than merely present.
     el("live").hidden = false;
-    for (const id of ["write", "run", "ask-operator", "editor-face"]) {
+    for (const id of ["write", "run", "ask-operator", "editor-face", "cascade-face"]) {
       const control = el(id);
       if (control) control.disabled = true;
     }
@@ -83,6 +83,7 @@ function writeProgram() {
   const miss = el("miss");
   if (result.ok) {
     el("editor").value = result.source;
+    withdrawEditorFace();
     miss.hidden = true;
   } else {
     // Escape once, at the end. Hints contain angle brackets, so escaping
@@ -163,6 +164,7 @@ async function askOperator() {
     const body = await response.json();
     const text = body.content.filter((b) => b.type === "text").map((b) => b.text).join("");
     el("editor").value = text.trim();
+    withdrawEditorFace();
     miss.hidden = true;
   } catch (error) {
     miss.textContent = `Operator failed: ${error.message}`;
@@ -194,6 +196,23 @@ function toggleCascadeFace() {
   // presentation, not worth touching the copied file for.
 }
 
+// The glyph face is a face *of the source it was rendered from*. The moment
+// the editor changes it stops being one, so it is withdrawn rather than left
+// sitting under a program it no longer describes — which on a page whose
+// whole claim is "one program, two faces, the conversion loses nothing"
+// would be the most damaging thing on the screen.
+//
+// Withdrawn, not re-rendered: re-rendering would mean a parse per keystroke,
+// and a diagnostic for every half-typed line. Pressing the button again is
+// how the reader asks for the face of what is now there.
+function withdrawEditorFace() {
+  const pre = el("editor-glyph");
+  if (pre.hidden) return;
+  pre.hidden = true;
+  pre.textContent = "";
+  el("editor-face").textContent = "Show glyphs";
+}
+
 function toggleEditorFace() {
   const pre = el("editor-glyph");
   const button = el("editor-face");
@@ -209,6 +228,11 @@ function toggleEditorFace() {
     pre.textContent = result.glyph;
     pre.hidden = false;
     button.textContent = "Hide glyphs";
+    // The slot is shared, so a face that renders has to clear the failure
+    // that a previous one left there — otherwise the reader fixes their
+    // program, gets the glyphs, and the old syntax error is still accusing
+    // them. `writeProgram` and `runProgram` both clear it on success.
+    el("miss").hidden = true;
   } else {
     el("miss").textContent = result.error;
     el("miss").hidden = false;
@@ -223,6 +247,10 @@ function toggleExampleFace(button) {
 
 el("cascade-face").addEventListener("click", toggleCascadeFace);
 el("editor-face").addEventListener("click", toggleEditorFace);
+// Typing is only one of the ways the editor changes; Scribe and Operator
+// both write into it, and assigning `.value` fires no input event, so they
+// withdraw the face themselves.
+el("editor").addEventListener("input", withdrawEditorFace);
 document.querySelectorAll(".face-toggle").forEach((button) => {
   button.addEventListener("click", () => toggleExampleFace(button));
 });
