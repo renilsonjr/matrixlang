@@ -32,15 +32,19 @@ _OUT = Path(__file__).parent / "examples.json"
 
 
 def build() -> dict:
-    """Every example, with the source Scribe wrote and the output it printed."""
+    """Every example, with the source Scribe wrote, its glyph face, and the
+    output it printed."""
     built = {}
     for request in EXAMPLES:
         written = glue.write(request)
         assert written["ok"], f"{request!r} is no longer a request Scribe knows"
         source = written["source"]
         events = glue.run(source)
+        glyph_result = glue.glyph(source)
+        assert glyph_result["ok"], f"{request!r} source no longer renders a glyph face"
         built[request] = {
             "source": source,
+            "glyph": glyph_result["glyph"],
             "output": [e["text"] for e in events if e["kind"] == "output"],
         }
     return built

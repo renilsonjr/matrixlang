@@ -1,12 +1,14 @@
 {
   "add 5 and 3": {
     "source": "trace 5 + 3\n",
+    "glyph": "\uff84 \uff6b \uff80 \uff69\n",
     "output": [
       "8"
     ]
   },
   "count from 1 to 5": {
     "source": "construct i = 1\ndejavu i <= 5\n  trace i\n  i = i + 1\nflatline\n",
+    "glyph": "\uff71 i \uff85 \uff67\n\uff83 i \uff7e \uff6b\n  \uff84 i\n  i \uff85 i \uff80 \uff67\n\uff97\n",
     "output": [
       "1",
       "2",
@@ -17,16 +19,19 @@
   },
   "make a list of 1 2 3": {
     "source": "construct xs = [1, 2, 3]\n",
+    "glyph": "\uff71 xs \uff85 \uff8d\uff67\uff88 \uff68\uff88 \uff69\uff8e\n",
     "output": []
   },
   "if 5 is greater than 3 trace bigger": {
     "source": "redpill 5 > 3\n  trace \"bigger\"\nflatline\n",
+    "glyph": "\uff9a \uff6b \uff7f \uff69\n  \uff84 \"bigger\"\n\uff97\n",
     "output": [
       "bigger"
     ]
   },
   "define a function that doubles": {
     "source": "agent double(n)\n  jackout n * 2\nflatline\n",
+    "glyph": "\uff74 double\uff78n\uff79\n  \uff96 n \uff76 \uff68\n\uff97\n",
     "output": []
   }
 }
