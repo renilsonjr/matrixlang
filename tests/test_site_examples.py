@@ -45,3 +45,26 @@ def test_every_example_generated_source():
     committed = json.loads(_COMMITTED.read_text())
     for request, example in committed.items():
         assert example["source"].strip(), f"{request!r} generated no source"
+
+
+def test_every_example_has_a_glyph_face():
+    committed = json.loads(_COMMITTED.read_text())
+    for request, example in committed.items():
+        assert example["glyph"].strip(), f"{request!r} has no glyph face"
+
+
+def test_every_example_glyph_face_round_trips():
+    """The glyph face on the page re-parses to the same tree as the ASCII.
+
+    Round-tripping is the guarantee that makes a second face safe: the
+    reader can switch the example to glyphs and still be looking at the
+    same program.
+    """
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    committed = json.loads(_COMMITTED.read_text())
+    for request, example in committed.items():
+        assert parse(lex(example["glyph"])) == parse(lex(example["source"])), (
+            f"{request!r} glyph face drifted from its ASCII source"
+        )
