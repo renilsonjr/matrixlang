@@ -14,6 +14,7 @@ did (see the commit that deleted it, and TECHNICAL-OVERVIEW §5.7).
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
+from matrixlang.render import render_glyph
 from matrixlang.scribe import ScribeProgram, scribe
 
 from server.sse import payload
@@ -45,6 +46,23 @@ def write(request: str) -> dict:
     if isinstance(result, ScribeProgram):
         return {"ok": True, "source": result.source}
     return {"ok": False, "error": result.reason, "hint": result.closest}
+
+
+def glyph(source: str) -> dict:
+    """The glyph face of arbitrary source, rendered by Python. Never raises.
+
+    The editor toggle shows this face *beside* what the reader typed; it
+    never rewrites the editor. Rendering happens here rather than in
+    JavaScript because the browser may draw but must not own the
+    transliteration table (§5.7, site/checks/no_semantics.py).
+    """
+    from matrixlang.errors import MatrixLangError
+
+    try:
+        program = parse(lex(source))
+    except MatrixLangError as error:
+        return {"ok": False, "error": f"[line {error.line}, column {error.column}] {error.message}"}
+    return {"ok": True, "glyph": render_glyph(program)}
 
 
 def operator_prompt(request: str) -> str:

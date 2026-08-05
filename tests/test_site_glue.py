@@ -82,3 +82,19 @@ def test_operator_prompt_pulls_in_no_sdk():
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert out.stdout.strip() == "False"
+
+
+def test_glyph_renders_the_glyph_face_of_arbitrary_source():
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    result = glue.glyph("trace 5 + 3")
+    assert result["ok"] is True
+    assert parse(lex(result["glyph"])) == parse(lex("trace 5 + 3"))
+    assert result["glyph"] != "trace 5 + 3"  # really the glyph face
+
+
+def test_glyph_of_invalid_source_is_an_error():
+    result = glue.glyph("trace )(")
+    assert result["ok"] is False
+    assert "error" in result
