@@ -1,0 +1,96 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the package and its dev extra
+        run: python -m pip install -e ".[dev]"
+
+      # The freshness gate. If examples.json disagrees with a real run, the
+      # page would ship an example the interpreter no longer produces.
+      - name: Verify the committed examples are not stale
+        run: python -m pytest tests/test_site_examples.py tests/test_site_glue.py -q
+
+      # The two rules that are easy to state and easy to erode. Both strip
+      # comments before looking, so they test what the code does rather than
+      # what its prose is allowed to name.
+      - name: The browser half owns no language logic
+        run: python site/checks/no_semantics.py
+
+      - name: The reader's key is memory-only and goes to one host
+        run: python site/checks/key_handling.py
+
+      - name: Build the wheel the browser installs
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir dist/
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp site/index.html site/style.css site/playground.js site/glue.py site/examples.json _site/
+          # Copied, never forked. cascade.js may re-implement presentation;
+          # sse.py is the single definition of the wire shape. Editing either
+          # into site/ is what TECHNICAL-OVERVIEW §5.7 warns against.
+          cp web-ui/cascade.js _site/
+          cp server/sse.py _site/
+          cp dist/*.whl _site/
+
+      - name: Check the wheel filename matches what playground.js installs
+        run: |
+          expected=$(grep -oE 'matrixlang-[0-9.]+-py3-none-any\.whl' site/playground.js)
+          test -f "_site/$expected" || {
+            echo "playground.js installs $expected but the build produced:"; ls _site/*.whl; exit 1;
+          }
+
+      # A missing wheel does not surface as a 404 in the browser — micropip
+      # feeds the 404 body straight to zipfile and the reader sees
+      # "File is not a zip file". Confirm it is a real wheel here, where the
+      # message can still be clear.
+      - name: Check the wheel ships the modules the page imports
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+          names = zipfile.ZipFile(glob.glob("_site/*.whl")[0]).namelist()
+          # scribe is the keyless path; operator.prompt is what
+          # glue.operator_prompt() imports for the bring-your-own-key path.
+          required = ["matrixlang/scribe.py", "matrixlang/operator/prompt.py"]
+          missing = [r for r in required if r not in names]
+          if missing:
+              sys.exit(f"wheel is missing {missing}")
+          print("wheel ships scribe and operator.prompt")
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,306 @@
+/* The narrative page. It shares web-ui/style.css's palette on purpose: the
+   playground and the local browser UI run the same interpreter and draw the
+   same cascade, so they should not look like two projects.
+
+   The one structural difference is the reading measure. web-ui/ is an
+   application laid out in panels; this is a page someone reads on a phone
+   before deciding whether to press anything, so prose is capped at 34rem and
+   nothing is allowed to push the document sideways. */
+
+:root {
+  --bg: #05070a;
+  --panel: #0b0f14;
+  --edge: #16202a;
+  --green: #00ff41;
+  --dim: #0d7a2a;
+  --head: #ccffcc;
+  --text: #c8d4cd;
+  --muted: #5d6f66;
+  --white: #e8f0ea;
+  --amber: #d68a2a;
+  --mono: "SF Mono", Menlo, Consolas, monospace;
+  --prose: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --measure: 34rem;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1.25rem 4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.65 var(--prose);
+  /* A long unbroken token in prose must wrap rather than widen the page. */
+  overflow-wrap: break-word;
+}
+
+/* ---- the reading column ---- */
+
+.masthead,
+.prose,
+#playground {
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+.masthead { padding: 3.5rem 0 2.5rem; }
+
+.eyebrow {
+  margin: 0 0 1.25rem;
+  color: var(--dim);
+  font: 11px/1 var(--mono);
+  letter-spacing: 0.28em;
+}
+
+h1 {
+  margin: 0;
+  color: var(--head);
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.premise {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+h2 {
+  margin: 3rem 0 1rem;
+  color: var(--green);
+  font: 12px/1.4 var(--mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+p { margin: 0 0 1rem; }
+
+i { color: inherit; }
+
+b { color: var(--white); font-weight: 600; }
+
+a {
+  color: var(--green);
+  text-decoration-color: var(--dim);
+  text-underline-offset: 3px;
+}
+a:hover { color: var(--head); }
+
+/* The one sentence the whole project reduces to. */
+.thesis {
+  margin: 1.5rem 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--dim);
+  color: var(--white);
+  font-size: 1.15rem;
+}
+
+/* ---- code ---- */
+
+code {
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
+pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  color: var(--white);
+  font: 13px/1.7 var(--mono);
+  /* Code is the one thing that may exceed the measure. It scrolls inside its
+     own box so the document never does. */
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+/* ---- two faces ---- */
+
+.faces {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+  margin: 0 0 1.5rem;
+}
+
+.faces figure { margin: 0; min-width: 0; }
+
+.faces figcaption {
+  margin-bottom: 0.4rem;
+  color: var(--muted);
+  font: 10px/1.4 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.glyph { color: var(--green); }
+
+@media (min-width: 40rem) {
+  .faces { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---- the examples ---- */
+
+.example { margin: 0 0 1.75rem; }
+
+/* What a person asked for, in their own words, above what came back. */
+.request {
+  margin: 0 0 0.5rem;
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--edge);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.example .output {
+  margin-top: 0.4rem;
+  border-color: var(--dim);
+  color: var(--green);
+}
+
+/* Two examples print nothing, correctly: they declare rather than announce.
+   This note takes the place of the output block rather than sitting beside an
+   empty one — a blank box on a page that promises "watch it run" reads as a
+   fault, and it isn't one. */
+.declares {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ---- the playground ---- */
+
+#playground { padding-top: 1rem; }
+
+label {
+  display: block;
+  margin: 1.5rem 0 0.4rem;
+  color: var(--muted);
+  font: 10px/1.4 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+input, textarea {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  color: var(--white);
+  font: 14px/1.7 var(--mono);
+  tab-size: 2;
+}
+input { line-height: 1.4; }
+textarea { resize: vertical; }
+input::placeholder { color: var(--muted); }
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--dim);
+}
+
+button {
+  margin-top: 0.75rem;
+  padding: 0.55rem 1rem;
+  background: transparent;
+  border: 1px solid var(--dim);
+  border-radius: 4px;
+  color: var(--green);
+  font: 13px/1.2 var(--mono);
+  cursor: pointer;
+}
+button:hover { background: #08120c; color: var(--head); }
+button:disabled { border-color: var(--edge); color: var(--muted); cursor: default; }
+
+#boot {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  font-size: 14px;
+}
+
+/* Misses and diagnostics. Never transliterated — an error is the moment a
+   reader's fluency has failed, and glyphs are the worst possible response. */
+#miss {
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--panel);
+  border-left: 2px solid var(--amber);
+  color: var(--amber);
+  font: 13px/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+
+#cascade {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  /* An explicit ratio, NOT `height: auto`.
+     `Cascade.resize()` writes canvas.width/height from getBoundingClientRect(),
+     and `height: auto` derives the rendered height from those same attributes —
+     so the ResizeObserver fed its own output back in and the box crept from
+     16:9 to a 1:1 square, thinning the wall over a taller area. web-ui avoids
+     this by giving the canvas a definite height inside a sized flex parent;
+     this page has no such parent, so the ratio is stated here instead. */
+  aspect-ratio: 16 / 9;
+  margin-top: 1.5rem;
+  background: #000;
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+}
+
+/* ---- the Operator panel ---- */
+
+#operator-panel {
+  margin-top: 2rem;
+  padding: 0.9rem 1rem;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+}
+
+#operator-panel summary {
+  color: var(--muted);
+  font: 12px/1.4 var(--mono);
+  cursor: pointer;
+}
+#operator-panel summary:hover { color: var(--text); }
+
+/* The paragraph a reader must not skim past. The plan asked for dimmer text;
+   dimming is what makes a paragraph skimmable, so it keeps full reading
+   contrast and the amber that this page uses nowhere except for things that
+   have gone wrong or could. It is the loudest block on the page by
+   construction: warm against an otherwise entirely green document. */
+.warning {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  background: #120d06;
+  border-left: 3px solid var(--amber);
+  border-radius: 0 4px 4px 0;
+  color: var(--white);
+  font-size: 0.95rem;
+}
+.warning a { color: var(--amber); text-decoration-color: var(--amber); }
+.warning a:hover { color: #f0b464; }
+
+#api-key { margin-top: 0.5rem; }
+
+/* ---- footer ---- */
+
+footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5rem; }
+
+.links { margin: 0 0 2rem; padding: 0; list-style: none; }
+.links li { margin-bottom: 0.9rem; }
+
+.colophon {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}

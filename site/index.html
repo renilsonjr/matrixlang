@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MatrixLang — the language the film pretended to have</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <p class="eyebrow">MATRIXLANG</p>
+  <h1>The code in <i>The Matrix</i> was never a programming language.</h1>
+  <p class="premise">This is the one it pretended to have — invented, written down,
+  and made to run.</p>
+</header>
+
+<main>
+
+<section class="prose">
+  <h2>Nothing in the film runs</h2>
+
+  <p>The falling green characters are a visual effect. They have no grammar, no
+  meaning attached to any symbol, and no way to be executed. Nobody could type
+  them into a computer and get an answer back, because there is nothing behind
+  them to answer.</p>
+
+  <p>So this project is not "recreate the Matrix language." There is nothing to
+  recreate. It is the other thing:</p>
+
+  <p class="thesis">Invent the language the film pretended to have.</p>
+
+  <p>A real one, with rules a program either follows or is rejected for breaking.
+  It stores values, makes decisions, repeats work, defines functions that
+  remember where they were written, and handles numbers, text, true and false,
+  and lists. It is Turing-complete, which is the technical way of saying there
+  is no arbitrary ceiling on what you can express in it. Programs live in files
+  ending in <code>.rain</code>, and there is an interpreter that runs them, an
+  interactive prompt for trying things a line at a time, and a test suite that
+  has to stay green before any of this changes.</p>
+
+  <p>When a program runs, its own source and its own output fall through a
+  window as glyphs. Nothing on that screen is generated at random. Every
+  character that falls came from the program you ran.</p>
+</section>
+
+<section class="prose">
+  <h2>Two faces</h2>
+
+  <p>Every program can be written and read two ways. Here is one program, twice:</p>
+
+  <div class="faces">
+    <figure>
+      <figcaption>The face you type</figcaption>
+      <pre>construct i = 1
+dejavu i <= 5
+  trace i
+  i = i + 1
+flatline</pre>
+    </figure>
+    <figure>
+      <figcaption>The face it wears</figcaption>
+      <pre class="glyph">ｱ i ﾅ ｧ
+ﾃ i ｾ ｫ
+  ﾄ i
+  i ﾅ i ﾀ ｧ
+ﾗ</pre>
+    </figure>
+  </div>
+
+  <p>Neither of those is a translation of the other. The program is read once,
+  into a single structure, and that structure can be printed in either face —
+  which is why the conversion loses nothing and can be run in both directions
+  without drift. Feed the glyphs back in and the text comes out again — spacing
+  normalized to the canonical form, and otherwise the program you started with.
+  Run either face and the same thing happens.</p>
+
+  <p>Names you chose and text you quoted stay as you wrote them here, because
+  this is source you are meant to keep editing. The cascade window is stricter:
+  it transliterates everything, so what falls is a wall with no Latin in it, and
+  the table is reversible, so it can be read back rather than merely watched.</p>
+
+  <p>The glyphs are ordinary Unicode half-width katakana. They are not the
+  film's own glyph designs, and nothing here uses them.</p>
+</section>
+
+<section class="prose">
+  <h2>What it looks like</h2>
+
+  <p>You do not need to know any of those keywords to get a program out of this.
+  <b>Scribe</b> takes a plain-English request and writes the MatrixLang for it.
+  It is not an AI: it is a fixed catalogue of phrasings it was taught in
+  advance, matched exactly, so the same request always produces the same
+  program — and a request outside the catalogue is refused with the closest
+  phrasing it does know, rather than answered with a guess.</p>
+
+  <p>Below is every example on this page: what was asked for, what Scribe wrote,
+  and what that program printed. None of it was typed here by hand. It was
+  produced by running the real interpreter, and a test compares this page
+  against a fresh run, so an example cannot quietly go stale.</p>
+
+  <div class="example">
+    <p class="request">add 5 and 3</p>
+    <pre class="source">trace 5 + 3</pre>
+    <pre class="output">8</pre>
+  </div>
+
+  <div class="example">
+    <p class="request">count from 1 to 5</p>
+    <pre class="source">construct i = 1
+dejavu i <= 5
+  trace i
+  i = i + 1
+flatline</pre>
+    <pre class="output">1
+2
+3
+4
+5</pre>
+  </div>
+
+  <div class="example">
+    <p class="request">make a list of 1 2 3</p>
+    <pre class="source">construct xs = [1, 2, 3]</pre>
+    <p class="declares">This one declares rather than prints: it binds a list to
+    the name <code>xs</code>, and printing is what <code>trace</code> does.</p>
+  </div>
+
+  <div class="example">
+    <p class="request">if 5 is greater than 3 trace bigger</p>
+    <pre class="source">redpill 5 > 3
+  trace "bigger"
+flatline</pre>
+    <pre class="output">bigger</pre>
+  </div>
+
+  <div class="example">
+    <p class="request">define a function that doubles</p>
+    <pre class="source">agent double(n)
+  jackout n * 2
+flatline</pre>
+    <p class="declares">This one declares too: <code>double</code> now exists,
+    but nothing has called it yet, and a function that is never called has
+    nothing to say.</p>
+  </div>
+
+  <p><code>construct</code> names a value, <code>trace</code> prints one,
+  <code>dejavu</code> loops, <code>redpill</code> is <i>if</i>,
+  <code>agent</code> defines a function, <code>jackout</code> returns from one,
+  and <code>flatline</code> closes whichever of those you opened. There are
+  fourteen keywords in total.</p>
+</section>
+
+<section class="prose">
+  <h2>Now run one yourself</h2>
+
+  <p>Everything above had already happened before you arrived. What comes next
+  has not.</p>
+
+  <p>The button below fetches Python — the real one, compiled to run inside a
+  browser — along with this project's package, and starts the actual interpreter
+  in this tab. Everything you have read so far cost about 24&nbsp;KB; this costs
+  roughly 13&nbsp;MB, fetched once and then cached, and took about three seconds
+  on a fast connection. That is the whole reason it waits for you to ask. After
+  it loads, nothing you type leaves your machine, because there is no server on
+  the other end of it: the language is running on your device, and this page has
+  nowhere to send anything even if it wanted to.</p>
+
+  <p>Describe a program and Scribe writes it, needing no account and no key.
+  Edit what it wrote, or ignore it and type MatrixLang directly. Then run it,
+  and watch it fall.</p>
+</section>
+
+<section id="playground">
+  <button id="boot">Load the interpreter and try it</button>
+  <div id="live" hidden>
+    <label for="request">Describe a program</label>
+    <input id="request" placeholder="count from 1 to 10" autocomplete="off">
+    <button id="write">Write it</button>
+    <p id="miss" hidden></p>
+
+    <label for="editor">MatrixLang</label>
+    <textarea id="editor" rows="10" spellcheck="false"></textarea>
+    <button id="run">Run it</button>
+
+    <canvas id="cascade" width="640" height="360"></canvas>
+
+    <details id="operator-panel">
+      <summary>Use Operator instead (needs your own API key)</summary>
+      <p class="warning">
+        Your key is held in this tab's memory only — never saved, never sent
+        anywhere but Anthropic, and gone when you close the page. Anyone
+        asking you to paste an API key into a web page is asking for a lot
+        of trust; this page is open source, and
+        <a href="https://github.com/renilsonjr/matrixlang/blob/main/site/playground.js">playground.js</a>
+        is the file that makes the call.
+      </p>
+      <input id="api-key" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <button id="ask-operator">Ask Operator</button>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer class="prose">
+  <h2>Where to go next</h2>
+  <ul class="links">
+    <li><a href="https://github.com/renilsonjr/matrixlang">The repository</a>
+    — clone it and run the same interpreter on your own machine.</li>
+    <li><a href="https://github.com/renilsonjr/matrixlang/blob/main/docs/LEARNING-MATRIXLANG.md">Learning MatrixLang</a>
+    — the whole language, fourteen keywords and four types, every example executed before it shipped.</li>
+    <li><a href="https://github.com/renilsonjr/matrixlang/blob/main/docs/TECHNICAL-OVERVIEW.md">Technical overview</a>
+    — how it is built, and the design problems that took real work.</li>
+  </ul>
+
+  <p class="colophon">MatrixLang is an independent, non-commercial project made
+  by a fan, for learning. It is not affiliated with, sponsored by, or endorsed
+  by Warner Bros. Entertainment Inc. or any other rights holder connected to
+  <i>The Matrix</i>. Those marks belong to their owners; nothing here uses
+  their trademarks, logos, footage, or the film's own glyph designs. The code
+  is MIT licensed.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script src="playground.js"></script>
+
+</body>
+</html>
