@@ -242,11 +242,19 @@ def test_committed_examples_match_a_fresh_run():
     )
 
 
-def test_every_example_produced_output():
+def test_every_example_generated_source():
+    """Source, not output — some examples correctly print nothing.
+
+    `make a list of 1 2 3` and `define a function that doubles` are
+    declarations; a declaration traces nothing, and Scribe has no
+    define-and-call intent, so the function example *cannot* print.
+    Asserting output would only restate what the freshness test already
+    pins exactly, and would wrongly force the page to drop its one
+    `agent`/`jackout` example.
+    """
     committed = json.loads(_COMMITTED.read_text())
     for request, example in committed.items():
         assert example["source"].strip(), f"{request!r} generated no source"
-        assert example["output"], f"{request!r} produced no output"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -308,8 +316,11 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Generate the file**
 
-Run: `python site/generate_examples.py`
+Run: `PYTHONPATH=.:src python site/generate_examples.py`
 Expected: `wrote .../site/examples.json`
+
+The prefix is required: `server/` is deliberately unpackaged, so a plain
+script run cannot import `server.sse`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -685,7 +696,9 @@ fetch("examples.json")
   .then((data) => { SYSTEM_PROMPT = data.__system_prompt__.source; });
 ```
 
-Read `src/matrixlang/operator/prompt.py` to get the real exported name before writing this — do not assume it is `SYSTEM`. Update `tests/test_site_examples.py::test_every_example_produced_output` to skip the `__system_prompt__` key, which has no output by construction.
+Read `src/matrixlang/operator/prompt.py` to get the real exported name before writing this — do not assume it is `SYSTEM`. No test change is needed for the `__system_prompt__` key: the freshness
+test compares it like any other entry, and `test_every_example_generated_source`
+asserts source rather than output, which the prompt text satisfies.
 
 - [ ] **Step 3: Verify the key is never persisted**
 

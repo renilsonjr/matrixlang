@@ -1,0 +1,32 @@
+{
+  "add 5 and 3": {
+    "source": "trace 5 + 3\n",
+    "output": [
+      "8"
+    ]
+  },
+  "count from 1 to 5": {
+    "source": "construct i = 1\ndejavu i <= 5\n  trace i\n  i = i + 1\nflatline\n",
+    "output": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ]
+  },
+  "make a list of 1 2 3": {
+    "source": "construct xs = [1, 2, 3]\n",
+    "output": []
+  },
+  "if 5 is greater than 3 trace bigger": {
+    "source": "redpill 5 > 3\n  trace \"bigger\"\nflatline\n",
+    "output": [
+      "bigger"
+    ]
+  },
+  "define a function that doubles": {
+    "source": "agent double(n)\n  jackout n * 2\nflatline\n",
+    "output": []
+  }
+}
