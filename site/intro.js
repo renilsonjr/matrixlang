@@ -21,33 +21,29 @@
 (function () {
 "use strict";
 
-const STORAGE_KEY = "matrixlang-intro-seen";
 const CHAR_MS = 65; // the steady cadence; punctuation rests on top of it
 const GLYPH_MS = 22; // the turn is faster than the typing — it is a reveal
 
-// sessionStorage, not localStorage: once per visit rather than once per
-// browser, forever. The permanent version meant a reader who came back a
-// month later got nothing, and the author of the page essentially never saw
-// their own intro. A session is the unit that matches what the intro is for
-// — it greets an arrival, and closing the tab ends the arrival.
-function seen() {
-  try {
-    return sessionStorage.getItem(STORAGE_KEY) === "1";
-  } catch {
-    return false; // storage blocked (private mode) — play it, never crash
-  }
-}
+// This file remembers NOTHING. It stores no flag, reads no flag, and touches
+// neither localStorage nor sessionStorage — every page load gets the intro.
+//
+// That is a deliberate reversal of two earlier attempts. Once-per-browser
+// meant a reader returning later saw nothing. Once-per-tab meant a refresh
+// saw nothing, because sessionStorage survives a reload. Both were chosen to
+// spare a returning reader, and both mostly succeeded in hiding the intro
+// from everyone including its author.
+//
+// The cost is real and accepted: someone who reloads to re-read a paragraph
+// gets it again. Skipping is one key or one click, and the page underneath
+// is never blocked, which is what makes that cost affordable.
+//
+// It also deletes a whole class of bug. With nothing recorded, a failed
+// fetch cannot mark a reader as having watched an intro they never saw —
+// the next load simply tries again.
 
-function remember() {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, "1");
-  } catch {
-    /* storage blocked — this visit still gets the intro exactly once */
-  }
-}
-
-// `?intro` replays it on demand: without this the only way to see the intro
-// again is to clear site data, which makes it untestable and unshareable.
+// `?intro` remains for one narrow purpose: it overrides the reduced-motion
+// decline, so a reader who has asked their OS for less motion can still
+// choose, explicitly, to see this once.
 function forced() {
   return new URLSearchParams(location.search).has("intro");
 }
@@ -55,8 +51,7 @@ function forced() {
 function shouldPlay() {
   if (forced()) return true;
   // A reader who asked the OS for less motion is not asking for a typewriter.
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
-  return !seen();
+  return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 // Before first paint, for the same reason layout.js runs in <head>: the CSS
@@ -70,15 +65,13 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let run = 0; // bumped to cancel an in-flight sequence
 
-// `seen` is a parameter and not an assumption. Marking unconditionally meant
-// a reader whose intro.json request failed was recorded as having watched an
-// intro they never saw — one transient network blip and it was gone for the
-// whole session. Only a reader who actually got something on screen counts.
-function dismiss({ seen: watched }) {
+// One exit for every path. Skipping, finishing and failing were three cases
+// only because something had to be recorded; with nothing recorded they are
+// the same act — take the overlay away and give the reader the page.
+function stop() {
   run += 1;
   const root = document.documentElement;
   const overlay = document.getElementById("intro");
-  if (watched) remember();
   if (!overlay) {
     root.removeAttribute("data-intro");
     return;
@@ -87,18 +80,6 @@ function dismiss({ seen: watched }) {
   // Drop the attribute only after the fade, or the overlay vanishes instantly
   // and body scrolling returns mid-transition.
   setTimeout(() => root.removeAttribute("data-intro"), 900);
-}
-
-// What a reader's own skip does, and what the finished sequence does: they
-// saw it, so the session remembers.
-function stop() {
-  dismiss({ seen: true });
-}
-
-// What a failure does. Nothing reached the screen, so nothing is recorded and
-// the next page load in this session tries again.
-function abandon() {
-  dismiss({ seen: false });
 }
 
 /* A machine of that era typed at a steady rate, but it rested at punctuation,
@@ -140,7 +121,7 @@ async function play(lines) {
   const terminal = document.getElementById("intro-terminal");
   // The overlay is showing but its terminal is missing — nothing can be typed
   // into it, so this is a failure, not a viewing.
-  if (!terminal) return abandon();
+  if (!terminal) return stop();
 
   for (const [index, line] of lines.entries()) {
     const row = document.createElement("span");
@@ -187,10 +168,10 @@ async function start() {
     if (!Array.isArray(lines) || !lines.length) throw new Error("no lines");
     await play(lines);
   } catch {
-    // No intro is a fine outcome. A black screen is not — and neither is
-    // recording a viewing that never happened, which is why this abandons
-    // rather than stops.
-    abandon();
+    // No intro is a fine outcome. A black screen is not. Nothing is recorded
+    // either way, so a reader who hit a blocked fetch gets the intro on their
+    // next load without anything having to notice.
+    stop();
   }
 }
 
