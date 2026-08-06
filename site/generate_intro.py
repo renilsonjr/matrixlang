@@ -18,14 +18,14 @@ from pathlib import Path
 
 from matrixlang.translit import transliterate, untransliterate
 
-# The first line is four words of on-screen text from the film, which the
-# page's colophon already covers: this is a fan project, unaffiliated, and
-# it uses none of the film's trademarks, logos, footage or glyph designs.
-# The second line is the project's own, and it is what the intro is FOR —
-# it states the page's argument before a word of prose has been read.
+# Four words of on-screen text from the film, which the page's colophon
+# already covers: this is a fan project, unaffiliated, and it uses none of
+# the film's trademarks, logos, footage or glyph designs.
+#
+# One line, deliberately. The turn to glyphs is what makes the intro the
+# project's rather than the film's, and a second line only delayed the page.
 LINES = [
     "The Matrix has you...",
-    "But the code never did.",
 ]
 
 _OUT = Path(__file__).parent / "intro.json"
