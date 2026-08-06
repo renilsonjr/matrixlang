@@ -1,0 +1,26 @@
+# Keeps the SHA-pinned actions from rotting.
+#
+# Pinning to a commit closes a real hole: a tag like `v4` is a moving
+# pointer, and whoever owns the action can repoint it at any time, so
+# `uses: actions/checkout@v4` is a promise to run whatever that name means
+# on the morning the workflow happens to run. A SHA cannot be repointed.
+#
+# But pinning alone trades one risk for another. A frozen SHA never picks up
+# a security fix, and nobody notices, because nothing breaks — which is
+# arguably worse than the tag it replaced. This is the other half: Dependabot
+# opens a pull request when a pinned action has a newer release, updating
+# both the SHA and the `# vX.Y.Z` comment beside it.
+#
+# Monthly rather than weekly on purpose. These six actions change slowly, the
+# whole point is to be told rather than to be busy, and a stream of pull
+# requests on a project this size is how the notifications get muted.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore"
+    labels:
+      - dependencies
