@@ -5,9 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MatrixLang — the language the film pretended to have</title>
 <script src="layout.js"></script>
+<!-- Before the stylesheet, like layout.js and for the same reason: it decides
+     whether the intro plays and sets the attribute the CSS keys off, so the
+     overlay is there from the first frame or not at all. -->
+<script src="intro.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<!-- The intro. Invisible unless intro.js sets data-intro on <html>, so a
+     reader whose JavaScript failed, who has seen it already, or who asked for
+     reduced motion gets the page and never knows this element is here.
+     aria-hidden because it is decoration: the page below is the document, and
+     a screen reader should meet that, not a typewriter. -->
+<div id="intro" class="intro" aria-hidden="true">
+  <div class="intro-terminal" id="intro-terminal"></div>
+  <button class="intro-skip" id="intro-skip" tabindex="-1">Skip — or press any key</button>
+</div>
 
 <header class="masthead">
   <p class="eyebrow">MATRIXLANG</p>

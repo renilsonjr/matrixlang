@@ -335,6 +335,97 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
 
 #api-key { margin-top: 0.5rem; }
 
+/* ---- the intro ---- */
+
+/* Hidden by default and shown only by the attribute intro.js sets. The
+   default direction matters: if the script never runs, never loads, or throws
+   before it decides, the reader gets the page rather than a black screen with
+   nothing behind it. */
+.intro { display: none; }
+
+:root[data-intro="playing"] .intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: #000;
+  opacity: 1;
+  transition: opacity 900ms ease;
+  cursor: pointer;
+}
+
+:root[data-intro="playing"] .intro.gone { opacity: 0; pointer-events: none; }
+
+/* The document must not scroll behind an overlay that covers it. */
+:root[data-intro="playing"] body { overflow: hidden; }
+
+/* A phosphor screen is brightest at the centre and falls off at the glass. */
+:root[data-intro="playing"] .intro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(0, 0, 0, 0.75) 100%);
+}
+
+.intro-terminal {
+  width: min(90vw, 44rem);
+  padding: 0 1rem;
+  font-family: var(--mono);
+  font-size: clamp(1rem, 2.6vw, 1.6rem);
+  line-height: 2;
+  color: var(--green);
+  /* The glow is the look. A CRT does not draw a hard edge. */
+  text-shadow: 0 0 2px rgba(0, 255, 65, 0.9), 0 0 12px rgba(0, 255, 65, 0.45);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.intro-line { display: block; min-height: 1em; }
+
+/* The glyph face reads brighter than the Latin it replaced — the turn should
+   register as an event, not as the same line in a different alphabet. */
+.intro-terminal .glyphed { color: var(--head); }
+
+/* A block, not a bar: it is what a terminal of that era drew. */
+.intro-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.05em;
+  margin-left: 0.06em;
+  background: var(--green);
+  vertical-align: -0.16em;
+  box-shadow: 0 0 8px rgba(0, 255, 65, 0.6);
+  animation: intro-blink 1.06s steps(1) infinite;
+}
+
+@keyframes intro-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+/* Belt and braces. intro.js already declines to play under reduced motion, so
+   this only matters if the intro is forced with ?intro. */
+@media (prefers-reduced-motion: reduce) {
+  .intro-cursor { animation: none; }
+  :root[data-intro="playing"] .intro { transition: none; }
+}
+
+/* Overrides the page's button rule: this one sits on black, not on the page. */
+.intro-skip {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 1;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  background: rgba(5, 7, 10, 0.7);
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  color: var(--muted);
+  font: 11px/1.2 var(--mono);
+  cursor: pointer;
+}
+.intro-skip:hover { color: var(--head); border-color: var(--dim); }
+
 /* ---- footer ---- */
 
 footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5rem; }
