@@ -3,6 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- GitHub Pages cannot set response headers, so the policy is declared here.
+     Its real job is `connect-src`: the reader's API key lives in a DOM input
+     in plaintext while Operator is in use, so the question that matters is
+     not "can script run" but "where could script send it". Three origins can
+     be reached and no others, which means even injected code has nowhere to
+     post a stolen key.
+
+     `wasm-unsafe-eval` is what Pyodide needs to instantiate its runtime; it
+     permits WebAssembly compilation, NOT JavaScript eval(), which stays
+     blocked. `blob:` covers the workers Pyodide spawns.
+
+     Note the limits of a meta-tag CSP: frame-ancestors, report-uri and
+     sandbox are ignored in meta and would need real headers, so this offers
+     no clickjacking protection. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net;
+  worker-src 'self' blob:;
+  connect-src 'self' blob: data: https://cdn.jsdelivr.net https://api.anthropic.com;
+  style-src 'self';
+  img-src 'self' data:;
+  base-uri 'none';
+  form-action 'none';
+  object-src 'none'">
 <title>MatrixLang — the language the film pretended to have</title>
 <script src="layout.js"></script>
 <!-- Before the stylesheet, like layout.js and for the same reason: it decides
@@ -267,7 +291,18 @@ flatline</pre>
   is MIT licensed.</p>
 </footer>
 
-<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<!-- Pinned by content, not just by version. A version tag says which file was
+     asked for; the hash says which file was allowed to run. This page invites
+     readers to paste a live API key into it, so the CDN is effectively trusted
+     with their credentials — `integrity` is what withdraws that trust. The
+     `crossorigin` attribute is required for SRI to be checked at all, and
+     jsdelivr sends `access-control-allow-origin: *`, so it costs nothing.
+
+     Recomputing after a Pyodide upgrade:
+       curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"
+        integrity="sha384-i3R37b3tF+HWudsUf1VSEOY2YxwSNMqY8DQa9Z0O3xh+NkJ9o+yjcGyIi5huj+nB"
+        crossorigin="anonymous"></script>
 <script src="playground.js"></script>
 
 </body>
