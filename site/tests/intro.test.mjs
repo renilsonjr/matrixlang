@@ -19,10 +19,22 @@ const INTRO = join(dirname(fileURLToPath(import.meta.url)), "..", "intro.js");
 const SOURCE = readFileSync(INTRO, "utf8");
 
 /** The smallest environment intro.js can decide in. */
-function load({ reducedMotion = false, storage = {}, search = "", blockStorage = false } = {}) {
+function load({
+  reducedMotion = false,
+  storage = {},
+  search = "",
+  blockStorage = false,
+  fetch = () => Promise.reject(new Error("not used in this test")),
+} = {}) {
   const root = { dataset: {}, removeAttribute(name) { delete this.dataset[name.replace("data-", "")]; } };
   const elements = new Map();
   const listeners = new Map();
+  const stub = () => ({
+    className: "", textContent: "", hidden: false,
+    classList: { add() {}, remove() {} },
+    append() {}, appendChild() {}, remove() {}, addEventListener() {},
+  });
+  for (const id of ["intro", "intro-terminal", "intro-skip"]) elements.set(id, stub());
 
   const sandbox = {
     console,
@@ -30,7 +42,11 @@ function load({ reducedMotion = false, storage = {}, search = "", blockStorage =
     clearTimeout,
     location: { search },
     URLSearchParams,
-    localStorage: {
+    fetch,
+    // The session is the unit now. A localStorage stub is deliberately NOT
+    // provided: if intro.js reaches for it again this throws rather than
+    // quietly going back to remembering forever.
+    sessionStorage: {
       getItem: (k) => { if (blockStorage) throw new Error("blocked"); return k in storage ? storage[k] : null; },
       setItem: (k, v) => { if (blockStorage) throw new Error("blocked"); storage[k] = v; },
     },
@@ -39,13 +55,9 @@ function load({ reducedMotion = false, storage = {}, search = "", blockStorage =
       readyState: "loading",
       getElementById: (id) => elements.get(id) ?? null,
       addEventListener: (type, fn) => listeners.set(type, fn),
-      createElement: () => ({
-        className: "", textContent: "", classList: { add() {}, remove() {} },
-        append() {}, appendChild() {}, remove() {},
-      }),
+      createElement: stub,
     },
     matchMedia: (query) => ({ matches: reducedMotion && query.includes("reduce") }),
-    fetch: () => Promise.reject(new Error("not used in this test")),
   };
   sandbox.window = sandbox;
   sandbox.window.addEventListener = () => {};
@@ -60,9 +72,16 @@ test("a first-time reader gets the intro", () => {
   assert.equal(root.dataset.intro, "playing");
 });
 
-test("a reader who has seen it does not get it again", () => {
+test("a reader who has seen it this session does not get it again", () => {
   const { root } = load({ storage: { "matrixlang-intro-seen": "1" } });
-  assert.equal(root.dataset.intro, undefined, "the intro replayed on a repeat visit");
+  assert.equal(root.dataset.intro, undefined, "the intro replayed within one session");
+});
+
+test("a new session gets the intro again", () => {
+  // sessionStorage starts empty in a new tab, which is the whole difference
+  // from the localStorage version: coming back later is a fresh arrival.
+  const { root } = load({ storage: {} });
+  assert.equal(root.dataset.intro, "playing");
 });
 
 test("reduced motion means no intro at all", () => {
@@ -103,6 +122,39 @@ test("stopping records that it was seen", () => {
   const { storage, sandbox } = load();
   sandbox.window.__intro.stop();
   assert.equal(storage["matrixlang-intro-seen"], "1");
+});
+
+test("a failed fetch does NOT record a viewing that never happened", async () => {
+  // One transient network blip used to cost the reader the intro for the
+  // whole session, having shown them nothing.
+  const { root, storage, fire } = load({
+    fetch: () => Promise.reject(new Error("offline")),
+  });
+  assert.equal(root.dataset.intro, "playing");
+
+  await fire("DOMContentLoaded");
+
+  assert.equal(
+    storage["matrixlang-intro-seen"],
+    undefined,
+    "a reader who saw nothing was recorded as having watched it",
+  );
+});
+
+test("a non-ok response for intro.json is treated the same way", async () => {
+  const { storage, fire } = load({
+    fetch: () => Promise.resolve({ ok: false, status: 404 }),
+  });
+  await fire("DOMContentLoaded");
+  assert.equal(storage["matrixlang-intro-seen"], undefined);
+});
+
+test("an empty line list is a failure, not a viewing", async () => {
+  const { storage, fire } = load({
+    fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({ lines: [] }) }),
+  });
+  await fire("DOMContentLoaded");
+  assert.equal(storage["matrixlang-intro-seen"], undefined);
 });
 
 test("the browser half still owns no glyph table", () => {

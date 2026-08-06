@@ -25,9 +25,14 @@ const STORAGE_KEY = "matrixlang-intro-seen";
 const CHAR_MS = 65; // the steady cadence; punctuation rests on top of it
 const GLYPH_MS = 22; // the turn is faster than the typing — it is a reveal
 
+// sessionStorage, not localStorage: once per visit rather than once per
+// browser, forever. The permanent version meant a reader who came back a
+// month later got nothing, and the author of the page essentially never saw
+// their own intro. A session is the unit that matches what the intro is for
+// — it greets an arrival, and closing the tab ends the arrival.
 function seen() {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "1";
+    return sessionStorage.getItem(STORAGE_KEY) === "1";
   } catch {
     return false; // storage blocked (private mode) — play it, never crash
   }
@@ -35,7 +40,7 @@ function seen() {
 
 function remember() {
   try {
-    localStorage.setItem(STORAGE_KEY, "1");
+    sessionStorage.setItem(STORAGE_KEY, "1");
   } catch {
     /* storage blocked — this visit still gets the intro exactly once */
   }
@@ -65,11 +70,15 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let run = 0; // bumped to cancel an in-flight sequence
 
-function stop() {
+// `seen` is a parameter and not an assumption. Marking unconditionally meant
+// a reader whose intro.json request failed was recorded as having watched an
+// intro they never saw — one transient network blip and it was gone for the
+// whole session. Only a reader who actually got something on screen counts.
+function dismiss({ seen: watched }) {
   run += 1;
   const root = document.documentElement;
   const overlay = document.getElementById("intro");
-  remember();
+  if (watched) remember();
   if (!overlay) {
     root.removeAttribute("data-intro");
     return;
@@ -78,6 +87,18 @@ function stop() {
   // Drop the attribute only after the fade, or the overlay vanishes instantly
   // and body scrolling returns mid-transition.
   setTimeout(() => root.removeAttribute("data-intro"), 900);
+}
+
+// What a reader's own skip does, and what the finished sequence does: they
+// saw it, so the session remembers.
+function stop() {
+  dismiss({ seen: true });
+}
+
+// What a failure does. Nothing reached the screen, so nothing is recorded and
+// the next page load in this session tries again.
+function abandon() {
+  dismiss({ seen: false });
 }
 
 /* A machine of that era typed at a steady rate, but it rested at punctuation,
@@ -117,7 +138,9 @@ async function turnToGlyphs(body, glyph, token) {
 async function play(lines) {
   const token = run;
   const terminal = document.getElementById("intro-terminal");
-  if (!terminal) return stop();
+  // The overlay is showing but its terminal is missing — nothing can be typed
+  // into it, so this is a failure, not a viewing.
+  if (!terminal) return abandon();
 
   for (const [index, line] of lines.entries()) {
     const row = document.createElement("span");
@@ -164,8 +187,10 @@ async function start() {
     if (!Array.isArray(lines) || !lines.length) throw new Error("no lines");
     await play(lines);
   } catch {
-    // No intro is a fine outcome. A black screen is not.
-    stop();
+    // No intro is a fine outcome. A black screen is not — and neither is
+    // recording a viewing that never happened, which is why this abandons
+    // rather than stops.
+    abandon();
   }
 }
 
