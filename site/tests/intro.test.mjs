@@ -21,9 +21,7 @@ const SOURCE = readFileSync(INTRO, "utf8");
 /** The smallest environment intro.js can decide in. */
 function load({
   reducedMotion = false,
-  storage = {},
   search = "",
-  blockStorage = false,
   fetch = () => Promise.reject(new Error("not used in this test")),
 } = {}) {
   const root = { dataset: {}, removeAttribute(name) { delete this.dataset[name.replace("data-", "")]; } };
@@ -36,6 +34,9 @@ function load({
   });
   for (const id of ["intro", "intro-terminal", "intro-skip"]) elements.set(id, stub());
 
+  // Neither storage is provided. The intro is supposed to remember nothing,
+  // so any attempt to read or write a flag is a ReferenceError here rather
+  // than a quiet return to hiding itself from people.
   const sandbox = {
     console,
     setTimeout,
@@ -43,13 +44,6 @@ function load({
     location: { search },
     URLSearchParams,
     fetch,
-    // The session is the unit now. A localStorage stub is deliberately NOT
-    // provided: if intro.js reaches for it again this throws rather than
-    // quietly going back to remembering forever.
-    sessionStorage: {
-      getItem: (k) => { if (blockStorage) throw new Error("blocked"); return k in storage ? storage[k] : null; },
-      setItem: (k, v) => { if (blockStorage) throw new Error("blocked"); storage[k] = v; },
-    },
     document: {
       documentElement: root,
       readyState: "loading",
@@ -64,24 +58,30 @@ function load({
   const context = vm.createContext(sandbox);
   vm.runInContext(SOURCE, context, { filename: INTRO });
 
-  return { root, storage, sandbox, fire: (type) => listeners.get(type)?.() };
+  return { root, sandbox, fire: (type) => listeners.get(type)?.() };
 }
 
-test("a first-time reader gets the intro", () => {
+test("every page load gets the intro", () => {
   const { root } = load();
   assert.equal(root.dataset.intro, "playing");
 });
 
-test("a reader who has seen it this session does not get it again", () => {
-  const { root } = load({ storage: { "matrixlang-intro-seen": "1" } });
-  assert.equal(root.dataset.intro, undefined, "the intro replayed within one session");
+test("a reload gets it again — nothing is remembered between loads", () => {
+  // Two independent loads stand in for a refresh. Both must play: the
+  // once-per-browser and once-per-tab versions each failed this, and each
+  // one hid the intro from almost everybody.
+  for (const attempt of [1, 2, 3]) {
+    const { root } = load();
+    assert.equal(root.dataset.intro, "playing", `load ${attempt} did not play`);
+  }
 });
 
-test("a new session gets the intro again", () => {
-  // sessionStorage starts empty in a new tab, which is the whole difference
-  // from the localStorage version: coming back later is a fresh arrival.
-  const { root } = load({ storage: {} });
-  assert.equal(root.dataset.intro, "playing");
+test("intro.js touches no storage at all", () => {
+  // The sandbox above provides neither, so a reach for one would already
+  // throw — but this says why, and catches it even if a stub reappears.
+  const code = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(code, /localStorage\s*\./, "intro.js reads or writes localStorage");
+  assert.doesNotMatch(code, /sessionStorage\s*\./, "intro.js reads or writes sessionStorage");
 });
 
 test("reduced motion means no intro at all", () => {
@@ -93,19 +93,8 @@ test("reduced motion means no intro at all", () => {
   );
 });
 
-test("?intro replays it even for a reader who has seen it", () => {
-  const { root } = load({ storage: { "matrixlang-intro-seen": "1" }, search: "?intro" });
-  assert.equal(root.dataset.intro, "playing");
-});
-
 test("?intro overrides reduced motion, because it was asked for explicitly", () => {
   const { root } = load({ reducedMotion: true, search: "?intro" });
-  assert.equal(root.dataset.intro, "playing");
-});
-
-test("blocked storage plays the intro rather than throwing", () => {
-  // Private mode. Reading and writing both throw; neither may escape.
-  const { root } = load({ blockStorage: true });
   assert.equal(root.dataset.intro, "playing");
 });
 
@@ -118,43 +107,28 @@ test("stopping clears the attribute, so the page is never left covered", async (
   assert.equal(root.dataset.intro, undefined, "the overlay attribute outlived the intro");
 });
 
-test("stopping records that it was seen", () => {
-  const { storage, sandbox } = load();
-  sandbox.window.__intro.stop();
-  assert.equal(storage["matrixlang-intro-seen"], "1");
-});
-
-test("a failed fetch does NOT record a viewing that never happened", async () => {
-  // One transient network blip used to cost the reader the intro for the
-  // whole session, having shown them nothing.
-  const { root, storage, fire } = load({
-    fetch: () => Promise.reject(new Error("offline")),
-  });
+test("a failed fetch leaves the reader the page, not a black screen", async () => {
+  const { root, fire } = load({ fetch: () => Promise.reject(new Error("offline")) });
   assert.equal(root.dataset.intro, "playing");
-
   await fire("DOMContentLoaded");
-
-  assert.equal(
-    storage["matrixlang-intro-seen"],
-    undefined,
-    "a reader who saw nothing was recorded as having watched it",
-  );
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  assert.equal(root.dataset.intro, undefined, "a failed fetch left the overlay up");
 });
 
 test("a non-ok response for intro.json is treated the same way", async () => {
-  const { storage, fire } = load({
-    fetch: () => Promise.resolve({ ok: false, status: 404 }),
-  });
+  const { root, fire } = load({ fetch: () => Promise.resolve({ ok: false, status: 404 }) });
   await fire("DOMContentLoaded");
-  assert.equal(storage["matrixlang-intro-seen"], undefined);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  assert.equal(root.dataset.intro, undefined);
 });
 
-test("an empty line list is a failure, not a viewing", async () => {
-  const { storage, fire } = load({
+test("an empty line list leaves the reader the page", async () => {
+  const { root, fire } = load({
     fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({ lines: [] }) }),
   });
   await fire("DOMContentLoaded");
-  assert.equal(storage["matrixlang-intro-seen"], undefined);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  assert.equal(root.dataset.intro, undefined);
 });
 
 test("the browser half still owns no glyph table", () => {
