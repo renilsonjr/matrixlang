@@ -23,6 +23,7 @@
   worker-src 'self' blob:;
   connect-src 'self' blob: data: https://cdn.jsdelivr.net https://api.anthropic.com;
   style-src 'self';
+  font-src 'self';
   img-src 'self' data:;
   base-uri 'none';
   form-action 'none';
@@ -220,7 +221,8 @@ flatline</pre>
 
   <p>The button below fetches Python — the real one, compiled to run inside a
   browser — along with this project's package, and starts the actual interpreter
-  in this tab. Everything you have read so far cost about 24&nbsp;KB; this costs
+  in this tab. Everything you have read so far cost about 100&nbsp;KB, most of it
+  the typeface this page is set in; this costs
   roughly 13&nbsp;MB, fetched once and then cached, and took about three seconds
   on a fast connection. That is the whole reason it waits for you to ask. After
   it loads, nothing you type leaves your machine, because there is no server on
