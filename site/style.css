@@ -18,7 +18,12 @@
   --muted: #5d6f66;
   --white: #e8f0ea;
   --amber: #d68a2a;
-  --mono: "SF Mono", Menlo, Consolas, monospace;
+  /* JetBrains Mono first, but the fallbacks are load-bearing rather than
+     decorative: the subset shipped here is basic latin, and this page prints
+     half-width katakana in every example. Those characters fall through to
+     Menlo/SF Mono, which do carry them. Dropping the tail would render the
+     glyph face as a row of tofu. */
+  --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --prose: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --measure: 34rem;
   /* The desktop width. ONE token, deliberately: on a wide screen the reading
@@ -34,6 +39,50 @@
      already past that range, so the choice was never comfortable versus not.
      It was alignment against line length, and alignment won. */
   --page: 90rem;
+}
+
+/* ---- the typeface ---- */
+
+/* Self-hosted, not fetched from a font CDN. Three reasons and they all matter:
+   the Content-Security-Policy in index.html allows `font-src 'self'` only, a
+   third-party font request tells someone else who reads this page, and a file
+   served from the same origin arrives without a second DNS lookup and TLS
+   handshake.
+
+   Basic-latin subsets, ~31KB each. site/fonts/OFL.txt is the licence and has
+   to stay beside them: JetBrains Mono is SIL Open Font License 1.1, which
+   permits bundling and requires the notice travel with the font. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  /* `swap`, deliberately. The page is a document first: text in a fallback
+     face beats no text at all, and the reflow when the real face lands is a
+     smaller cost than a blank headline. */
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-700.woff2") format("woff2");
+}
+/* Italic exists for one phrase — <i>The Matrix</i> in the headline, set at
+   700. Without a real 700 italic the browser slants the upright, and a
+   synthesised oblique in a monospace face at display size is obvious.
+
+   700 only. A 400 italic would be dead weight: nothing on this page renders
+   italic inside a monospace element except that headline, so the browser
+   never requested the file. Should one appear, it synthesises from 400
+   upright, which is the right failure for text nobody has written yet. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/jetbrains-mono-700-italic.woff2") format("woff2");
 }
 
 * { box-sizing: border-box; }
@@ -83,13 +132,24 @@ body {
   letter-spacing: 0.28em;
 }
 
+/* The headline is set in the same face the code is. The page argues that the
+   film's falling characters were never a language and that this one is, so a
+   headline typed in the language's own face states that before a word of it
+   is read — where a book serif would have quietly argued the opposite.
+
+   The three values are neither defaults nor arbitrary. JetBrains Mono sets
+   wide, so 1.7rem holds the apparent size the old 1.9rem sans had; 700
+   because a monospace goes limp at display size below it, and this line is
+   the loudest thing on the page; -0.02em because monospace sidebearings are
+   drawn for columns of code, not for a sentence. */
 h1 {
   margin: 0;
   color: var(--head);
-  font-size: 1.9rem;
-  font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-family: var(--mono);
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
 }
 
 .premise {
