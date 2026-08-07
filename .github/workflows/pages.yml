@@ -49,6 +49,8 @@ jobs:
         run: |
           mkdir -p _site
           cp site/index.html site/style.css site/layout.js site/intro.js site/playground.js site/glue.py site/examples.json site/intro.json _site/
+          # The typeface, and the licence that has to travel with it.
+          cp -R site/fonts _site/fonts
           # Copied, never forked. cascade.js may re-implement presentation;
           # sse.py is the single definition of the wire shape. Editing either
           # into site/ is what TECHNICAL-OVERVIEW §5.7 warns against.
