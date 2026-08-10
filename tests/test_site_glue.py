@@ -98,3 +98,22 @@ def test_glyph_of_invalid_source_is_an_error():
     result = glue.glyph("trace )(")
     assert result["ok"] is False
     assert "error" in result
+
+
+def test_transliterate_text_round_trips():
+    original = "Neo woke up"
+    glyphs = glue.transliterate_text(original)
+    assert glyphs != original
+    assert glue.untransliterate_text(glyphs) == original
+
+
+def test_transliterate_text_matches_the_real_table():
+    from matrixlang.translit import transliterate
+
+    assert glue.transliterate_text("hello") == transliterate("hello")
+
+
+def test_readers_table_documents_the_markers():
+    table = glue.readers_table()
+    assert "marks the next glyph as uppercase" in table
+    assert "marks the next character as literal" in table

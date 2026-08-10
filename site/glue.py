@@ -16,6 +16,7 @@ from matrixlang.lexer import lex
 from matrixlang.parser import parse
 from matrixlang.render import render_glyph
 from matrixlang.scribe import ScribeProgram, scribe
+from matrixlang.translit import table_for_readers, transliterate, untransliterate
 
 from server.sse import payload
 
@@ -63,6 +64,26 @@ def glyph(source: str) -> dict:
     except MatrixLangError as error:
         return {"ok": False, "error": f"[line {error.line}, column {error.column}] {error.message}"}
     return {"ok": True, "glyph": render_glyph(program)}
+
+
+def transliterate_text(text: str) -> str:
+    """The glyph face of arbitrary text, for the Transliterator tab.
+
+    Calls the real table rather than a JS copy of it — a JS copy is the
+    exact shape of thing site/checks/no_semantics.py exists to block (see
+    the playground-tabs-and-transliterator design doc, TT-9).
+    """
+    return transliterate(text)
+
+
+def untransliterate_text(glyphs: str) -> str:
+    """The inverse of transliterate_text()."""
+    return untransliterate(glyphs)
+
+
+def readers_table() -> str:
+    """The full reversible table, for the Transliterator's disclosure panel."""
+    return table_for_readers()
 
 
 def operator_prompt(request: str) -> str:
