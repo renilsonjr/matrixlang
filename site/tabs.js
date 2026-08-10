@@ -9,7 +9,13 @@
 "use strict";
 
 function activate(tabs, panels, index) {
-  tabs.forEach((tab, i) => tab.setAttribute("aria-selected", String(i === index)));
+  tabs.forEach((tab, i) => {
+    tab.setAttribute("aria-selected", String(i === index));
+    // Roving tabindex: only the active tab sits in the page's Tab order, so
+    // Tab from the tablist moves straight into the panel content rather than
+    // walking all four tab buttons first — the standard ARIA tabs pattern.
+    tab.setAttribute("tabindex", i === index ? "0" : "-1");
+  });
   panels.forEach((panel, i) => { panel.hidden = i !== index; });
 }
 

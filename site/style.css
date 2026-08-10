@@ -284,7 +284,7 @@ pre {
 .tabs {
   display: flex;
   gap: 2px;
-  margin: 0 0 1.5rem;
+  margin: 0 auto 1.5rem;
   padding: 2px;
   background: var(--panel);
   border: 1px solid var(--edge);
@@ -319,10 +319,6 @@ pre {
   margin: 1rem 0;
 }
 .translit-grid textarea { min-height: 8rem; }
-
-@media (min-width: 40rem) {
-  .translit-grid { grid-template-columns: 1fr 1fr; }
-}
 
 .translit-caption {
   margin: 0.5rem 0 0;
@@ -593,6 +589,10 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
      is untouched. */
   #cascade { max-width: none; }
   .examples {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.75rem;
+  }
+  .translit-grid {
     grid-template-columns: 1fr 1fr;
     gap: 1.75rem;
   }

@@ -18,6 +18,14 @@ const el = (id) => document.getElementById(id);
 
 const BOOT_LABEL = "Load the interpreter and try it";
 const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
+// Every control that is dead until Pyodide has booted successfully. A failed
+// boot disables all of these; a successful one — first try or a retry after
+// a failure — has to re-enable all of them, or a fail-then-retry-then-succeed
+// reader is left with a page that looks alive but has dead buttons on it.
+const GATED_CONTROL_IDS = [
+  "write", "run", "ask-operator", "editor-face", "cascade-face",
+  "translit-latin", "translit-glyphs",
+];
 
 async function boot() {
   const buttons = BOOT_BUTTON_IDS.map(el);
@@ -51,19 +59,31 @@ async function boot() {
     // Showing the controls dead is worse than not showing them, so they
     // are disabled rather than merely present.
     el("live").hidden = false;
-    for (const id of [
-      "write", "run", "ask-operator", "editor-face", "cascade-face",
-      "translit-latin", "translit-glyphs",
-    ]) {
+    for (const id of GATED_CONTROL_IDS) {
       const control = el(id);
       if (control) control.disabled = true;
     }
     return;
   }
   for (const button of buttons) button.hidden = true;
+  finishBoot();
+}
+
+// Runs once load() has resolved, whether this is the first attempt or a
+// retry after an earlier failure. The failure branch above disables every
+// gated control and leaves its message in #miss; both have to be undone
+// here, or a fail-then-retry-then-succeed reader is left with a page that
+// looks alive but has dead buttons and a stale error on it. Pulled out as
+// its own function — rather than left inline in boot() — so this half of
+// the contract can be exercised without going through load()'s Pyodide/
+// fetch/dynamic-import pipeline, which the test harness cannot stub.
+function finishBoot() {
   el("live").hidden = false;
-  el("translit-latin").disabled = false;
-  el("translit-glyphs").disabled = false;
+  for (const id of GATED_CONTROL_IDS) {
+    const control = el(id);
+    if (control) control.disabled = false;
+  }
+  el("miss").hidden = true;
   el("translit-table").textContent = glue.readers_table();
 }
 
@@ -279,4 +299,4 @@ el("translit-boot").addEventListener("click", boot);
 el("translit-latin").addEventListener("input", transliterateLatin);
 el("translit-glyphs").addEventListener("input", untransliterateGlyphs);
 
-window.__playground = { boot, write: writeProgram, run: runProgram };
+window.__playground = { boot, write: writeProgram, run: runProgram, finishBoot };

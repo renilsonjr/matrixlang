@@ -132,6 +132,49 @@ test("a failed boot leaves no control looking usable", async () => {
   assert.equal(page.el("translit-boot").disabled, false);
 });
 
+// A full fail-then-retry-then-succeed run would need load() to actually
+// resolve, which drags in pyodide.loadPackage, micropip.install, two
+// fetch() calls and a dynamic import("./cascade.js") — none of which this
+// harness's stub DOM provides (no `fetch`, no importModuleDynamically
+// hook in the vm context), and no existing test in this suite attempts a
+// full successful boot for exactly that reason. What playground.js exposes
+// instead is finishBoot(), the function boot() calls once load() resolves —
+// pulled out for this reason — so this test drives a failed boot for real
+// (proving the gated controls start disabled and #miss starts populated),
+// then calls finishBoot() directly to exercise the "undo the failure"
+// contract in isolation, without needing a working load() pipeline.
+test("boot() fails then succeeds re-enables every gated control", async () => {
+  const page = loadPlayground();
+  page.setGlue({ readers_table: () => "TABLE" });
+  page.setGlobal("loadPyodide", () => Promise.reject(new Error("blocked")));
+
+  await page.playground.boot();
+
+  const gated = [
+    "write", "run", "ask-operator", "editor-face", "cascade-face",
+    "translit-latin", "translit-glyphs",
+  ];
+  for (const id of gated) {
+    assert.equal(page.el(id).disabled, true, `${id} is still live after a failed boot`);
+  }
+  assert.equal(page.el("miss").hidden, false);
+
+  // The retry succeeds: playground.js's boot() would reach this point once
+  // load() stops throwing, and calls finishBoot() itself.
+  page.playground.finishBoot();
+
+  for (const id of gated) {
+    assert.equal(page.el(id).disabled, false, `${id} is still disabled after a successful retry`);
+  }
+  assert.equal(
+    page.el("miss").hidden,
+    true,
+    "the failed boot's message is still showing after a successful retry",
+  );
+  assert.equal(page.el("live").hidden, false);
+  assert.equal(page.el("translit-table").textContent, "TABLE");
+});
+
 test("typing Latin fills the Glyphs box, and back again", () => {
   const page = loadPlayground();
   page.setGlue({
