@@ -99,6 +99,63 @@
   <p>When a program runs, its own source and its own output fall through a
   window as glyphs. Nothing on that screen is generated at random. Every
   character that falls came from the program you ran.</p>
+
+  <h2>Now run one yourself</h2>
+
+  <p>Everything above had already happened before you arrived. What comes next
+  has not.</p>
+
+  <p>The button below fetches Python — the real one, compiled to run inside a
+  browser — along with this project's package, and starts the actual interpreter
+  in this tab. Everything you have read so far cost about 100&nbsp;KB, most of it
+  the typeface this page is set in; this costs
+  roughly 13&nbsp;MB, fetched once and then cached, and took about three seconds
+  on a fast connection. That is the whole reason it waits for you to ask. After
+  it loads, nothing you type leaves your machine, because there is no server on
+  the other end of it: the language is running on your device, and this page has
+  nowhere to send anything even if it wanted to.</p>
+
+  <p>Describe a program and Scribe writes it, needing no account and no key.
+  Edit what it wrote, or ignore it and type MatrixLang directly. Then run it,
+  and watch it fall.</p>
+
+  <section id="playground">
+    <button id="boot">Load the interpreter and try it</button>
+    <div id="live" hidden>
+      <div class="playground-grid">
+        <div class="editor-pane">
+          <label for="request">Describe a program</label>
+          <input id="request" placeholder="count from 1 to 10" autocomplete="off">
+          <button id="write">Write it</button>
+          <p id="miss" hidden></p>
+
+          <label for="editor">MatrixLang</label>
+          <textarea id="editor" rows="16" spellcheck="false"></textarea>
+          <button id="editor-face">Show glyphs</button>
+          <pre id="editor-glyph" class="glyph" hidden></pre>
+          <button id="run">Run it</button>
+        </div>
+        <div class="cascade-pane">
+          <button id="cascade-face">Latin</button>
+          <canvas id="cascade" width="960" height="540"></canvas>
+        </div>
+      </div>
+
+      <details id="operator-panel">
+        <summary>Use Operator instead (needs your own API key)</summary>
+        <p class="warning">
+          Your key is held in this tab's memory only — never saved, never sent
+          anywhere but Anthropic, and gone when you close the page. Anyone
+          asking you to paste an API key into a web page is asking for a lot
+          of trust; this page is open source, and
+          <a href="https://github.com/renilsonjr/matrixlang/blob/main/site/playground.js">playground.js</a>
+          is the file that makes the call.
+        </p>
+        <input id="api-key" type="password" placeholder="sk-ant-..." autocomplete="off">
+        <button id="ask-operator">Ask Operator</button>
+      </details>
+    </div>
+  </section>
 </div>
 
 <div role="tabpanel" id="tab-faces" aria-labelledby="tab-faces-btn" class="prose" tabindex="0" hidden>
@@ -252,65 +309,6 @@ flatline</pre>
 
   <button id="translit-boot">Load the interpreter and try it</button>
 </div>
-
-<section class="prose">
-  <h2>Now run one yourself</h2>
-
-  <p>Everything above had already happened before you arrived. What comes next
-  has not.</p>
-
-  <p>The button below fetches Python — the real one, compiled to run inside a
-  browser — along with this project's package, and starts the actual interpreter
-  in this tab. Everything you have read so far cost about 100&nbsp;KB, most of it
-  the typeface this page is set in; this costs
-  roughly 13&nbsp;MB, fetched once and then cached, and took about three seconds
-  on a fast connection. That is the whole reason it waits for you to ask. After
-  it loads, nothing you type leaves your machine, because there is no server on
-  the other end of it: the language is running on your device, and this page has
-  nowhere to send anything even if it wanted to.</p>
-
-  <p>Describe a program and Scribe writes it, needing no account and no key.
-  Edit what it wrote, or ignore it and type MatrixLang directly. Then run it,
-  and watch it fall.</p>
-</section>
-
-<section id="playground" class="band">
-  <button id="boot">Load the interpreter and try it</button>
-  <div id="live" hidden>
-    <div class="playground-grid">
-      <div class="editor-pane">
-        <label for="request">Describe a program</label>
-        <input id="request" placeholder="count from 1 to 10" autocomplete="off">
-        <button id="write">Write it</button>
-        <p id="miss" hidden></p>
-
-        <label for="editor">MatrixLang</label>
-        <textarea id="editor" rows="16" spellcheck="false"></textarea>
-        <button id="editor-face">Show glyphs</button>
-        <pre id="editor-glyph" class="glyph" hidden></pre>
-        <button id="run">Run it</button>
-      </div>
-      <div class="cascade-pane">
-        <button id="cascade-face">Latin</button>
-        <canvas id="cascade" width="960" height="540"></canvas>
-      </div>
-    </div>
-
-    <details id="operator-panel">
-      <summary>Use Operator instead (needs your own API key)</summary>
-      <p class="warning">
-        Your key is held in this tab's memory only — never saved, never sent
-        anywhere but Anthropic, and gone when you close the page. Anyone
-        asking you to paste an API key into a web page is asking for a lot
-        of trust; this page is open source, and
-        <a href="https://github.com/renilsonjr/matrixlang/blob/main/site/playground.js">playground.js</a>
-        is the file that makes the call.
-      </p>
-      <input id="api-key" type="password" placeholder="sk-ant-..." autocomplete="off">
-      <button id="ask-operator">Ask Operator</button>
-    </details>
-  </div>
-</section>
 
 </main>
 
