@@ -1,12 +1,25 @@
 # Playground Tabs and Transliterator Design — a shorter front page, and a live translator
 
-Status: **Approved as a design. Nothing is implemented.**
+Status: **Implemented**, with one revision made during PR review (see below).
 Inputs: `2026-08-05-playground-faces-and-layout-design.md` (the layout this
 builds on), `TECHNICAL-OVERVIEW.md` §5.7 (the browser may re-implement
 presentation, never semantics — the rule this design has to satisfy),
 `src/matrixlang/translit.py` (the reversible table the new tab exposes),
 `site/glue.py` and `site/checks/no_semantics.py` (the sanctioned boundary
 between the two halves), GitHub #103 (this feature).
+
+**Revision (TT-2):** the approved design put the playground outside every
+tab, always visible below them. Reviewing the shipped PR, the request came
+back that this made no sense on Two Faces, How It Works, or the
+Transliterator — there is nothing to "run one yourself" until you have read
+the Overview, and the playground has no bearing on the other three tabs'
+content. The playground (and the "Now run one yourself" paragraph that
+introduces it) now lives at the end of the **Overview** tab only, reusing
+`site/tabs.js`'s existing `hidden` toggling rather than adding new logic —
+switching tabs away from Overview hides the playground the same way it hides
+any other tab's content. `#playground` keeps its id and every child id
+unchanged; only its position in the document moved. The rest of this spec is
+otherwise accurate to what shipped.
 
 The front page currently stacks three prose sections and a 4-example band,
 all rendered at once, before a visitor reaches the live playground. This
@@ -20,7 +33,7 @@ already loads.
 | # | Question | Decision |
 | --- | --- | --- |
 | TT-1 | The new hero | `<h1>` becomes **"Explore MatrixLang"**, eyebrow unchanged (`MATRIXLANG`), subtitle shortened to one line. The current headline/thesis text is not deleted — it moves into the Overview tab. |
-| TT-2 | Page order | **Welcome → Tabs → Playground**, in that order. The playground stays outside every tab — always visible, not itself a tab. |
+| TT-2 | Page order | **Welcome → Tabs → Playground**, in that order. ~~The playground stays outside every tab — always visible, not itself a tab.~~ **Revised:** the playground lives at the end of the **Overview** tab only — see the Revision note above. |
 | TT-3 | Tab set and default | Four tabs, in order: **Overview · Two Faces · How It Works · Transliterator**. Overview is selected on load. |
 | TT-4 | What "reduce the text" means here | Reorganizing what is already written so one section renders at a time, not rewriting the prose. The 4-example band moves inside **How It Works**, since that is the section that introduces Scribe and the examples illustrate it. |
 | TT-5 | Tab persistence | **None.** Every page load starts on Overview. No `localStorage`, no URL hash. |
@@ -47,9 +60,9 @@ section that introduces Scribe, so folding it in both gives the examples a
 home and removes an always-rendered block from the default view.
 
 The **Transliterator** tab is new (§3). The "Now run one yourself" paragraph
-and the playground itself stay outside all tabs, per TT-2 — they're the
-destination, not explanation, and should be reachable regardless of which tab
-a visitor was last on.
+and the playground itself close out the **Overview** tab (revised TT-2) —
+the playground is what Overview's narrative has been building to, and has no
+bearing on the other three tabs' content.
 
 ## 2. Tabs (TT-5, TT-6)
 
