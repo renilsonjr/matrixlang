@@ -120,12 +120,30 @@ test("a failed boot leaves no control looking usable", async () => {
   assert.equal(page.el("miss").hidden, false);
   assert.match(page.el("miss").textContent, /could not load/);
 
-  for (const id of ["write", "run", "ask-operator", "editor-face", "cascade-face"]) {
+  for (const id of [
+    "write", "run", "ask-operator", "editor-face", "cascade-face",
+    "translit-latin", "translit-glyphs",
+  ]) {
     assert.equal(page.el(id).disabled, true, `${id} is still live after a failed boot`);
   }
 
-  // The one control that must come back: the reader can try again.
+  // Both boot buttons must come back: the reader can retry from either tab.
   assert.equal(page.el("boot").disabled, false);
+  assert.equal(page.el("translit-boot").disabled, false);
+});
+
+test("typing Latin fills the Glyphs box, and back again", () => {
+  const page = loadPlayground();
+  page.setGlue({
+    transliterate_text: (text) => `GLYPHS(${text})`,
+    untransliterate_text: (glyphs) => `LATIN(${glyphs})`,
+  });
+
+  page.type("translit-latin", "hello");
+  assert.equal(page.el("translit-glyphs").value, "GLYPHS(hello)");
+
+  page.type("translit-glyphs", "abc");
+  assert.equal(page.el("translit-latin").value, "LATIN(abc)");
 });
 
 test("an example's glyph face toggles independently of its neighbours", () => {

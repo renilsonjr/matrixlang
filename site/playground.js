@@ -16,21 +16,28 @@ let face = "glyph"; // "glyph" | "latin" — the cascade's face for both source 
 
 const el = (id) => document.getElementById(id);
 
+const BOOT_LABEL = "Load the interpreter and try it";
+const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
+
 async function boot() {
-  const button = el("boot");
-  button.disabled = true;
-  button.textContent = "Loading Python… (a few MB, once)";
+  const buttons = BOOT_BUTTON_IDS.map(el);
+  for (const button of buttons) {
+    button.disabled = true;
+    button.textContent = "Loading Python… (a few MB, once)";
+  }
   try {
     await load();
   } catch (error) {
     // Without this the rejection surfaces only as "Uncaught (in promise)"
-    // in a console the reader is not looking at, and the button sits on
+    // in a console the reader is not looking at, and the buttons sit on
     // "Loading Python…" forever. A CDN that is blocked, an offline tab,
     // and a wheel that failed to publish all look like that. The narrative
     // above is unaffected — that is the point of loading none of this
     // until asked.
-    button.disabled = false;
-    button.textContent = "Load the interpreter and try it";
+    for (const button of buttons) {
+      button.disabled = false;
+      button.textContent = BOOT_LABEL;
+    }
     const miss = el("miss");
     miss.textContent =
       `The interpreter could not load: ${error.message}. ` +
@@ -44,14 +51,20 @@ async function boot() {
     // Showing the controls dead is worse than not showing them, so they
     // are disabled rather than merely present.
     el("live").hidden = false;
-    for (const id of ["write", "run", "ask-operator", "editor-face", "cascade-face"]) {
+    for (const id of [
+      "write", "run", "ask-operator", "editor-face", "cascade-face",
+      "translit-latin", "translit-glyphs",
+    ]) {
       const control = el(id);
       if (control) control.disabled = true;
     }
     return;
   }
-  button.hidden = true;
+  for (const button of buttons) button.hidden = true;
   el("live").hidden = false;
+  el("translit-latin").disabled = false;
+  el("translit-glyphs").disabled = false;
+  el("translit-table").textContent = glue.readers_table();
 }
 
 async function load() {
@@ -245,6 +258,14 @@ function toggleExampleFace(button) {
   button.textContent = pre.hidden ? "Show glyphs" : "Hide glyphs";
 }
 
+function transliterateLatin() {
+  el("translit-glyphs").value = glue.transliterate_text(el("translit-latin").value);
+}
+
+function untransliterateGlyphs() {
+  el("translit-latin").value = glue.untransliterate_text(el("translit-glyphs").value);
+}
+
 el("cascade-face").addEventListener("click", toggleCascadeFace);
 el("editor-face").addEventListener("click", toggleEditorFace);
 // Typing is only one of the ways the editor changes; Scribe and Operator
@@ -254,5 +275,8 @@ el("editor").addEventListener("input", withdrawEditorFace);
 document.querySelectorAll(".face-toggle").forEach((button) => {
   button.addEventListener("click", () => toggleExampleFace(button));
 });
+el("translit-boot").addEventListener("click", boot);
+el("translit-latin").addEventListener("input", transliterateLatin);
+el("translit-glyphs").addEventListener("input", untransliterateGlyphs);
 
 window.__playground = { boot, write: writeProgram, run: runProgram };

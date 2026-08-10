@@ -49,6 +49,18 @@ test("the harness starts each element hidden exactly when the page does", () => 
   }
 });
 
+test("the harness starts each control disabled exactly when the page does", () => {
+  for (const [id, start] of Object.entries(INITIAL)) {
+    const onPage = /\sdisabled(\s|>|=)/.test(`${findElement(id).attributes}>`);
+    assert.equal(
+      onPage,
+      start.disabled ?? false,
+      `id="${id}" is ${onPage ? "" : "not "}disabled in index.html, ` +
+        `but the harness starts it ${start.disabled ? "" : "not "}disabled`,
+    );
+  }
+});
+
 test("the harness starts each control with the label the page gives it", () => {
   for (const [id, start] of Object.entries(INITIAL)) {
     if (start.text === undefined) continue;
