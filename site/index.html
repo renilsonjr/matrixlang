@@ -50,9 +50,9 @@
 
 <header class="masthead">
   <p class="eyebrow">MATRIXLANG</p>
-  <h1>The code in <i>The Matrix</i> was never a programming language.</h1>
-  <p class="premise">This is the one it pretended to have — invented, written down,
-  and made to run.</p>
+  <h1>Explore MatrixLang</h1>
+  <p class="premise">A real programming language, invented for a film that
+  never had one.</p>
 
   <div id="layout-switch" role="group" aria-label="Layout">
     <button data-layout-choice="auto" aria-pressed="true">Auto</button>
@@ -63,7 +63,18 @@
 
 <main>
 
-<section class="prose">
+<div class="tabs" role="tablist" aria-label="About MatrixLang">
+  <button class="tab" role="tab" aria-selected="true"  aria-controls="tab-overview" id="tab-overview-btn">Overview</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="tab-faces"    id="tab-faces-btn">Two Faces</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="tab-how"      id="tab-how-btn">How It Works</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="tab-translit" id="tab-translit-btn">Transliterator</button>
+</div>
+
+<div role="tabpanel" id="tab-overview" aria-labelledby="tab-overview-btn" class="prose" tabindex="0">
+  <p><b>The code in <i>The Matrix</i> was never a programming language.</b>
+  This is the one it pretended to have — invented, written down, and made to
+  run.</p>
+
   <h2>Nothing in the film runs</h2>
 
   <p>The falling green characters are a visual effect. They have no grammar, no
@@ -88,9 +99,9 @@
   <p>When a program runs, its own source and its own output fall through a
   window as glyphs. Nothing on that screen is generated at random. Every
   character that falls came from the program you ran.</p>
-</section>
+</div>
 
-<section class="prose">
+<div role="tabpanel" id="tab-faces" aria-labelledby="tab-faces-btn" class="prose" tabindex="0" hidden>
   <h2>Two faces</h2>
 
   <p>Every program can be written and read two ways. Here is one program, twice:</p>
@@ -128,9 +139,9 @@ flatline</pre>
 
   <p>The glyphs are ordinary Unicode half-width katakana. They are not the
   film's own glyph designs, and nothing here uses them.</p>
-</section>
+</div>
 
-<section class="prose">
+<div role="tabpanel" id="tab-how" aria-labelledby="tab-how-btn" class="prose" tabindex="0" hidden>
   <h2>What it looks like</h2>
 
   <p>You do not need to know any of those keywords to get a program out of this.
@@ -150,67 +161,96 @@ flatline</pre>
   <code>agent</code> defines a function, <code>jackout</code> returns from one,
   and <code>flatline</code> closes whichever of those you opened. There are
   fourteen keywords in total.</p>
-</section>
 
-<div class="examples band">
-  <div class="example">
-    <p class="request">add 5 and 3</p>
-    <pre class="source">trace 5 + 3</pre>
-    <pre class="example-glyph glyph" hidden>ﾄ ｫ ﾀ ｩ</pre>
-    <button class="face-toggle">Show glyphs</button>
-    <pre class="output">8</pre>
-  </div>
-  <div class="example">
-    <p class="request">count from 1 to 5</p>
-    <pre class="source">construct i = 1
+  <div class="examples">
+    <div class="example">
+      <p class="request">add 5 and 3</p>
+      <pre class="source">trace 5 + 3</pre>
+      <pre class="example-glyph glyph" hidden>ﾄ ｫ ﾀ ｩ</pre>
+      <button class="face-toggle">Show glyphs</button>
+      <pre class="output">8</pre>
+    </div>
+    <div class="example">
+      <p class="request">count from 1 to 5</p>
+      <pre class="source">construct i = 1
 dejavu i <= 5
   trace i
   i = i + 1
 flatline</pre>
-    <pre class="example-glyph glyph" hidden>ｱ i ﾅ ｧ
+      <pre class="example-glyph glyph" hidden>ｱ i ﾅ ｧ
 ﾃ i ｾ ｫ
   ﾄ i
   i ﾅ i ﾀ ｧ
 ﾗ</pre>
-    <button class="face-toggle">Show glyphs</button>
-    <pre class="output">1
+      <button class="face-toggle">Show glyphs</button>
+      <pre class="output">1
 2
 3
 4
 5</pre>
-  </div>
-  <div class="example">
-    <p class="request">make a list of 1 2 3</p>
-    <pre class="source">construct xs = [1, 2, 3]</pre>
-    <pre class="example-glyph glyph" hidden>ｱ xs ﾅ ﾍｧﾈ ｨﾈ ｩﾎ</pre>
-    <button class="face-toggle">Show glyphs</button>
-    <p class="declares">This one declares rather than prints: it binds a list to
-    the name <code>xs</code>, and printing is what <code>trace</code> does.</p>
-  </div>
-  <div class="example">
-    <p class="request">if 5 is greater than 3 trace bigger</p>
-    <pre class="source">redpill 5 > 3
+    </div>
+    <div class="example">
+      <p class="request">make a list of 1 2 3</p>
+      <pre class="source">construct xs = [1, 2, 3]</pre>
+      <pre class="example-glyph glyph" hidden>ｱ xs ﾅ ﾍｧﾈ ｨﾈ ｩﾎ</pre>
+      <button class="face-toggle">Show glyphs</button>
+      <p class="declares">This one declares rather than prints: it binds a list to
+      the name <code>xs</code>, and printing is what <code>trace</code> does.</p>
+    </div>
+    <div class="example">
+      <p class="request">if 5 is greater than 3 trace bigger</p>
+      <pre class="source">redpill 5 > 3
   trace "bigger"
 flatline</pre>
-    <pre class="example-glyph glyph" hidden>ﾚ ｫ ｿ ｩ
+      <pre class="example-glyph glyph" hidden>ﾚ ｫ ｿ ｩ
   ﾄ "bigger"
 ﾗ</pre>
-    <button class="face-toggle">Show glyphs</button>
-    <pre class="output">bigger</pre>
-  </div>
-  <div class="example">
-    <p class="request">define a function that doubles</p>
-    <pre class="source">agent double(n)
+      <button class="face-toggle">Show glyphs</button>
+      <pre class="output">bigger</pre>
+    </div>
+    <div class="example">
+      <p class="request">define a function that doubles</p>
+      <pre class="source">agent double(n)
   jackout n * 2
 flatline</pre>
-    <pre class="example-glyph glyph" hidden>ｴ doubleｸnｹ
+      <pre class="example-glyph glyph" hidden>ｴ doubleｸnｹ
   ﾖ n ｶ ｨ
 ﾗ</pre>
-    <button class="face-toggle">Show glyphs</button>
-    <p class="declares">This one declares too: <code>double</code> now exists,
-    but nothing has called it yet, and a function that is never called has
-    nothing to say.</p>
+      <button class="face-toggle">Show glyphs</button>
+      <p class="declares">This one declares too: <code>double</code> now exists,
+      but nothing has called it yet, and a function that is never called has
+      nothing to say.</p>
+    </div>
   </div>
+</div>
+
+<div role="tabpanel" id="tab-translit" aria-labelledby="tab-translit-btn" class="prose" tabindex="0" hidden>
+  <h2>Transliterator</h2>
+
+  <p>Type in either box — the other updates as you type. Both directions run
+  the same reversible table the falling cascade decodes from, through the
+  real interpreter this page loads, not a copy guessed at in the browser.</p>
+
+  <div class="translit-grid">
+    <div>
+      <label for="translit-latin">Latin</label>
+      <textarea id="translit-latin" rows="6" disabled placeholder="Type here…"></textarea>
+    </div>
+    <div>
+      <label for="translit-glyphs">Glyphs</label>
+      <textarea id="translit-glyphs" rows="6" class="glyph" disabled placeholder="…or type here"></textarea>
+    </div>
+  </div>
+
+  <p class="translit-caption">A few glyphs in that box are not letters — one
+  marks the next glyph as uppercase, another marks the next character as a
+  literal passthrough rather than something encoded. The full table:</p>
+  <details>
+    <summary>Full table</summary>
+    <pre id="translit-table" class="glyph"></pre>
+  </details>
+
+  <button id="translit-boot">Load the interpreter and try it</button>
 </div>
 
 <section class="prose">
@@ -245,14 +285,14 @@ flatline</pre>
         <p id="miss" hidden></p>
 
         <label for="editor">MatrixLang</label>
-        <textarea id="editor" rows="10" spellcheck="false"></textarea>
+        <textarea id="editor" rows="16" spellcheck="false"></textarea>
         <button id="editor-face">Show glyphs</button>
         <pre id="editor-glyph" class="glyph" hidden></pre>
         <button id="run">Run it</button>
       </div>
       <div class="cascade-pane">
         <button id="cascade-face">Latin</button>
-        <canvas id="cascade" width="640" height="360"></canvas>
+        <canvas id="cascade" width="960" height="540"></canvas>
       </div>
     </div>
 
@@ -305,6 +345,7 @@ flatline</pre>
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"
         integrity="sha384-i3R37b3tF+HWudsUf1VSEOY2YxwSNMqY8DQa9Z0O3xh+NkJ9o+yjcGyIi5huj+nB"
         crossorigin="anonymous"></script>
+<script src="tabs.js"></script>
 <script src="playground.js"></script>
 
 </body>

@@ -102,7 +102,8 @@ body {
 /* The reading column keeps its measure; the band joins it until wide. */
 .masthead,
 .prose,
-.band {
+.band,
+.tabs {
   max-width: var(--measure);
   margin: 0 auto;
 }
@@ -276,6 +277,60 @@ pre {
   margin: 0.5rem 0 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+/* ---- the tabs ---- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 auto 1.5rem;
+  padding: 2px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.tab {
+  margin: 0;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  font: 11px/1.2 var(--mono);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:hover { color: var(--head); background: #08120c; }
+.tab[aria-selected="true"] {
+  color: var(--green);
+  background: #0a1a0f;
+}
+
+/* ---- the transliterator ---- */
+
+.translit-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.translit-grid textarea { min-height: 8rem; }
+
+.translit-caption {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+#translit-table {
+  margin-top: 0.5rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
 }
 
 /* ---- the playground ---- */
@@ -525,7 +580,8 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
      restyle it. */
   .masthead,
   .prose,
-  .band { max-width: var(--page); }
+  .band,
+  .tabs { max-width: var(--page); }
   /* The canvas fills its column now that the column is wide. The cap existed
      to stop a 640-wide drawing being stretched across a whole screen; inside
      a bounded band it only left dead space to the right of the wall.
@@ -533,6 +589,10 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
      is untouched. */
   #cascade { max-width: none; }
   .examples {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.75rem;
+  }
+  .translit-grid {
     grid-template-columns: 1fr 1fr;
     gap: 1.75rem;
   }

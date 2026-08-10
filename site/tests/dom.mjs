@@ -72,6 +72,10 @@ export const INITIAL = {
   "cascade-face": { text: "Latin" },
   "api-key": {},
   "ask-operator": { text: "Ask Operator" },
+  "translit-latin": { disabled: true },
+  "translit-glyphs": { disabled: true },
+  "translit-boot": { text: "Load the interpreter and try it" },
+  "translit-table": {},
 };
 
 /**
@@ -88,6 +92,7 @@ export function loadPlayground({ faceToggles = 0 } = {}) {
     Object.entries(INITIAL).map(([id, start]) => {
       const element = new StubElement(id);
       element.hidden = start.hidden ?? false;
+      element.disabled = start.disabled ?? false;
       element.textContent = start.text ?? "";
       return [id, element];
     }),
@@ -134,8 +139,19 @@ export function loadPlayground({ faceToggles = 0 } = {}) {
     setGlue(stub) {
       sandbox.__stubGlue = {};
       for (const [name, fn] of Object.entries(stub)) {
-        // Real calls return a PyProxy that the caller converts with .toJs().
-        sandbox.__stubGlue[name] = (...args) => ({ toJs: () => fn(...args) });
+        // Real calls return a PyProxy the caller converts with .toJs() —
+        // but only for dicts and lists. Pyodide converts str/int/float/bool
+        // straight to their JS equivalents with no PyProxy and no .toJs()
+        // to call, which is what transliterate_text() and friends return.
+        // Wrapping every stub the same way would make playground.js's
+        // correct, .toJs()-free call to those look broken here while
+        // breaking for real the moment it grew one.
+        sandbox.__stubGlue[name] = (...args) => {
+          const result = fn(...args);
+          return result !== null && typeof result === "object"
+            ? { toJs: () => result }
+            : result;
+        };
       }
       vm.runInContext("glue = __stubGlue", context);
     },
