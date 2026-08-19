@@ -10,7 +10,7 @@ from matrixlang.display import Backend, TextDisplay, choose_backend, tk_is_avail
 from matrixlang.errors import MatrixLangError, recursion_guard
 from matrixlang.events import Error
 from matrixlang.input import StdinSource
-from matrixlang.interpreter import DEFAULT_MAX_STEPS, Interpreter
+from matrixlang.interpreter import DEFAULT_MAX_STEPS, Interpreter, reads_input
 from matrixlang.window import CascadeWindow
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -140,10 +140,19 @@ def _command_run(
 
     # Chosen after the parse: a program that cannot run must say so
     # immediately, not from behind a window someone has to dismiss first.
+    #
+    # The AST is consulted here, which looks arbitrary until you try it: a
+    # program containing `jackin` reads from stdin, and the cascade window
+    # has no input field. Windowed, the worker thread blocks on stdin with
+    # nothing on screen saying why, and the reader has to type blind into
+    # the terminal underneath an empty window. Text keeps the prompt and
+    # the program in one place, which is what LEARNING-MATRIXLANG §17
+    # promises the terminal does. Only the DISPLAY is chosen this way —
+    # the program runs identically either side of the decision.
     backend = choose_backend(
         isatty=sys.stdout.isatty(),
         env=os.environ,
-        want_window=want_window,
+        want_window=want_window and not reads_input(tree),
         tk_available=tk_is_available(),
     )
     if backend is Backend.WINDOW:

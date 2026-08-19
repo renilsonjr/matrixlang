@@ -130,3 +130,14 @@ def test_run_without_input_reports_the_shortfall_rather_than_raising():
     events = glue.run("trace jackin\n")
     assert events[-1]["kind"] == "error"
     assert "no input left to read" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_decode_rather_than_raising():
+    # `run` promises never to raise and the JS caller has no error path,
+    # so a raw ValueError out of int() breaks the playground rather than
+    # showing a diagnostic. Reachable with no input at all, straight from
+    # the editor -- CPython refuses int(str) past 4300 digits.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'trace decode "{too_long}"\n')
+    assert events[-1]["kind"] == "error"
+    assert "decode" in events[-1]["message"]

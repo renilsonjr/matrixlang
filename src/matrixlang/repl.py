@@ -27,20 +27,30 @@ _FACE_COMMANDS: dict[str, str] = {":ascii": "ascii", ":glyph": "glyph"}
 
 
 class Repl:
-    def __init__(self, out: TextIO | None = None, err: TextIO | None = None) -> None:
+    def __init__(
+        self,
+        out: TextIO | None = None,
+        err: TextIO | None = None,
+        in_: TextIO | None = None,
+    ) -> None:
         self._out = sys.stdout if out is None else out
         # Diagnostics go to stderr, matching the CLI and what the README
         # promises. Sharing one stream with program output meant
         # `matrixlang repl > session.txt` captured the errors into the file
         # and left the terminal with no sign anything had gone wrong.
         self._err = sys.stderr if err is None else err
-        # Shares stdin with the prompt: a `jackin` during execution consumes
+        # Shares the prompt's stream: a `jackin` during execution consumes
         # the next line typed. At a terminal that is exactly right. Piping a
         # script into the REPL interleaves program input with program source,
         # which is a documented sharp edge rather than something special-cased
         # -- branching language behaviour on whether stdin is a TTY would be
         # worse than the edge.
-        self.interpreter = Interpreter(out=self._out, source=StdinSource())
+        #
+        # The stream is threaded through rather than hardcoded to
+        # sys.stdin: `repl(in_=...)` reads program source from its own
+        # stream, and a session reading source from one place and input
+        # from another shares nothing. Unset, this is sys.stdin as before.
+        self.interpreter = Interpreter(out=self._out, source=StdinSource(in_))
         self._buffer: list[str] = []
         self._face = "ascii"
 
@@ -113,7 +123,9 @@ def repl(
     """Run an interactive session until end of input."""
     source = sys.stdin if in_ is None else in_
     sink = sys.stdout if out is None else out
-    session = Repl(out=sink, err=sys.stderr if err is None else err)
+    session = Repl(
+        out=sink, err=sys.stderr if err is None else err, in_=source
+    )
     needs_more = False
 
     while True:

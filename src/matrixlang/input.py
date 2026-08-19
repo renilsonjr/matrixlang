@@ -57,10 +57,30 @@ class BufferSource(ListSource):
     Never blocks, which is the whole reason the playground can offer input:
     JavaScript is single-threaded, so a read that waited would freeze the
     tab and the cascade drawing in it.
+
+    Splits on newlines and nothing else, matching `StdinSource` exactly.
+    These two are the surfaces a reader chooses between -- the same input
+    pasted into the browser box or piped at a terminal must yield the same
+    lines, or a program means different things on the two. `str.splitlines`
+    would not: it also breaks on \\v, \\f, \\x85 and U+2028/9, which
+    `readline` treats as ordinary characters inside a line.
     """
 
     def __init__(self, text: str) -> None:
-        super().__init__(text.splitlines())
+        super().__init__(_split_lines(text))
+
+
+def _split_lines(text: str) -> list[str]:
+    """`text` as the lines `StdinSource` would have read from it."""
+    if text == "":
+        return []
+    # A trailing newline ends the last line rather than starting an empty
+    # one -- readline() returns "" at end of stream, not one more line.
+    if text.endswith("\n"):
+        text = text[:-1]
+    # `.rstrip("\r")` for the same reason StdinSource does: CRLF text
+    # must not leave a carriage return glued to every line.
+    return [line.rstrip("\r") for line in text.split("\n")]
 
 
 class StdinSource:

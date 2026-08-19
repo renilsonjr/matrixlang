@@ -9,6 +9,7 @@ lexer, the parser or the CLI, so Stage 4 can hand it a tree that came from
 either source face.
 """
 
+import dataclasses
 import string
 import sys
 from typing import TextIO
@@ -78,6 +79,12 @@ _OP_WORDS = {TokenType.SPLICE: "splice", TokenType.FORK: "fork"}
 # reads external input rather than lexed source, so nothing upstream has
 # filtered it; do not "simplify" this back to bare int().
 _DECODE_DIGITS = frozenset(string.digits)
+
+# The surrounding space `decode` forgives, and no more. str.strip() with
+# no argument strips every Unicode space -- NBSP, the ideographic space,
+# U+2028 -- so "\xa05" would decode to 5 while the lexer would never read
+# that as a number. ASCII only, for the same reason _DECODE_DIGITS is.
+_DECODE_SPACE = string.whitespace
 
 
 class Environment:
@@ -384,7 +391,7 @@ class Interpreter:
                 # "1_000", Arabic-Indic digits, other Unicode decimal
                 # digits -- because decode reads external input that
                 # nothing upstream has filtered. See _DECODE_DIGITS.
-                stripped = operand.strip()
+                stripped = operand.strip(_DECODE_SPACE)
                 digits = stripped[1:] if stripped.startswith("-") else stripped
                 if not digits or not all(c in _DECODE_DIGITS for c in digits):
                     raise RuntimeErrorML(
@@ -392,7 +399,24 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     )
-                return int(stripped)
+                try:
+                    return int(stripped)
+                except ValueError as error:
+                    # All digits and still refused: CPython caps
+                    # int(str) at sys.int_info.default_max_str_digits
+                    # (4300), so a long enough run of digits passes the
+                    # check above and then raises. `decode` reads
+                    # external input, so a caller can hand us one --
+                    # and everything downstream (site/glue.py's run(),
+                    # which promises never to raise; the operator's dry
+                    # run; the CLI's diagnostic) expects nothing but
+                    # MatrixLangError out of here.
+                    raise RuntimeErrorML(
+                        f"'decode' got a number too long to read — "
+                        f"{len(digits)} digits",
+                        expr.line,
+                        expr.column,
+                    ) from error
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
@@ -650,3 +674,30 @@ class Interpreter:
 def run(program: Program, out: TextIO | None = None) -> None:
     """Execute a program. Convenience wrapper over Interpreter."""
     Interpreter(out=out).run(program)
+
+
+def reads_input(program: Program) -> bool:
+    """Whether running this program can ever ask its source for a line.
+
+    A fact about executing the tree rather than about drawing it, which is
+    why it lives beside the branch that does the asking. Callers use it to
+    decide what to hand the interpreter and where to run it — see cli.py's
+    backend choice.
+
+    Walked generically over the dataclass fields instead of by an
+    isinstance chain per node type. A chain would need editing every time
+    a node gains a child, and forgetting that edit is exactly the bug
+    treeview.py has now shipped twice.
+    """
+    pending: list[object] = [program]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, JackIn):
+            return True
+        if isinstance(item, list):
+            pending.extend(item)
+        elif dataclasses.is_dataclass(item) and not isinstance(item, type):
+            pending.extend(
+                getattr(item, field.name) for field in dataclasses.fields(item)
+            )
+    return False

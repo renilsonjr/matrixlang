@@ -174,3 +174,8 @@ def test_a_loop_reading_input_forever_is_still_bounded():
     # this -- exactly as it stops any other infinite loop.
     outcome = check("dejavu true\n  trace jackin\nflatline\n", max_steps=200)
     assert not isinstance(outcome, Valid)
+    # Which stage rejected it is the whole claim. `not Valid` alone stays
+    # green if ConstantSource ever starts running out -- the outcome would
+    # become Stage.RUN, "no input left to read", and the test would still
+    # pass while proving the opposite of what it says.
+    assert outcome.stage is Stage.LIMIT

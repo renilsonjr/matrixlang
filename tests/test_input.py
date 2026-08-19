@@ -7,6 +7,8 @@ use ListSource without wondering whether the source itself is correct.
 
 import io
 
+import pytest
+
 from matrixlang.input import (
     BufferSource,
     ConstantSource,
@@ -67,3 +69,41 @@ def test_stdin_source_distinguishes_a_blank_line_from_the_end():
 def test_constant_source_never_runs_out():
     source = ConstantSource("1")
     assert [source.next_line() for _ in range(3)] == ["1", "1", "1"]
+
+
+def _drain(source) -> list[str]:
+    lines = []
+    while (line := source.next_line()) is not None:
+        lines.append(line)
+    return lines
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "Neo",
+        "Neo\n",
+        "Neo\nTrinity\n",
+        "Neo\nTrinity",
+        "\nNeo\n",
+        "Neo\n\n\n",
+        "Neo  \n",
+        "Neo\r\nTrinity\r\n",
+        # The five characters str.splitlines() breaks on and readline()
+        # does not: vertical tab, form feed, NEL, line separator,
+        # paragraph separator. Each of these is one line, not two.
+        "a\vb\n",
+        "a\fb\n",
+        "a\x85b\n",
+        "a\u2028b\n",
+        "a\u2029b\n",
+    ],
+)
+def test_the_buffer_and_stdin_sources_agree_on_what_a_line_is(text):
+    # The two surfaces a reader chooses between: the same text pasted into
+    # the playground's input box or piped at a terminal must yield the same
+    # lines, or one program means two things depending on where it runs.
+    # BufferSource used str.splitlines(), which breaks on five characters
+    # readline() treats as ordinary content inside a line.
+    assert _drain(BufferSource(text)) == _drain(StdinSource(io.StringIO(text)))

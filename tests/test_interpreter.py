@@ -431,6 +431,59 @@ def test_decode_rejects_a_value_that_is_already_a_number():
     assert "decode" in caught.value.message
 
 
+def test_decode_rejects_a_leading_plus_although_it_accepts_a_leading_minus():
+    # Asymmetric on purpose, and pinned here so it is a decision rather
+    # than an accident: "-3" is how the language itself writes a negative
+    # number, while "+3" is a spelling the lexer never produces. §17 of
+    # LEARNING-MATRIXLANG says so out loud.
+    from matrixlang.errors import MatrixLangError
+
+    assert _run_with_input("trace decode jackin\n", ["-3"]) == ["-3"]
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", ["+3"])
+    assert "decode" in caught.value.message
+
+
+def test_decode_rejects_non_ascii_spacing_around_a_number():
+    # str.strip() with no argument eats NBSP and the rest of Unicode's
+    # spaces, which would let "\xa05" through the same door the digit
+    # check exists to shut. See _DECODE_SPACE.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", ["\xa05"])
+    assert "decode" in caught.value.message
+
+
+def test_decode_reports_an_over_long_digit_string_rather_than_raising():
+    # CPython refuses int(str) past sys.int_info.default_max_str_digits
+    # (4300). Every character is an ASCII digit, so the check above passes
+    # it straight to int(), which raises ValueError -- a raw Python
+    # exception escaping the interpreter, out through site/glue.py's
+    # run() ("Never raises"), the operator's dry run and the CLI.
+    import sys
+
+    from matrixlang.errors import MatrixLangError
+
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", [too_long])
+    assert "decode" in caught.value.message
+    assert caught.value.line == 1
+
+
+def test_an_over_long_digit_string_needs_no_input_at_all():
+    # Reachable from a literal, so it is not gated behind the input box:
+    # anybody typing this into the playground editor hits it.
+    import sys
+
+    from matrixlang.errors import MatrixLangError
+
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    with pytest.raises(MatrixLangError):
+        _run_with_input(f'trace decode "{too_long}"\n', [])
+
+
 def test_the_default_source_is_empty_never_stdin():
     # A default that read a terminal would hang validate.py's dry run
     # inside a server request. Empty is the only safe default.
