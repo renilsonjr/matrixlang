@@ -67,6 +67,7 @@ export const INITIAL = {
   "editor": {},
   "editor-face": { text: "Show glyphs" },
   "editor-glyph": { hidden: true },
+  "program-input": {},
   "run": { text: "Run it" },
   "cascade": {},
   "cascade-face": { text: "Latin" },
@@ -122,6 +123,15 @@ export function loadPlayground({ faceToggles = 0 } = {}) {
   vm.runInContext(readFileSync(PLAYGROUND, "utf8"), context, {
     filename: PLAYGROUND,
   });
+
+  // `cascade` is only ever constructed inside load(), which this harness
+  // never runs — so it starts out null, same as it does on the real page
+  // before Pyodide finishes booting. Any test that clicks #run walks
+  // straight into runProgram()'s unconditional `cascade.clear()`, which
+  // has nothing to do with what such a test is actually checking. A no-op
+  // stand-in, assigned the same way setGlue() reaches the module-scoped
+  // `glue`, keeps that a non-issue here.
+  vm.runInContext("cascade = { clear() {}, add() {} };", context);
 
   return {
     el: (id) => elements.get(id),

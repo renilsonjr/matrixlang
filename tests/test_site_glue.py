@@ -117,3 +117,16 @@ def test_readers_table_documents_the_markers():
     table = glue.readers_table()
     assert "marks the next glyph as uppercase" in table
     assert "marks the next character as literal" in table
+
+
+def test_run_reads_supplied_input():
+    events = glue.run('construct name = jackin\ntrace "Hello, " + name\n', stdin="Neo\n")
+    outputs = [e for e in events if e["kind"] == "output"]
+    assert [o["text"] for o in outputs] == ["Hello, Neo"]
+
+
+def test_run_without_input_reports_the_shortfall_rather_than_raising():
+    # Never raises -- the JS side walks one list and has no error path.
+    events = glue.run("trace jackin\n")
+    assert events[-1]["kind"] == "error"
+    assert "no input left to read" in events[-1]["message"]

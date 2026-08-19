@@ -11,6 +11,7 @@ reason the page cannot drift from the language the way `web/interpreter.js`
 did (see the commit that deleted it, and TECHNICAL-OVERVIEW §5.7).
 """
 
+from matrixlang.input import BufferSource
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -104,11 +105,18 @@ def operator_prompt(request: str) -> str:
     return build(request)
 
 
-def run(source: str, max_steps: int = BROWSER_MAX_STEPS) -> list[dict]:
+def run(
+    source: str, stdin: str = "", max_steps: int = BROWSER_MAX_STEPS
+) -> list[dict]:
     """Execute `source`, returning every event in wire shape. Never raises.
 
     A failure is the last event rather than an exception, so the JS side
     has one list to walk and no error path of its own.
+
+    `stdin` is whatever the reader typed into the input box, supplied up
+    front. The browser cannot block -- JavaScript is single-threaded, so a
+    read that waited would freeze the tab and the cascade drawing in it --
+    so input is buffered rather than prompted for.
     """
     from matrixlang.errors import MatrixLangError, recursion_guard
 
@@ -120,7 +128,9 @@ def run(source: str, max_steps: int = BROWSER_MAX_STEPS) -> list[dict]:
         return [{"kind": "error", "message": f"[line {error.line}, column {error.column}] {error.message}"}]
 
     try:
-        Interpreter(sink=sink, max_steps=max_steps).run(program)
+        Interpreter(
+            sink=sink, max_steps=max_steps, source=BufferSource(stdin)
+        ).run(program)
     except MatrixLangError as error:
         sink.events.append(
             {"kind": "error", "message": f"[line {error.line}, column {error.column}] {error.message}"}
