@@ -21,7 +21,8 @@ trace "wake up, Neo"
 ```
 
 `trace` prints. That is the only way a program produces output; there is
-no `print`, no `return` to a console, and no input.
+no `print` and no `return` to a console. Reading input has its own
+keyword — see §17.
 
 Save it as `hello.rain` and run it:
 
