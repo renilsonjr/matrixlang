@@ -3,7 +3,7 @@ import pytest
 from matrixlang.errors import LexError
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.tokens import TokenType
+from matrixlang.tokens import KEYWORDS, TokenType
 
 
 def kinds(source: str) -> list[TokenType]:
@@ -476,3 +476,15 @@ def test_jackout_lexes_in_the_glyph_face():
 
     types = [t.type for t in lex(f"{GLYPHS['jackout']} 1\n")]
     assert types[0] is TokenType.JACKOUT
+
+
+def test_the_input_keywords_lex_in_both_faces():
+    from matrixlang.glyphs import GLYPHS
+
+    for ascii_word in ("jackin", "decode"):
+        (token, _eof) = [t for t in lex(ascii_word) if t.type is not TokenType.NEWLINE]
+        assert token.type is KEYWORDS[ascii_word], f"{ascii_word} did not lex"
+        (glyph_token, _) = [
+            t for t in lex(GLYPHS[ascii_word]) if t.type is not TokenType.NEWLINE
+        ]
+        assert glyph_token.type is token.type, f"{ascii_word}'s glyph face did not lex"

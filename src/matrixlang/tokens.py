@@ -29,6 +29,8 @@ class TokenType(Enum):
     SPLICE = auto()
     FORK = auto()
     UNPLUG = auto()
+    JACKIN = auto()
+    DECODE = auto()
 
     # Operators
     PLUS = auto()
@@ -71,6 +73,8 @@ KEYWORDS: dict[str, TokenType] = {
     "splice": TokenType.SPLICE,
     "fork": TokenType.FORK,
     "unplug": TokenType.UNPLUG,
+    "jackin": TokenType.JACKIN,
+    "decode": TokenType.DECODE,
 }
 
 

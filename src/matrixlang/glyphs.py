@@ -38,6 +38,11 @@ GLYPHS: dict[str, str] = {
     "splice": "ﾁ",
     "fork": "ﾂ",
     "unplug": "ｳ",
+    # Input. `jackin` takes ｲ for the "i" of "in", pairing with jackout's
+    # ﾖ: one carries a value out of a function, the other brings one in
+    # from the world. `decode` takes ｺ for the "co" in the middle of it.
+    "jackin": "ｲ",
+    "decode": "ｺ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
