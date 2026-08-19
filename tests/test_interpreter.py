@@ -385,11 +385,40 @@ def test_decode_rejects_text_that_is_not_a_number():
 
 
 def test_decode_rejects_a_float_spelling():
-    # The language has integers only -- the lexer builds numbers with int().
+    # The language has integers only.
     from matrixlang.errors import MatrixLangError
 
-    with pytest.raises(MatrixLangError):
+    with pytest.raises(MatrixLangError) as caught:
         _run_with_input("trace decode jackin\n", ["5.5"])
+    assert "decode" in caught.value.message
+
+
+def test_decode_rejects_an_underscore_grouped_number():
+    # int("1_000") == 1000, but the lexer never lexes "1_000" as a single
+    # number token, so decode must not treat it as one either.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", ["1_000"])
+    assert "decode" in caught.value.message
+
+
+def test_decode_rejects_arabic_indic_digits():
+    # int("٣٤٥") == 345, but the lexer's digit set is explicitly ASCII-only.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", ["٣٤٥"])
+    assert "decode" in caught.value.message
+
+
+def test_decode_rejects_mathematical_digits():
+    # int("𝟝") == 5, another Unicode decimal digit outside the ASCII set.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", ["𝟝"])
+    assert "decode" in caught.value.message
 
 
 def test_decode_rejects_a_value_that_is_already_a_number():

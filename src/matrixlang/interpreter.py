@@ -9,6 +9,7 @@ lexer, the parser or the CLI, so Stage 4 can hand it a tree that came from
 either source face.
 """
 
+import string
 import sys
 from typing import TextIO
 
@@ -69,6 +70,14 @@ _LOGICAL_OPS = (TokenType.SPLICE, TokenType.FORK)
 # render into the interpreter would put a presentation module underneath
 # execution, which tests/test_architecture.py forbids.
 _OP_WORDS = {TokenType.SPLICE: "splice", TokenType.FORK: "fork"}
+
+# Explicit ASCII set, matching lexer._DIGITS. Bare int() is far more
+# tolerant than the lexer's own number grammar -- it accepts "1_000",
+# Arabic-Indic digits ("٣٤٥"), and other Unicode decimal digits, none of
+# which the lexer would ever produce as a single number token. `decode`
+# reads external input rather than lexed source, so nothing upstream has
+# filtered it; do not "simplify" this back to bare int().
+_DECODE_DIGITS = frozenset(string.digits)
 
 
 class Environment:
@@ -370,17 +379,20 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     )
-                try:
-                    return int(operand)
-                except ValueError:
-                    # int() already tolerates surrounding whitespace and a
-                    # leading sign, and rejects "5.5" -- the language has
-                    # integers only.
+                # Explicit check, not bare int(): int() accepts far more
+                # than the lexer's own number grammar ever produces --
+                # "1_000", Arabic-Indic digits, other Unicode decimal
+                # digits -- because decode reads external input that
+                # nothing upstream has filtered. See _DECODE_DIGITS.
+                stripped = operand.strip()
+                digits = stripped[1:] if stripped.startswith("-") else stripped
+                if not digits or not all(c in _DECODE_DIGITS for c in digits):
                     raise RuntimeErrorML(
                         f"'decode' needs a whole number, got \"{operand}\"",
                         expr.line,
                         expr.column,
-                    ) from None
+                    )
+                return int(stripped)
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
