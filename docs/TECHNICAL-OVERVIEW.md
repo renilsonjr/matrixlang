@@ -98,7 +98,7 @@ anything about the language, which is the whole point of the split.
 | `treeview.py` | 162 | AST → indented text, for teaching |
 | `repl.py` | 138 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
-| `input.py` | 97 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |
+| `input.py` | 117 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |
 | `translit.py` | 162 | The reversible display table. Pure |
 | `display.py` | 96 | The display protocol and backend selection. Pure |
 | `cascade.py` | 271 | The content-carrying field simulation. Pure |
