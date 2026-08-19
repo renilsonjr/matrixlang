@@ -19,6 +19,7 @@ _ALLOWED: dict[str, set[str]] = {
     "tokens": set(),
     "errors": set(),
     "glyphs": set(),
+    "input": set(),
     "nodes": {"tokens"},
     "values": set(),
     "events": {"nodes"},
