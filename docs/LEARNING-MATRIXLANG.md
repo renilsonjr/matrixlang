@@ -21,8 +21,8 @@ trace "wake up, Neo"
 ```
 
 `trace` prints. That is the only way a program produces output; there is
-no `print` and no `return` to a console. Reading input has its own
-keyword — see §17.
+no `print` and no `return` to a console. Reading input has its own two
+keywords — see §17.
 
 Save it as `hello.rain` and run it:
 
@@ -1062,6 +1062,12 @@ decimal point (this language has integers only), and refuses a value that is
 already a number — the same way `splice` refuses anything that is not a
 boolean rather than guessing what you meant.
 
+Spaces and tabs either side of the number are forgiven, and so is a leading
+`-`: `decode` reads ` -3 ` as `-3`. A leading `+` is not. The asymmetry is
+deliberate rather than an oversight — `-3` is how the language itself writes
+that number, and `+3` is a spelling it never produces, so accepting it would
+mean `decode` reading a wider set of numbers than the language can write.
+
 ### `decode` binds tighter than arithmetic
 
 `decode jackin + 1` means `(decode jackin) + 1`, not `decode (jackin + 1)`.
@@ -1097,9 +1103,17 @@ blanks while the real mistake stayed invisible.
 ### Where input comes from
 
 At the terminal, `jackin` reads what you type, and `echo "Neo" | matrixlang
-run greet.rain` works the way you would expect. In the browser it reads the
-input box beside the editor, one line per `jackin`, supplied before you press
-Run — a web page cannot stop and wait for you without freezing the tab.
+run greet.rain` works the way you would expect.
+
+A program that uses `jackin` prints to the terminal rather than opening the
+cascade window, even without `--no-window`. The window has no input box, so
+a windowed run would sit there waiting for a line you had no way to see it
+wanting. Only the display changes; the program itself runs the same either
+way. Every other program still gets the window described in §12.
+
+In the browser `jackin` reads the input box beside the editor, one line per
+`jackin`, supplied before you press Run — a web page cannot stop and wait for
+you without freezing the tab.
 
 ---
 
