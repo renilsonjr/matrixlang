@@ -70,6 +70,20 @@ def scribe(request: str) -> ScribeResult:
             "conditional comparisons need numbers, like 'if 5 is greater than 3'",
             closest=_closest(text),
         )
+    if _discarded(text, match):
+        # The winning pattern covered only part of the request, and the
+        # rest would be thrown away silently. The conditional guard above
+        # is one instance of this; the general case is worse, because a
+        # whole pasted program whose last line is `print (result)` matches
+        # the bare `trace <value>` intent on its tail and comes back as
+        # `trace "(result)"` — a program the reader never asked for that
+        # check() nonetheless accepts. Refusing is the contract: Scribe
+        # answers what it recognizes and declines the rest.
+        return ScribeMiss(
+            "only part of that request was recognized — Scribe answers one "
+            "request at a time, and cannot read code pasted as a request",
+            closest=_closest(text),
+        )
     built = intent.build(match)
     if isinstance(built, ScribeMiss):
         # A pattern can match text it cannot turn into a runnable program —
@@ -108,6 +122,31 @@ def normalize(request: str) -> str:
         part = re.sub(r"\s+", " ", part)
         parts[i] = part
     return '"'.join(parts).strip()
+
+
+# Words that carry no request of their own. Filler and punctuation around
+# a matched pattern is not content Scribe failed to understand — "please
+# print hello" is still `print hello`, and refusing it would fix the
+# silent-guess bug by making the catalogue brittle instead.
+_FILLER = frozenset({
+    "please", "kindly", "can", "could", "would", "will", "you", "now", "just",
+    "i", "me", "my", "we", "want", "need", "like", "to", "let", "us",
+    "a", "an", "the", "for", "of", "it", "this", "that", "and", "then",
+    "write", "make", "create", "give", "show", "program", "code", "one",
+})
+
+
+def _discarded(text: str, match: re.Match) -> bool:
+    """True when the winning pattern left substantive text unmatched.
+
+    The catalogue is searched, not fullmatched, so a pattern may win on a
+    fragment while the rest of the request goes nowhere. Everything
+    outside the match is examined: punctuation and `_FILLER` do not
+    count, any other word does. One unrecognized word is enough, because
+    the alternative is answering a request the reader did not make.
+    """
+    leftover = f"{text[:match.start()]} {text[match.end():]}"
+    return any(word not in _FILLER for word in re.findall(r"[a-z0-9_]+", leftover))
 
 
 _SYNONYMS = {
