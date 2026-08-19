@@ -423,12 +423,24 @@ def test_make_a_list_rejects_word_elements():
 
 
 def test_make_a_list_rejects_trailing_undeclared_name():
-    # Same root cause: `xs` is the list's own name, not an element. The
-    # numbers still match; the trailing name is simply not part of the
-    # element list. Whatever the match produces must pass check().
+    # This used to assert a ScribeProgram, on the reading that `xs` was the
+    # list's own name rather than an element. It wasn't: the name `xs` is a
+    # hardcoded default, so "make a list of 1 2 foo" produced the identical
+    # `construct xs = [1, 2]` and dropped `foo` on the floor. The old
+    # assertion only looked right because the example word and the default
+    # name happened to be the same string.
+    #
+    # A trailing word the pattern cannot place is discarded content, which
+    # is the same defect as a pasted program matching on its last line.
     result = scribe("make a list of 1 2 xs")
-    assert isinstance(result, ScribeProgram)
-    assert isinstance(check(result.source), Valid)
+    assert isinstance(result, ScribeMiss)
+
+
+def test_make_a_list_discards_nothing_silently():
+    # The generalization of the case above, with a word that cannot be
+    # confused with the default list name.
+    result = scribe("make a list of 1 2 banana")
+    assert isinstance(result, ScribeMiss), "dropped 'banana' and built a list anyway"
 
 
 def test_get_element_rejects_negative_index():
@@ -718,3 +730,39 @@ def test_no_accepted_request_is_ever_check_invalid():
             assert isinstance(outcome, Valid), (
                 f"{text!r} produced {result.source!r} -> {outcome.as_diagnostic()}"
             )
+
+
+# --- Partial matches are misses, not guesses ----------------------------
+#
+# The catalogue is searched with .search(), so a pattern can match a
+# fragment buried in a much larger request and the rest is silently
+# discarded. That is how a whole Python program pasted into the request
+# box came back as `trace "(result)"` — the tail `print (result)` matched
+# and the fifty lines above it were dropped. A request Scribe only
+# partly understood is a miss: guessing is the one thing this module
+# exists not to do.
+
+
+def test_a_pattern_buried_in_unrelated_text_is_a_miss():
+    result = scribe("blah blah blah print (result)")
+    assert isinstance(result, ScribeMiss), "matched a fragment and discarded the rest"
+
+
+def test_a_pasted_program_is_a_miss_rather_than_its_last_line():
+    request = (
+        "user_input = input('What book do you want?') "
+        'books = ["Clean Code", "Refactoring"] '
+        "def find_item(books, target): for item in books: "
+        "if item == target: return item "
+        "result = find_item(books, user_input) print (result)"
+    )
+    result = scribe(request)
+    assert isinstance(result, ScribeMiss), "a pasted program became a one-line guess"
+
+
+def test_politeness_and_punctuation_still_match():
+    # The fix must not make the catalogue brittle: filler around a request
+    # is not content Scribe failed to understand.
+    for request in ["please print hello", "count from 1 to 5.", "can you print hello"]:
+        result = scribe(request)
+        assert isinstance(result, ScribeProgram), f"{request!r} became a miss"
