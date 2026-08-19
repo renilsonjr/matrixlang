@@ -766,3 +766,28 @@ def test_politeness_and_punctuation_still_match():
     for request in ["please print hello", "count from 1 to 5.", "can you print hello"]:
         result = scribe(request)
         assert isinstance(result, ScribeProgram), f"{request!r} became a miss"
+
+
+def test_a_pasted_program_offers_no_phrasing_suggestion():
+    # The "closest phrasing" hint is for someone who asked in words Scribe
+    # not quite know. Someone who pasted code did not mishrase a request —
+    # they used the wrong input entirely, and suggesting
+    # `if not <a> is greater than <b> trace <value>` sends them further from
+    # what they wanted. The reason already tells them what went wrong.
+    result = scribe("construct xs = [1, 2, 3]\ntrace xs\n")
+    assert isinstance(result, ScribeMiss)
+    assert result.closest is None, f"offered a phrasing hint: {result.closest!r}"
+
+
+def test_a_pasted_program_is_told_to_run_it_instead():
+    result = scribe("construct xs = [1, 2, 3]\ntrace xs\n")
+    assert isinstance(result, ScribeMiss)
+    assert "run it" in result.reason
+
+
+def test_an_ordinary_miss_still_offers_the_closest_phrasing():
+    # The suppression above must be narrow: a real phrasing miss still gets
+    # the help it always did.
+    result = scribe("make soup")
+    assert isinstance(result, ScribeMiss)
+    assert result.closest

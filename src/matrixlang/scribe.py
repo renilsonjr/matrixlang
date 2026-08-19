@@ -79,10 +79,21 @@ def scribe(request: str) -> ScribeResult:
         # `trace "(result)"` — a program the reader never asked for that
         # check() nonetheless accepts. Refusing is the contract: Scribe
         # answers what it recognizes and declines the rest.
+        # No `closest`, deliberately. That hint answers "you asked in words
+        # I don't quite know" by offering a phrasing that is close. Someone
+        # who pasted code did not misphrase a request — they used the wrong
+        # input entirely, and handing them `if not <a> is greater than <b>
+        # trace <value>` sends them further from what they wanted. The
+        # reason below is the whole answer.
+        #
+        # Worded without naming a surface: this module is pure and serves
+        # the CLI and the REPL as well as the page, so "paste it in the box
+        # below" would be a lie in two of the three places it can be read.
         return ScribeMiss(
             "only part of that request was recognized — Scribe answers one "
-            "request at a time, and cannot read code pasted as a request",
-            closest=_closest(text),
+            "request at a time, and cannot read code pasted as a request. "
+            "If this is already MatrixLang, run it instead of describing it",
+            closest=None,
         )
     built = intent.build(match)
     if isinstance(built, ScribeMiss):
