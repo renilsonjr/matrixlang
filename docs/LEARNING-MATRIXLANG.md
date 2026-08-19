@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has fourteen keywords, four types, and two ways of writing
+MatrixLang has sixteen keywords, four types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -797,8 +797,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Fourteen keywords, eleven operators, parentheses, a comma, two brackets,
-ten digits, and the comment marker — 41 slots in all.
+Sixteen keywords, eleven operators, parentheses, a comma, two brackets,
+ten digits, and the comment marker — 43 slots in all.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -806,7 +806,7 @@ ten digits, and the comment marker — 41 slots in all.
 | `agent` `ｴ` | `jackout` `ﾖ` | `length` `ﾙ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` |
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
-| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | | | | |
+| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
