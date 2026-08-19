@@ -268,3 +268,30 @@ def test_the_glyph_table_covers_every_slot_the_renderer_can_emit():
     # than hardcoded. A missing entry here means render(tree, GLYPH_FACE)
     # can silently print ASCII where a glyph belongs.
     assert _slots_the_renderer_can_emit() <= set(GLYPHS)
+
+
+def test_both_faces_round_trip_a_program_using_input():
+    # D-03: parse(lex(render_X(t))) == t, for both faces. A word operator
+    # rendered without a separator would re-lex as one identifier, which
+    # is precisely what this catches.
+    source = "construct n = decode jackin + 1\ntrace n\n"
+    tree = parse(lex(source))
+    for render in (render_ascii, render_glyph):
+        assert parse(lex(render(tree))) == tree, f"{render.__name__} did not round-trip"
+
+
+def test_the_ascii_face_spells_the_keywords_out():
+    tree = parse(lex("construct n = decode jackin\n"))
+    rendered = render_ascii(tree)
+    assert "decode jackin" in rendered
+
+
+def test_the_glyph_face_uses_the_table_not_the_words():
+    from matrixlang.glyphs import GLYPHS
+
+    tree = parse(lex("construct n = decode jackin\n"))
+    rendered = render_glyph(tree)
+    assert GLYPHS["decode"] in rendered
+    assert GLYPHS["jackin"] in rendered
+    assert "decode" not in rendered
+    assert "jackin" not in rendered
