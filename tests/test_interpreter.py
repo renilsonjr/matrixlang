@@ -329,3 +329,89 @@ def test_reading_an_undeclared_name_suggests_construct():
     with pytest.raises(RuntimeErrorML) as excinfo:
         output("trace nope\n")
     assert "use 'construct' first" in str(excinfo.value)
+
+
+def _run_with_input(source_text: str, lines: list[str]) -> list[str]:
+    """Run a program with supplied input, returning its output lines."""
+    import io
+
+    from matrixlang.input import ListSource
+    from matrixlang.interpreter import Interpreter
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    out = io.StringIO()
+    Interpreter(out=out, source=ListSource(lines)).run(parse(lex(source_text)))
+    return out.getvalue().splitlines()
+
+
+def test_jackin_reads_a_line_as_text():
+    assert _run_with_input("trace jackin\n", ["Neo"]) == ["Neo"]
+
+
+def test_jackin_reads_successive_lines_in_order():
+    program = "trace jackin\ntrace jackin\n"
+    assert _run_with_input(program, ["Neo", "Trinity"]) == ["Neo", "Trinity"]
+
+
+def test_jackin_yields_text_not_a_number():
+    # "5" stays text, so concatenation works and arithmetic does not.
+    assert _run_with_input('trace jackin + "!"\n', ["5"]) == ["5!"]
+
+
+def test_running_out_of_input_is_an_error_with_a_position():
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace jackin\n", [])
+    assert "no input left to read" in caught.value.message
+    assert caught.value.line == 1
+
+
+def test_decode_turns_text_into_a_number():
+    assert _run_with_input("trace decode jackin + 1\n", ["41"]) == ["42"]
+
+
+def test_decode_accepts_a_negative_number_and_surrounding_spaces():
+    assert _run_with_input("trace decode jackin\n", ["  -3 "]) == ["-3"]
+
+
+def test_decode_rejects_text_that_is_not_a_number():
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode jackin\n", ["abc"])
+    assert "decode" in caught.value.message
+
+
+def test_decode_rejects_a_float_spelling():
+    # The language has integers only -- the lexer builds numbers with int().
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError):
+        _run_with_input("trace decode jackin\n", ["5.5"])
+
+
+def test_decode_rejects_a_value_that_is_already_a_number():
+    # Strict like `splice`, which refuses an integer rather than coercing.
+    # A decode that passed numbers through would hide a double decode.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run_with_input("trace decode 5\n", [])
+    assert "decode" in caught.value.message
+
+
+def test_the_default_source_is_empty_never_stdin():
+    # A default that read a terminal would hang validate.py's dry run
+    # inside a server request. Empty is the only safe default.
+    import io
+
+    from matrixlang.errors import MatrixLangError
+    from matrixlang.interpreter import Interpreter
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    with pytest.raises(MatrixLangError) as caught:
+        Interpreter(out=io.StringIO()).run(parse(lex("trace jackin\n")))
+    assert "no input left to read" in caught.value.message

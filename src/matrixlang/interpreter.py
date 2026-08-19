@@ -14,6 +14,7 @@ from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
 from matrixlang.events import EventSink, Output, Statement, TextSink
+from matrixlang.input import EmptySource, InputSource
 from matrixlang.nodes import (
     Assign,
     Binary,
@@ -26,6 +27,7 @@ from matrixlang.nodes import (
     If,
     Index,
     IndexAssign,
+    JackIn,
     ListLiteral,
     Name,
     NumberLiteral,
@@ -133,6 +135,7 @@ class Interpreter:
         out: TextIO | None = None,
         sink: EventSink | None = None,
         max_steps: int | None = DEFAULT_MAX_STEPS,
+        source: InputSource | None = None,
     ) -> None:
         """Execute into a sink. `out` is the shorthand for "a TextSink on this".
 
@@ -160,6 +163,11 @@ class Interpreter:
             if sink is not None
             else TextSink(sys.stdout if out is None else out)
         )
+        # EmptySource, never StdinSource. A default that read a terminal
+        # would hang any caller that forgot to pass one -- including
+        # operator/validate.py's dry run, which executes untrusted
+        # candidate programs inside a server request.
+        self._source = EmptySource() if source is None else source
 
     def run(self, program: Program) -> None:
         for statement in program.statements:
@@ -321,6 +329,13 @@ class Interpreter:
                     expr.column,
                 )
             return value
+        if isinstance(expr, JackIn):
+            line = self._source.next_line()
+            if line is None:
+                raise RuntimeErrorML(
+                    "no input left to read", expr.line, expr.column
+                )
+            return line
         if isinstance(expr, Unary):
             operand = self._value_of(expr.operand, expr)
             if expr.op is TokenType.UNPLUG:
@@ -348,6 +363,24 @@ class Interpreter:
                         expr.column,
                     )
                 return len(operand)
+            if expr.op is TokenType.DECODE:
+                if not is_str(operand):
+                    raise RuntimeErrorML(
+                        f"'decode' takes text, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                try:
+                    return int(operand)
+                except ValueError:
+                    # int() already tolerates surrounding whitespace and a
+                    # leading sign, and rejects "5.5" -- the language has
+                    # integers only.
+                    raise RuntimeErrorML(
+                        f"'decode' needs a whole number, got \"{operand}\"",
+                        expr.line,
+                        expr.column,
+                    ) from None
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:

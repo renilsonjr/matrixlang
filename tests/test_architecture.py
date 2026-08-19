@@ -45,7 +45,7 @@ _ALLOWED: dict[str, set[str]] = {
         "display", "errors", "events", "interpreter", "lexer", "parser",
         "render", "repl", "treeview", "window",
     },
-    "interpreter": {"errors", "events", "nodes", "tokens", "values"},
+    "interpreter": {"errors", "events", "input", "nodes", "tokens", "values"},
     # The operator subpackage. Not {} as the design's table sketched for
     # prompt: the keyword list is read from tokens rather than retyped,
     # because a hardcoded grammar is how web/interpreter.js drifted from
