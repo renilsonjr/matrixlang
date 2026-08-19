@@ -149,3 +149,28 @@ def test_an_invalid_result_renders_as_a_diagnostic_line():
     result = check("construct = 5\n")
     assert result.as_diagnostic().startswith("[line 1, column")
     assert "expected a name" in result.as_diagnostic()
+
+
+# --- The dry run has input, because Operator writes `jackin` now --------
+
+
+def test_a_program_that_reads_input_still_validates():
+    # operator/prompt.py builds the prompt from tokens.KEYWORDS, so
+    # Operator writes `jackin` programs the moment the keyword exists. With
+    # no input, the dry run would raise "no input left to read" and reject
+    # every one of them -- a plumbing failure that would read as a model
+    # failure. check() supplies a canned source instead.
+    outcome = check("construct name = jackin\ntrace name\n")
+    assert isinstance(outcome, Valid), outcome.as_diagnostic()
+
+
+def test_a_program_that_decodes_input_still_validates():
+    outcome = check("construct n = decode jackin\ntrace n + 1\n")
+    assert isinstance(outcome, Valid), outcome.as_diagnostic()
+
+
+def test_a_loop_reading_input_forever_is_still_bounded():
+    # The canned source never runs out, so the step limit is what stops
+    # this -- exactly as it stops any other infinite loop.
+    outcome = check("dejavu true\n  trace jackin\nflatline\n", max_steps=200)
+    assert not isinstance(outcome, Valid)

@@ -9,6 +9,7 @@ from pathlib import Path
 from matrixlang.display import Backend, TextDisplay, choose_backend, tk_is_available
 from matrixlang.errors import MatrixLangError, recursion_guard
 from matrixlang.events import Error
+from matrixlang.input import StdinSource
 from matrixlang.interpreter import DEFAULT_MAX_STEPS, Interpreter
 from matrixlang.window import CascadeWindow
 from matrixlang.lexer import lex
@@ -164,7 +165,9 @@ def _run_as_text(tree, max_steps: int | None) -> int:
     # Outside the parse try-block on purpose: a program that fails partway
     # has already printed real output, and that output stays.
     try:
-        Interpreter(sink=TextDisplay(sys.stdout), max_steps=max_steps).run(tree)
+        Interpreter(
+            sink=TextDisplay(sys.stdout), max_steps=max_steps, source=StdinSource()
+        ).run(tree)
     except MatrixLangError as error:
         print(f"matrixlang: {error}", file=sys.stderr)
         return 1
@@ -188,7 +191,9 @@ def _run_in_window(tree, window, max_steps: int | None) -> int:
 
     def execute() -> None:
         try:
-            Interpreter(sink=window, max_steps=max_steps).run(tree)
+            Interpreter(
+                sink=window, max_steps=max_steps, source=StdinSource()
+            ).run(tree)
         except MatrixLangError as error:
             message = f"matrixlang: {error}"
             print(message, file=sys.stderr)

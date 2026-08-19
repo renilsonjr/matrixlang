@@ -42,8 +42,8 @@ _ALLOWED: dict[str, set[str]] = {
     "scribe": {"nodes", "render", "tokens"},
     "treeview": {"nodes", "tokens"},
     "cli": {
-        "display", "errors", "events", "interpreter", "lexer", "parser",
-        "render", "repl", "treeview", "window",
+        "display", "errors", "events", "input", "interpreter", "lexer",
+        "parser", "render", "repl", "treeview", "window",
     },
     "interpreter": {"errors", "events", "input", "nodes", "tokens", "values"},
     # The operator subpackage. Not {} as the design's table sketched for
@@ -51,12 +51,16 @@ _ALLOWED: dict[str, set[str]] = {
     # because a hardcoded grammar is how web/interpreter.js drifted from
     # the language it claimed to implement.
     "operator.prompt": {"tokens", "operator.validate"},
-    "operator.validate": {"errors", "interpreter", "lexer", "nodes", "parser"},
+    "operator.validate": {
+        "errors", "input", "interpreter", "lexer", "nodes", "parser",
+    },
     # The impure edge. Imports no matrixlang sibling and no SDK at module
     # scope — `anthropic` is imported inside the calling function.
     "operator.client": set(),
     "operator.loop": {"nodes", "operator.prompt", "operator.validate"},
-    "repl": {"errors", "interpreter", "lexer", "parser", "render", "tokens"},
+    "repl": {
+        "errors", "input", "interpreter", "lexer", "parser", "render", "tokens",
+    },
 }
 
 

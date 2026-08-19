@@ -11,6 +11,7 @@ import sys
 from typing import TextIO
 
 from matrixlang.errors import MatrixLangError, recursion_guard
+from matrixlang.input import StdinSource
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -33,7 +34,13 @@ class Repl:
         # `matrixlang repl > session.txt` captured the errors into the file
         # and left the terminal with no sign anything had gone wrong.
         self._err = sys.stderr if err is None else err
-        self.interpreter = Interpreter(out=self._out)
+        # Shares stdin with the prompt: a `jackin` during execution consumes
+        # the next line typed. At a terminal that is exactly right. Piping a
+        # script into the REPL interleaves program input with program source,
+        # which is a documented sharp edge rather than something special-cased
+        # -- branching language behaviour on whether stdin is a TTY would be
+        # worse than the edge.
+        self.interpreter = Interpreter(out=self._out, source=StdinSource())
         self._buffer: list[str] = []
         self._face = "ascii"
 

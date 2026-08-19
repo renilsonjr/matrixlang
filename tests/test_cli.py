@@ -398,6 +398,19 @@ def test_only_run_takes_the_window_flag(source_file):
     assert excinfo.value.code == 2
 
 
+def test_run_reads_input_from_stdin(tmp_path, monkeypatch, capsys):
+    import io
+
+    program = tmp_path / "greet.rain"
+    program.write_text('construct name = jackin\ntrace "Hello, " + name\n')
+    monkeypatch.setattr("sys.stdin", io.StringIO("Neo\n"))
+
+    exit_code = main(["run", str(program)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out.splitlines() == ["Hello, Neo"]
+
+
 def test_parse_does_not_crash_on_a_list_program(tmp_path, capsys):
     # treeview.py had no case for the Stage 6 nodes and this command
     # crashed while 878 tests passed. One test per stage, forever.
