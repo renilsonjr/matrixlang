@@ -15,6 +15,7 @@ from matrixlang.nodes import (
     FunctionDef,
     Index,
     IndexAssign,
+    JackIn,
     ListLiteral,
     Return,
     Assign,
@@ -434,7 +435,17 @@ class _Parser:
         return expr
 
     def _unary(self) -> Expr:
-        if self.check(TokenType.MINUS) or self.check(TokenType.LENGTH):
+        # `decode` sits here beside `length` rather than at `_not`'s level,
+        # and for the same reason: it PRODUCES a number that arithmetic
+        # then consumes, so `decode jackin + 1` must be
+        # `(decode jackin) + 1`. `unplug` binds looser because it CONSUMES
+        # a boolean that comparison produces. Different operand types,
+        # different natural reach -- design doc §3.
+        if (
+            self.check(TokenType.MINUS)
+            or self.check(TokenType.LENGTH)
+            or self.check(TokenType.DECODE)
+        ):
             op = self.advance()
             operand = self._unary()
             return Unary(op.type, operand, line=op.line, column=op.column)
@@ -484,6 +495,9 @@ class _Parser:
         if token.type is TokenType.IDENT:
             self.advance()
             return Name(token.lexeme, line=token.line, column=token.column)
+        if token.type is TokenType.JACKIN:
+            self.advance()
+            return JackIn(line=token.line, column=token.column)
         if token.type is TokenType.LPAREN:
             self.advance()
             inner = self.expression()
