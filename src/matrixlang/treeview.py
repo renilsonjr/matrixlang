@@ -17,6 +17,7 @@ from matrixlang.nodes import (
     If,
     Index,
     IndexAssign,
+    JackIn,
     ListLiteral,
     Return,
     Name,
@@ -42,6 +43,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
+    TokenType.DECODE: "decode",
     TokenType.UNPLUG: "unplug",
     TokenType.SPLICE: "splice",
     TokenType.FORK: "fork",
@@ -129,6 +131,9 @@ def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
         lines.append(f"{pad}BoolLiteral {str(expr.value).lower()}")
     elif isinstance(expr, Name):
         lines.append(f"{pad}Name '{expr.ident}'")
+    elif isinstance(expr, JackIn):
+        # A leaf: no operand, so nothing indented beneath it.
+        lines.append(f"{pad}JackIn")
     elif isinstance(expr, Call):
         lines.append(f"{pad}Call")
         lines.append(f"{pad}  callee:")
