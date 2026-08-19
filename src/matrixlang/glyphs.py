@@ -1,4 +1,4 @@
-"""The 41-slot glyph table — D-03's fixed bijective mapping.
+"""The 43-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
@@ -38,6 +38,11 @@ GLYPHS: dict[str, str] = {
     "splice": "ﾁ",
     "fork": "ﾂ",
     "unplug": "ｳ",
+    # Input. `jackin` takes ｲ for the "i" of "in", pairing with jackout's
+    # ﾖ: one carries a value out of a function, the other brings one in
+    # from the world. `decode` takes ｺ for the "co" in the middle of it.
+    "jackin": "ｲ",
+    "decode": "ｺ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",

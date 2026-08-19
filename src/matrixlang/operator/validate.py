@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from matrixlang.errors import MatrixLangError, recursion_guard
+from matrixlang.input import ConstantSource
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.nodes import Program
@@ -79,7 +80,15 @@ def check(source: str, max_steps: int = DRY_RUN_MAX_STEPS) -> Valid | Invalid:
     # the candidate's output where a person would mistake it for the real
     # thing, and stdout is where they would.
     try:
-        Interpreter(out=io.StringIO(), max_steps=max_steps).run(program)
+        # A canned source, not EmptySource. A dry run answers "does this
+        # parse and execute without crashing", not "what does this print",
+        # so immediate exhaustion would reject correct programs for lacking
+        # input the gate never had. "1" is both valid text and decodes
+        # cleanly, so it exercises `jackin` and `decode jackin` alike, and
+        # max_steps still bounds a program that loops reading forever.
+        Interpreter(
+            out=io.StringIO(), max_steps=max_steps, source=ConstantSource("1")
+        ).run(program)
     except MatrixLangError as error:
         stage = Stage.LIMIT if "step limit" in error.message else Stage.RUN
         return Invalid(stage, error.message, error.line, error.column)

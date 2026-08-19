@@ -1,7 +1,7 @@
 """Canonical source rendering: syntax tree in, source text out.
 
 One emitter serves both faces (design S4-5). The walk is identical; a
-face table maps the 41 glyph slots at emission time, so identifiers,
+face table maps the 43 glyph slots at emission time, so identifiers,
 string contents, and comment text bypass the table BY CONSTRUCTION —
 the reason this is not textual substitution, which would corrupt the
 digit in `x2` and the keyword inside "trace".
@@ -22,6 +22,7 @@ from matrixlang.nodes import (
     FunctionDef,
     Index,
     IndexAssign,
+    JackIn,
     ListLiteral,
     Return,
     Assign,
@@ -58,6 +59,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.LTE: "<=",
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
+    TokenType.DECODE: "decode",
     TokenType.UNPLUG: "unplug",
     TokenType.SPLICE: "splice",
     TokenType.FORK: "fork",
@@ -234,6 +236,9 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         return _map(face, "true" if expr.value else "false"), _ATOM_LEVEL
     if isinstance(expr, Name):
         return expr.ident, _ATOM_LEVEL
+    if isinstance(expr, JackIn):
+        # An atom: no operand, so nothing can need parenthesising around it.
+        return _map(face, "jackin"), _ATOM_LEVEL
     if isinstance(expr, Unary):
         if expr.op is TokenType.UNPLUG:
             # Looser than every binary operator except fork and splice, so
@@ -245,11 +250,12 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)
-        if expr.op is TokenType.LENGTH:
+        if expr.op in (TokenType.LENGTH, TokenType.DECODE):
             # A word operator needs a separator or `length xs` renders as
             # `lengthxs` and re-lexes as one identifier — a silent change
             # of meaning, which is exactly what §4.3 exists to catch.
-            return _map(face, "length") + " " + operand, _UNARY_LEVEL
+            # `decode` is the same shape and shares the rule.
+            return _map(face, _OPS[expr.op]) + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):
         # A call binds tighter than every operator, so the callee needs

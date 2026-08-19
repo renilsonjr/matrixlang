@@ -398,6 +398,19 @@ def test_only_run_takes_the_window_flag(source_file):
     assert excinfo.value.code == 2
 
 
+def test_run_reads_input_from_stdin(tmp_path, monkeypatch, capsys):
+    import io
+
+    program = tmp_path / "greet.rain"
+    program.write_text('construct name = jackin\ntrace "Hello, " + name\n')
+    monkeypatch.setattr("sys.stdin", io.StringIO("Neo\n"))
+
+    exit_code = main(["run", str(program)])
+
+    assert exit_code == 0
+    assert capsys.readouterr().out.splitlines() == ["Hello, Neo"]
+
+
 def test_parse_does_not_crash_on_a_list_program(tmp_path, capsys):
     # treeview.py had no case for the Stage 6 nodes and this command
     # crashed while 878 tests passed. One test per stage, forever.
@@ -407,3 +420,69 @@ def test_parse_does_not_crash_on_a_list_program(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "ListLiteral" in out
     assert "IndexAssign" in out
+
+
+def test_parse_does_not_crash_on_an_input_program(tmp_path, capsys):
+    # And it happened again at 1455 tests: treeview.py had no case for
+    # `jackin` and no _OPS row for `decode`, so `parse` crashed on every
+    # program using either while `run` and `render` were fine. The note
+    # above said "one test per stage, forever" — this is that stage's.
+    # tests/test_treeview.py's exhaustiveness guard is what makes the
+    # promise mechanical rather than remembered.
+    path = tmp_path / "input.rain"
+    path.write_text("construct n = decode jackin\ntrace jackin\n", encoding="utf-8")
+    assert main(["parse", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "Unary decode" in out
+    assert "JackIn" in out
+
+
+def test_a_program_that_reads_input_runs_as_text_even_on_a_tty(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    # The cascade window has no input field, so a windowed `jackin` blocks
+    # the worker thread on stdin behind an empty window with nothing on
+    # screen explaining why. LEARNING-MATRIXLANG §17 says the terminal
+    # reads what you type; text is the backend where that is true.
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    monkeypatch.setattr("sys.stdin", io.StringIO("Neo\n"))
+
+    program = source_file('construct name = jackin\ntrace "Hello, " + name\n')
+    assert main(["run", program]) == 0
+
+    assert no_real_window.opened == 0
+    assert capsys.readouterr().out.splitlines() == ["Hello, Neo"]
+
+
+def test_a_program_without_input_still_opens_a_window_on_a_tty(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    # The pair to the test above: only `jackin` diverts the display, and
+    # every other program keeps the cascade it had.
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    assert main(["run", source_file("trace 1\n")]) == 0
+    assert no_real_window.opened == 1
+
+
+def test_input_anywhere_in_the_tree_diverts_the_display(
+    source_file, capsys, monkeypatch, no_real_window
+):
+    # Nested inside an agent's body, several levels down: the check walks
+    # the whole tree rather than glancing at the top-level statements.
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(cli, "tk_is_available", lambda: True)
+    monkeypatch.setattr("sys.stdin", io.StringIO("7\n"))
+
+    program = source_file(
+        "agent ask()\n"
+        "  redpill true\n"
+        "    jackout decode jackin\n"
+        "  flatline\n"
+        "flatline\n"
+        "trace ask()\n"
+    )
+    assert main(["run", program]) == 0
+    assert no_real_window.opened == 0
+    assert capsys.readouterr().out.splitlines() == ["7"]

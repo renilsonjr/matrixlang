@@ -49,6 +49,16 @@ class Name(Expr):
 
 
 @dataclass
+class JackIn(Expr):
+    """Read one line of input. No operand — the source supplies it.
+
+    A node of its own rather than a Unary with no operand, because every
+    Unary carries one and a None operand would make every consumer test
+    for it.
+    """
+
+
+@dataclass
 class Unary(Expr):
     op: TokenType
     operand: Expr

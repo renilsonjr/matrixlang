@@ -383,3 +383,47 @@ def test_comment_on_the_bluepill_header_adopts_into_the_else_body():
         "redpill x\n  trace 1\nbluepill  # why\n  trace 2\nflatline\n"
     ).statements[0]
     assert branch.else_body[0].leading_comments == ["# why"]
+
+
+def test_jackin_parses_as_an_expression():
+    from matrixlang.nodes import Declare, JackIn
+
+    program_obj = program("construct name = jackin\n")
+    (declare,) = program_obj.statements
+    assert isinstance(declare, Declare)
+    assert isinstance(declare.value, JackIn)
+
+
+def test_decode_parses_as_a_unary_on_its_operand():
+    from matrixlang.nodes import JackIn, Unary
+
+    program_obj = program("construct n = decode jackin\n")
+    (declare,) = program_obj.statements
+    assert isinstance(declare.value, Unary)
+    assert declare.value.op is TokenType.DECODE
+    assert isinstance(declare.value.operand, JackIn)
+
+
+def test_decode_binds_tighter_than_arithmetic():
+    # `decode jackin + 1` must be `(decode jackin) + 1`. The loose reading
+    # would decode the result of adding 1 to text, which is an error for
+    # every possible input -- the same argument that puts `length` at this
+    # level. This differs from `unplug`, which binds LOOSER than
+    # comparison, and that asymmetry is deliberate: see the design doc §3.
+    from matrixlang.nodes import Binary, Unary
+
+    program_obj = program("construct n = decode jackin + 1\n")
+    (declare,) = program_obj.statements
+    assert isinstance(declare.value, Binary), "decode swallowed the addition"
+    assert declare.value.op is TokenType.PLUS
+    assert isinstance(declare.value.left, Unary)
+    assert declare.value.left.op is TokenType.DECODE
+
+
+def test_decode_of_a_parenthesised_expression_still_works():
+    from matrixlang.nodes import StringLiteral, Unary
+
+    program_obj = program('construct n = decode ("5")\n')
+    (declare,) = program_obj.statements
+    assert isinstance(declare.value, Unary)
+    assert isinstance(declare.value.operand, StringLiteral)

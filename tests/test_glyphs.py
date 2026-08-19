@@ -4,12 +4,13 @@ from matrixlang.glyphs import BLOCK_END, BLOCK_START, GLYPHS, REVERSE
 from matrixlang.tokens import KEYWORDS
 
 
-def test_the_table_covers_exactly_the_41_slots():
+def test_the_table_covers_exactly_the_43_slots():
     # Language spec §3.1, plus Stage 6: 11 keywords (agent and jackout
     # join, length in Stage 7) + 11 operators + 2 parens + a comma +
     # 2 brackets + 10 digits + the '#' comment marker + Stage 9: 3 logical
-    # operators (splice, fork, unplug). Nothing more (identifiers and string
-    # contents stay ASCII, per D-03), nothing less.
+    # operators (splice, fork, unplug) + input: jackin and decode.
+    # Nothing more (identifiers and string contents stay ASCII, per D-03),
+    # nothing less.
     expected = (
         set(KEYWORDS)
         | {"+", "-", "*", "/", "=", "==", "!=", "<", ">", "<=", ">="}
@@ -19,19 +20,20 @@ def test_the_table_covers_exactly_the_41_slots():
         | {"#"}
     )
     assert set(GLYPHS) == expected
-    assert len(expected) == 41
+    assert len(expected) == 43
 
 
 def test_the_glyph_budget_is_tracked_not_discovered():
     # Stage 6 design §1: 24 free before, 3 spent, 21 left. Stage 7
     # spends 3 more for lists: 21 - 3 = 18 left. Stage 9 spends 3 more
-    # for logical operators: 18 - 3 = 15 left. Finite, and worth knowing.
+    # for logical operators: 18 - 3 = 15 left. Input spends 2 for jackin
+    # and decode: 15 - 2 = 13 left. Finite, and worth knowing.
     free = sum(
         1
         for code in range(BLOCK_START, BLOCK_END + 1)
         if chr(code) not in set(GLYPHS.values())
     )
-    assert free == 15
+    assert free == 13
 
 
 def test_the_mapping_is_bijective():

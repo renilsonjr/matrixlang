@@ -189,3 +189,19 @@ def test_a_deeply_nested_render_echo_is_reported_and_the_session_continues():
     out, err = feed_streams([":glyph", line, "trace 2"])
     assert "matrixlang:" in err
     assert out.endswith("2\n")
+
+
+def test_jackin_at_the_prompt_reads_the_next_line_of_the_session():
+    # The REPL shares one stream between source and input, so the line
+    # after the `jackin` statement is what the statement reads. Repl
+    # used to hardcode StdinSource() and ignore `in_` entirely, which
+    # made this untestable -- feeding a StringIO drove the prompt while
+    # `jackin` blocked on the real stdin, raising OSError out of feed()
+    # and killing the session.
+    source = io.StringIO('construct name = jackin\nNeo\ntrace "Hello, " + name\n')
+    out, err = io.StringIO(), io.StringIO()
+
+    assert repl(in_=source, out=out, err=err) == 0
+
+    assert "Hello, Neo" in out.getvalue()
+    assert err.getvalue() == ""

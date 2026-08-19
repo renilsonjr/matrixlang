@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has fourteen keywords, four types, and two ways of writing
+MatrixLang has sixteen keywords, four types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -21,7 +21,8 @@ trace "wake up, Neo"
 ```
 
 `trace` prints. That is the only way a program produces output; there is
-no `print`, no `return` to a console, and no input.
+no `print` and no `return` to a console. Reading input has its own two
+keywords — see §17.
 
 Save it as `hello.rain` and run it:
 
@@ -796,8 +797,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Fourteen keywords, eleven operators, parentheses, a comma, two brackets,
-ten digits, and the comment marker — 41 slots in all.
+Sixteen keywords, eleven operators, parentheses, a comma, two brackets,
+ten digits, and the comment marker — 43 slots in all.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -805,7 +806,7 @@ ten digits, and the comment marker — 41 slots in all.
 | `agent` `ｴ` | `jackout` `ﾖ` | `length` `ﾙ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` |
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
-| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | | | | |
+| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1018,6 +1019,104 @@ those by hand — which, having read this far, you can.
 
 ---
 
+## 17. Input — `jackin` and `decode`
+
+`jackin` reads one line and gives you the text of it.
+
+```
+construct name = jackin
+trace "Hello, " + name
+```
+
+Save it as `greet.rain` and run it, piping in what it should read:
+
+```bash
+echo "Neo" | .venv/bin/matrixlang run --no-window greet.rain
+```
+
+```
+Hello, Neo
+```
+
+It is always text, never a number, even when the line looks like one. That
+is deliberate: a value whose type depended on what somebody typed would send
+the same program down different branches on different runs.
+
+So `decode` turns text into a number when you want one:
+
+```
+construct n = decode jackin
+trace n + 1
+```
+
+```bash
+echo "41" | .venv/bin/matrixlang run --no-window add.rain
+```
+
+```
+42
+```
+
+`decode` is strict. It refuses text that is not a whole number, refuses a
+decimal point (this language has integers only), and refuses a value that is
+already a number — the same way `splice` refuses anything that is not a
+boolean rather than guessing what you meant.
+
+Spaces and tabs either side of the number are forgiven, and so is a leading
+`-`: `decode` reads ` -3 ` as `-3`. A leading `+` is not. The asymmetry is
+deliberate rather than an oversight — `-3` is how the language itself writes
+that number, and `+3` is a spelling it never produces, so accepting it would
+mean `decode` reading a wider set of numbers than the language can write.
+
+### `decode` binds tighter than arithmetic
+
+`decode jackin + 1` means `(decode jackin) + 1`, not `decode (jackin + 1)`.
+This is the same level `length` sits at, and for the same reason: both
+produce a number that the arithmetic around them then consumes.
+
+Note that `unplug` goes the other way — `unplug n == 1` means
+`unplug (n == 1)`. The two are not inconsistent by accident. `unplug`
+*consumes* a boolean that comparison *produces*, so it has to reach across
+the comparison; `decode` *produces* a number that arithmetic *consumes*, so
+reaching across the `+` would only ever produce an error.
+
+### Running out of input
+
+Asking for a line that is not there stops the program. Run this with
+`echo "Neo"` piped in — one line for the first `jackin`, none for the
+second:
+
+```
+construct name = jackin
+trace name
+construct age = jackin
+```
+
+```
+Neo
+matrixlang: [line 3, column 17] no input left to read
+```
+
+Not an empty string. A loop reading input would otherwise spin forever on
+blanks while the real mistake stayed invisible.
+
+### Where input comes from
+
+At the terminal, `jackin` reads what you type, and `echo "Neo" | matrixlang
+run greet.rain` works the way you would expect.
+
+A program that uses `jackin` prints to the terminal rather than opening the
+cascade window, even without `--no-window`. The window has no input box, so
+a windowed run would sit there waiting for a line you had no way to see it
+wanting. Only the display changes; the program itself runs the same either
+way. Every other program still gets the window described in §12.
+
+In the browser `jackin` reads the input box beside the editor, one line per
+`jackin`, supplied before you press Run — a web page cannot stop and wait for
+you without freezing the tab.
+
+---
+
 ## What the language does not have
 
 Being clear about this saves more time than any feature list:
@@ -1026,7 +1125,9 @@ Being clear about this saves more time than any feature list:
 - no slicing (`name[0:2]`) and no string methods — indexing one character
   at a time (§7) is as far as string access goes
 - no `for`, `break`, `continue`, or `else if`
-- no input — a program's only channel out is `trace`
+- no way to *prompt* for input and wait — `jackin` (§17) reads lines that
+  were already supplied, from the terminal or from the box beside the
+  editor, and a program cannot stop mid-run to ask a question
 - no modules, imports, or standard library
 - no file or network access, and no way to reach the host language
 

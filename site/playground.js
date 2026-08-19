@@ -24,7 +24,7 @@ const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
 // reader is left with a page that looks alive but has dead buttons on it.
 const GATED_CONTROL_IDS = [
   "write", "run", "ask-operator", "editor-face", "cascade-face",
-  "translit-latin", "translit-glyphs",
+  "translit-latin", "translit-glyphs", "program-input",
 ];
 
 async function boot() {
@@ -129,7 +129,9 @@ function writeProgram() {
 }
 
 function runProgram() {
-  const events = glue.run(el("editor").value).toJs({ dict_converter: Object.fromEntries });
+  const events = glue
+    .run(el("editor").value, el("program-input").value)
+    .toJs({ dict_converter: Object.fromEntries });
   cascade.clear();
   el("miss").hidden = true;
   for (const event of events) {

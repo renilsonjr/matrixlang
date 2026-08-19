@@ -122,7 +122,7 @@ test("a failed boot leaves no control looking usable", async () => {
 
   for (const id of [
     "write", "run", "ask-operator", "editor-face", "cascade-face",
-    "translit-latin", "translit-glyphs",
+    "translit-latin", "translit-glyphs", "program-input",
   ]) {
     assert.equal(page.el(id).disabled, true, `${id} is still live after a failed boot`);
   }
@@ -152,7 +152,7 @@ test("boot() fails then succeeds re-enables every gated control", async () => {
 
   const gated = [
     "write", "run", "ask-operator", "editor-face", "cascade-face",
-    "translit-latin", "translit-glyphs",
+    "translit-latin", "translit-glyphs", "program-input",
   ];
   for (const id of gated) {
     assert.equal(page.el(id).disabled, true, `${id} is still live after a failed boot`);
@@ -187,6 +187,23 @@ test("typing Latin fills the Glyphs box, and back again", () => {
 
   page.type("translit-glyphs", "abc");
   assert.equal(page.el("translit-latin").value, "LATIN(abc)");
+});
+
+test("running passes the input box's contents to the Python half", () => {
+  const page = loadPlayground();
+  let seen = null;
+  page.setGlue({
+    run: (source, stdin) => {
+      seen = { source, stdin };
+      return [];
+    },
+  });
+
+  page.el("editor").value = "trace jackin";
+  page.el("program-input").value = "Neo";
+  page.el("run").click();
+
+  assert.equal(seen.stdin, "Neo", "the input box never reached glue.run");
 });
 
 test("an example's glyph face toggles independently of its neighbours", () => {

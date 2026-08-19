@@ -9,11 +9,14 @@ lexer, the parser or the CLI, so Stage 4 can hand it a tree that came from
 either source face.
 """
 
+import dataclasses
+import string
 import sys
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
 from matrixlang.events import EventSink, Output, Statement, TextSink
+from matrixlang.input import EmptySource, InputSource
 from matrixlang.nodes import (
     Assign,
     Binary,
@@ -26,6 +29,7 @@ from matrixlang.nodes import (
     If,
     Index,
     IndexAssign,
+    JackIn,
     ListLiteral,
     Name,
     NumberLiteral,
@@ -67,6 +71,20 @@ _LOGICAL_OPS = (TokenType.SPLICE, TokenType.FORK)
 # render into the interpreter would put a presentation module underneath
 # execution, which tests/test_architecture.py forbids.
 _OP_WORDS = {TokenType.SPLICE: "splice", TokenType.FORK: "fork"}
+
+# Explicit ASCII set, matching lexer._DIGITS. Bare int() is far more
+# tolerant than the lexer's own number grammar -- it accepts "1_000",
+# Arabic-Indic digits ("٣٤٥"), and other Unicode decimal digits, none of
+# which the lexer would ever produce as a single number token. `decode`
+# reads external input rather than lexed source, so nothing upstream has
+# filtered it; do not "simplify" this back to bare int().
+_DECODE_DIGITS = frozenset(string.digits)
+
+# The surrounding space `decode` forgives, and no more. str.strip() with
+# no argument strips every Unicode space -- NBSP, the ideographic space,
+# U+2028 -- so "\xa05" would decode to 5 while the lexer would never read
+# that as a number. ASCII only, for the same reason _DECODE_DIGITS is.
+_DECODE_SPACE = string.whitespace
 
 
 class Environment:
@@ -133,6 +151,7 @@ class Interpreter:
         out: TextIO | None = None,
         sink: EventSink | None = None,
         max_steps: int | None = DEFAULT_MAX_STEPS,
+        source: InputSource | None = None,
     ) -> None:
         """Execute into a sink. `out` is the shorthand for "a TextSink on this".
 
@@ -160,6 +179,11 @@ class Interpreter:
             if sink is not None
             else TextSink(sys.stdout if out is None else out)
         )
+        # EmptySource, never StdinSource. A default that read a terminal
+        # would hang any caller that forgot to pass one -- including
+        # operator/validate.py's dry run, which executes untrusted
+        # candidate programs inside a server request.
+        self._source = EmptySource() if source is None else source
 
     def run(self, program: Program) -> None:
         for statement in program.statements:
@@ -321,6 +345,13 @@ class Interpreter:
                     expr.column,
                 )
             return value
+        if isinstance(expr, JackIn):
+            line = self._source.next_line()
+            if line is None:
+                raise RuntimeErrorML(
+                    "no input left to read", expr.line, expr.column
+                )
+            return line
         if isinstance(expr, Unary):
             operand = self._value_of(expr.operand, expr)
             if expr.op is TokenType.UNPLUG:
@@ -348,6 +379,44 @@ class Interpreter:
                         expr.column,
                     )
                 return len(operand)
+            if expr.op is TokenType.DECODE:
+                if not is_str(operand):
+                    raise RuntimeErrorML(
+                        f"'decode' takes text, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # Explicit check, not bare int(): int() accepts far more
+                # than the lexer's own number grammar ever produces --
+                # "1_000", Arabic-Indic digits, other Unicode decimal
+                # digits -- because decode reads external input that
+                # nothing upstream has filtered. See _DECODE_DIGITS.
+                stripped = operand.strip(_DECODE_SPACE)
+                digits = stripped[1:] if stripped.startswith("-") else stripped
+                if not digits or not all(c in _DECODE_DIGITS for c in digits):
+                    raise RuntimeErrorML(
+                        f"'decode' needs a whole number, got \"{operand}\"",
+                        expr.line,
+                        expr.column,
+                    )
+                try:
+                    return int(stripped)
+                except ValueError as error:
+                    # All digits and still refused: CPython caps
+                    # int(str) at sys.int_info.default_max_str_digits
+                    # (4300), so a long enough run of digits passes the
+                    # check above and then raises. `decode` reads
+                    # external input, so a caller can hand us one --
+                    # and everything downstream (site/glue.py's run(),
+                    # which promises never to raise; the operator's dry
+                    # run; the CLI's diagnostic) expects nothing but
+                    # MatrixLangError out of here.
+                    raise RuntimeErrorML(
+                        f"'decode' got a number too long to read — "
+                        f"{len(digits)} digits",
+                        expr.line,
+                        expr.column,
+                    ) from error
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
@@ -605,3 +674,30 @@ class Interpreter:
 def run(program: Program, out: TextIO | None = None) -> None:
     """Execute a program. Convenience wrapper over Interpreter."""
     Interpreter(out=out).run(program)
+
+
+def reads_input(program: Program) -> bool:
+    """Whether running this program can ever ask its source for a line.
+
+    A fact about executing the tree rather than about drawing it, which is
+    why it lives beside the branch that does the asking. Callers use it to
+    decide what to hand the interpreter and where to run it — see cli.py's
+    backend choice.
+
+    Walked generically over the dataclass fields instead of by an
+    isinstance chain per node type. A chain would need editing every time
+    a node gains a child, and forgetting that edit is exactly the bug
+    treeview.py has now shipped twice.
+    """
+    pending: list[object] = [program]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, JackIn):
+            return True
+        if isinstance(item, list):
+            pending.extend(item)
+        elif dataclasses.is_dataclass(item) and not isinstance(item, type):
+            pending.extend(
+                getattr(item, field.name) for field in dataclasses.fields(item)
+            )
+    return False

@@ -396,6 +396,13 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
   white-space: pre-wrap;
 }
 
+/* The input box. Deliberately short: it is supplied up front rather than
+   prompted for, because the browser cannot block on a read without
+   freezing the tab and the cascade with it. */
+#program-input {
+  min-height: 3.5rem;
+}
+
 #cascade {
   display: block;
   width: 100%;

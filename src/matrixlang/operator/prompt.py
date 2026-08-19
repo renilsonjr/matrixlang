@@ -80,7 +80,9 @@ Rules that differ from most languages:
 - Integer division truncates toward zero.
 - `agent` defines; `jackout` returns. An agent that never jacks out
   produces nothing, and using that nothing as a value is an error.
-- The only way to produce output is `trace`. There is no input.
+- The only way to produce output is `trace`. To read input, use `jackin`,
+  which reads a line of text, and `decode`, which converts that text to a
+  number (or fails).
 - `splice` is and, `fork` is or, `unplug` is not. Operands must be
   boolean — `1 splice true` is an error, the same rule that makes
   `redpill 1` an error. `splice` and `fork` short-circuit: the right
