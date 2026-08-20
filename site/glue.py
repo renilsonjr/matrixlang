@@ -132,7 +132,34 @@ def run(
             sink=sink, max_steps=max_steps, source=BufferSource(stdin)
         ).run(program)
     except MatrixLangError as error:
-        sink.events.append(
-            {"kind": "error", "message": f"[line {error.line}, column {error.column}] {error.message}"}
-        )
+        message = f"[line {error.line}, column {error.column}] {error.message}"
+        sink.events.append({"kind": "error", "message": message + _input_hint(error, stdin)})
     return sink.events
+
+
+# The interpreter's own wording. It stays surface-neutral because the CLI and
+# the REPL read it too, so `glue.py` is where a browser-specific "and here is
+# the box" belongs -- this module IS the browser's half.
+#
+# Matching on the phrase duplicates a string from interpreter.py. The tests in
+# tests/test_site_glue.py run a real program to exhaustion rather than
+# asserting on a literal, so rewording the diagnostic there turns this hint
+# off loudly instead of silently.
+_EXHAUSTED = "no input left to read"
+
+
+def _input_hint(error, stdin: str) -> str:
+    """Name the box, for the one error whose fix is a box the reader can see.
+
+    Empty. A reader who never filled it in has been told what went wrong and
+    not where to fix it, which is exactly how this failed on the live page:
+    the box's placeholder read as content, so the box looked answered.
+
+    Part-filled is a different mistake and gets a different sentence, because
+    "the box is empty" would simply be false.
+    """
+    if _EXHAUSTED not in error.message:
+        return ""
+    if stdin.strip():
+        return " — the program read more lines than the Input box holds"
+    return " — the Input box beside the editor is empty"

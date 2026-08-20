@@ -359,7 +359,14 @@ input, textarea {
 }
 input { line-height: 1.4; }
 textarea { resize: vertical; }
-input::placeholder { color: var(--muted); }
+/* Both, and the textarea half is load-bearing. `input::placeholder` does not
+   match a <textarea>, so #program-input's hint fell back to the browser
+   default — measured at rgb(117,117,117) against this page's rgb(93,111,102),
+   lighter than every other placeholder on the page. In a box that must be
+   filled or the program fails, a hint that reads as content is a trap, and it
+   caught the first person to use it. */
+input::placeholder,
+textarea::placeholder { color: var(--muted); }
 input:focus, textarea:focus {
   outline: none;
   border-color: var(--dim);
