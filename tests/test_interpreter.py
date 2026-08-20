@@ -520,12 +520,44 @@ def test_encode_handles_negatives_and_zero():
 
 
 def test_encode_agrees_with_what_trace_prints():
-    # One answer to "how does a number look", not two. If encode ever
-    # formats integers itself, this is what catches the divergence.
+    # Necessary but not sufficient. to_display(n) == str(n) for every
+    # plain int (values._display's fallback is `return str(value)`), so
+    # this passes whether encode calls to_display or just reimplements it
+    # with str(). It still catches gross formatting bugs -- a wrong sign,
+    # stray quotes, a digit-grouping change -- for free, so it stays. See
+    # test_encode_delegates_to_to_display for the test that actually pins
+    # the delegation itself.
     for n in ["0", "7", "-3", "1000", "-1000"]:
         (encoded,) = _run(f"trace encode {n}\n")
         (printed,) = _run(f"trace {n}\n")
         assert encoded == printed, f"encode {n} disagreed with trace {n}"
+
+
+def test_encode_delegates_to_to_display(monkeypatch):
+    # The requirement is that `encode` CALLS to_display rather than
+    # reimplementing its formatting, so that if to_display's rendering
+    # ever changes, encode follows automatically. No black-box test can
+    # observe that: to_display(n) == str(n) for every int today, so a
+    # reimplementation is indistinguishable from delegation by output
+    # alone (see test_encode_agrees_with_what_trace_prints above). This
+    # patches to_display where interpreter.py imports it by name -- the
+    # only place patching takes effect -- and checks the substitution
+    # actually reaches encode's result.
+    import matrixlang.interpreter as interpreter_module
+
+    def fake_to_display(value):
+        # Strings pass through unchanged so `trace`'s OWN final
+        # to_display call -- on encode's already-stringified result --
+        # stays invisible here; only encode's internal call on the raw
+        # int operand should produce the marker. If encode stopped
+        # calling to_display, the marker would never appear and this
+        # assertion would see the real digits instead.
+        if isinstance(value, str):
+            return value
+        return "PATCHED"
+
+    monkeypatch.setattr(interpreter_module, "to_display", fake_to_display)
+    assert _run("trace encode 42\n") == ["PATCHED"]
 
 
 def test_decode_of_encode_returns_the_number():
