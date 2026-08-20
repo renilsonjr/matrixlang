@@ -47,6 +47,7 @@ from matrixlang.values import (
     CyclicValue,
     Function,
     Incomparable,
+    TooManyDigits,
     equal,
     is_bool,
     is_function,
@@ -232,6 +233,17 @@ class Interpreter:
                 # that contains itself may be one element long.
                 raise RuntimeErrorML(
                     "cannot display a list that contains a cycle",
+                    stmt.line,
+                    stmt.column,
+                ) from None
+            except TooManyDigits as size:
+                # Same shape as the cycle above: values.py knows the value
+                # cannot be rendered, this module knows where it was
+                # written. Reachable from `trace n` alone -- squaring in a
+                # loop passes 4300 digits long before the step limit.
+                raise RuntimeErrorML(
+                    f"cannot display a number longer than "
+                    f"{size.limit} digits",
                     stmt.line,
                     stmt.column,
                 ) from None
@@ -430,7 +442,20 @@ class Interpreter:
                 # to_display, not str(): `trace` renders numbers through it
                 # already, and two renderings of one integer would be two
                 # answers to the same question. They would drift.
-                return to_display(operand)
+                try:
+                    return to_display(operand)
+                except TooManyDigits as size:
+                    # The mirror of decode's ValueError guard above, and
+                    # for the same CPython cap -- but the guard itself
+                    # lives in values.py, so `trace` gets it too and the
+                    # two operators cannot end up with two answers about
+                    # what a number too long to write looks like.
+                    raise RuntimeErrorML(
+                        f"'encode' got a number too long to write — "
+                        f"more than {size.limit} digits",
+                        expr.line,
+                        expr.column,
+                    ) from None
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:

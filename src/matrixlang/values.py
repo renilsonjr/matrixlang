@@ -17,6 +17,7 @@ the body and the captured environment are held opaquely, so no dependency
 on `nodes` or the interpreter is created.
 """
 
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -93,6 +94,27 @@ class Incomparable(Exception):
         super().__init__(f"cannot compare {left} with {right}")
 
 
+class TooManyDigits(Exception):
+    """A number with more digits than Python will turn into text.
+
+    CPython refuses `str(int)` past `sys.get_int_max_str_digits()` — 4300
+    by default — and raises a bare ValueError. Repeated squaring reaches
+    that well inside a step budget, so it is a thing a program does, not
+    an impossibility: it has to come out as the language's own error
+    rather than as a Python exception escaping the interpreter (which
+    `site/glue.py`'s `run()` promises never to emit, and catches nothing
+    but MatrixLangError to stop).
+
+    Carries the limit so the interpreter can build the message. Not a
+    MatrixLangError for the same reason as CyclicValue and Incomparable:
+    this module may import nothing, and has no line or column to report.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        super().__init__(f"more than {limit} digits")
+
+
 def is_int(value: object) -> bool:
     return type(value) is int
 
@@ -160,7 +182,15 @@ def _display(value: object, nested: bool, seen: frozenset) -> str:
             raise CyclicValue
         seen = seen | {id(value)}
         return "[" + ", ".join(_display(v, True, seen) for v in value) + "]"
-    return str(value)
+    try:
+        return str(value)
+    except ValueError:
+        # Integers only, and only very long ones: CPython caps str(int)
+        # at sys.get_int_max_str_digits(). Caught rather than
+        # length-checked beforehand, so the limit reported is the one the
+        # running interpreter actually enforces — it is settable at
+        # runtime — rather than a 4300 copied into this file.
+        raise TooManyDigits(sys.get_int_max_str_digits()) from None
 
 
 def equal(left: object, right: object) -> bool:

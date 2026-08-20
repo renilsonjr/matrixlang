@@ -605,3 +605,57 @@ def test_adding_a_number_to_text_is_still_an_error():
     with pytest.raises(MatrixLangError) as caught:
         _run('trace "ID: " + 1\n')
     assert "cannot add" in caught.value.message
+
+
+# A number with more digits than CPython will render. Squaring is what
+# makes it reachable: thirteen doublings of the exponent from 10 is
+# 8193 digits, and costs the step budget almost nothing.
+_OVER_LONG = """construct n = 10
+construct i = 0
+dejavu i < 13
+  n = n * n
+  i = i + 1
+flatline
+"""
+
+
+def test_tracing_a_number_too_long_to_render_is_a_language_error():
+    # CPython refuses str(int) past 4300 digits with a bare ValueError.
+    # Nothing in the language stops a program reaching that, so without a
+    # guard the exception leaves the interpreter as a Python traceback --
+    # through the CLI, the operator's dry run and site/glue.py's run(),
+    # none of which catch anything but MatrixLangError.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run(_OVER_LONG + "trace n\n")
+    assert "cannot display a number longer than 4300 digits" in caught.value.message
+    assert caught.value.line == 7
+
+
+def test_encoding_a_number_too_long_to_render_is_a_language_error():
+    # The same ceiling reached through the other door. `trace` is one
+    # statement; `encode` is an expression, so it puts the hazard
+    # everywhere a value can go. Both report, because the guard lives in
+    # values._display rather than in either branch.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run(_OVER_LONG + "trace encode n\n")
+    assert "'encode' got a number too long to write" in caught.value.message
+    assert "4300 digits" in caught.value.message
+
+
+def test_a_number_just_under_the_ceiling_still_traces_and_encodes():
+    # The boundary from below, run through the whole language rather than
+    # through to_display alone: 4299 digits must still print, and must
+    # still encode to text of exactly that length.
+    source = """construct n = 1
+construct i = 0
+dejavu i < 4298
+  n = n * 10
+  i = i + 1
+flatline
+trace length encode n
+"""
+    assert _run(source) == ["4299"]
