@@ -174,5 +174,11 @@ export function loadPlayground({ faceToggles = 0 } = {}) {
     setGlobal(name, value) {
       sandbox[name] = value;
     },
+
+    /** Stand in for the cascade, so a test can watch what gets drawn. */
+    setCascade(stub) {
+      sandbox.__stubCascade = stub;
+      vm.runInContext("cascade = __stubCascade", context);
+    },
   };
 }

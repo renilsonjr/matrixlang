@@ -24,8 +24,19 @@ const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
 // reader is left with a page that looks alive but has dead buttons on it.
 const GATED_CONTROL_IDS = [
   "write", "run", "ask-operator", "editor-face", "cascade-face",
-  "translit-latin", "translit-glyphs", "program-input",
+  "translit-latin", "translit-glyphs", "program-input", "answer", "answer-send",
 ];
+
+// A program can read input inside a loop that never ends. Each answer costs
+// a full re-run, so without a cap the page would prompt forever and get
+// slower every round. Bounded the way the interpreter bounds a runaway loop.
+const MAX_ANSWER_ROUNDS = 100;
+
+// The interactive session: answers collected so far, and how many events the
+// cascade has already been given. Both reset when Run is pressed.
+let answers = [];
+let drawnCount = 0;
+let rounds = 0;
 
 async function boot() {
   const buttons = BOOT_BUTTON_IDS.map(el);
@@ -129,12 +140,29 @@ function writeProgram() {
 }
 
 function runProgram() {
-  const events = glue
-    .run(el("editor").value, el("program-input").value)
-    .toJs({ dict_converter: Object.fromEntries });
+  // Cleared once per Run, never per round: rounds repeat earlier output by
+  // design, and re-clearing would restart the animation on every answer.
   cascade.clear();
   el("miss").hidden = true;
-  for (const event of events) {
+  answers = el("program-input").value ? [el("program-input").value] : [];
+  drawnCount = 0;
+  rounds = 0;
+  runRound();
+}
+
+function runRound() {
+  // Three positional args, no placeholder: `interactive` sits before
+  // `max_steps` precisely so nothing has to pass `undefined` past it. A JS
+  // `undefined` becomes Python None, and None means "no step limit" -- the
+  // browser would lose its runaway-loop protection without a word.
+  const events = glue
+    .run(el("editor").value, answers.join("\n"), true)
+    .toJs({ dict_converter: Object.fromEntries });
+
+  // Only what has not been drawn yet. The re-run reproduces every earlier
+  // event exactly -- see tests/test_site_glue.py's determinism tests -- so
+  // anything before drawnCount is already on screen.
+  for (const event of events.slice(drawnCount)) {
     if (event.kind === "statement") {
       // `source` is the pure glyph wall, `latin` keeps identifiers readable.
       // One toggle governs both faces — output too — per FL-7.
@@ -149,6 +177,50 @@ function runProgram() {
       el("miss").hidden = false;
     }
   }
+
+  const wants = events.length > 0 && events[events.length - 1].kind === "needs_input";
+  // A needs_input marker is not something to draw, so it is excluded from the
+  // count -- the next round re-sends the events before it and stops there.
+  drawnCount = wants ? events.length - 1 : events.length;
+
+  if (!wants) {
+    hideAnswerRow();
+    return;
+  }
+  if (rounds >= MAX_ANSWER_ROUNDS) {
+    hideAnswerRow();
+    el("miss").textContent =
+      `this program asked for more than ${MAX_ANSWER_ROUNDS} answers — stopped`;
+    el("miss").hidden = false;
+    return;
+  }
+  showAnswerRow(lastOutput(events));
+}
+
+/** The program's own most recent output, which is the question it asked. */
+function lastOutput(events) {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i].kind === "output") return events[i].text;
+  }
+  // A program may read before it prints; a blank row would look broken.
+  return "The program is waiting for a line.";
+}
+
+function showAnswerRow(prompt) {
+  el("answer-prompt").textContent = prompt;
+  el("answer").value = "";
+  el("answer-row").hidden = false;
+}
+
+function hideAnswerRow() {
+  el("answer-row").hidden = true;
+}
+
+function sendAnswer() {
+  answers.push(el("answer").value);
+  rounds += 1;
+  hideAnswerRow();
+  runRound();
 }
 
 // The key is a local, never stored. Not localStorage, not a cookie, not a
@@ -221,6 +293,10 @@ el("request").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); writeProgram(); }
 });
 el("ask-operator").addEventListener("click", askOperator);
+el("answer-send").addEventListener("click", sendAnswer);
+el("answer").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); sendAnswer(); }
+});
 
 function toggleCascadeFace() {
   face = face === "glyph" ? "latin" : "glyph";

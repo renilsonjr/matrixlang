@@ -219,3 +219,72 @@ test("an example's glyph face toggles independently of its neighbours", () => {
   assert.equal(first.pre.hidden, true);
   assert.equal(first.button.textContent, "Show glyphs");
 });
+
+test("a program that wants input shows the answer row with its last output", () => {
+  const page = loadPlayground();
+  page.setGlue({
+    run: () => [
+      { kind: "output", text: "Digite a matricula ou nome: ", glyphs: "G" },
+      { kind: "needs_input" },
+    ],
+  });
+
+  page.el("editor").value = "trace jackin";
+  page.el("run").click();
+
+  assert.equal(page.el("answer-row").hidden, false);
+  assert.equal(page.el("answer-prompt").textContent, "Digite a matricula ou nome: ");
+});
+
+test("answering re-runs and feeds the cascade only the new events", () => {
+  // The cascade must not replay. Round two repeats round one's output --
+  // that is what makes re-running honest -- so drawing it again would show
+  // the reader their own history twice and restart the animation.
+  const page = loadPlayground();
+  const drawn = [];
+  page.setCascade({
+    clear: () => drawn.push("CLEAR"),
+    add: (text) => drawn.push(text),
+  });
+  let round = 0;
+  page.setGlue({
+    run: () => {
+      round += 1;
+      return round === 1
+        ? [{ kind: "output", text: "ask", glyphs: "ask" }, { kind: "needs_input" }]
+        : [
+            { kind: "output", text: "ask", glyphs: "ask" },
+            { kind: "output", text: "done", glyphs: "done" },
+          ];
+    },
+  });
+
+  page.el("editor").value = "trace jackin";
+  page.el("run").click();
+  page.el("answer").value = "ana";
+  page.el("answer-send").click();
+
+  assert.deepEqual(drawn, ["CLEAR", "ask", "done"], "the cascade replayed or cleared twice");
+  assert.equal(page.el("answer-row").hidden, true, "the row stayed open after finishing");
+});
+
+test("the answer is passed to the next run, appended to the box's contents", () => {
+  const page = loadPlayground();
+  const seen = [];
+  page.setGlue({
+    run: (source, stdin) => {
+      seen.push(stdin);
+      return seen.length === 1
+        ? [{ kind: "needs_input" }]
+        : [{ kind: "output", text: "ok", glyphs: "ok" }];
+    },
+  });
+
+  page.el("editor").value = "trace jackin";
+  page.el("program-input").value = "first";
+  page.el("run").click();
+  page.el("answer").value = "second";
+  page.el("answer-send").click();
+
+  assert.deepEqual(seen, ["first", "first\nsecond"]);
+});
