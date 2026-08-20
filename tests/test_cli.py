@@ -486,3 +486,16 @@ def test_input_anywhere_in_the_tree_diverts_the_display(
     assert main(["run", program]) == 0
     assert no_real_window.opened == 0
     assert capsys.readouterr().out.splitlines() == ["7"]
+
+
+def test_parse_does_not_crash_on_an_encode_program(tmp_path, capsys):
+    # treeview.py has been missed twice before. `encode` adds no node type,
+    # so the exhaustiveness guard over node classes cannot catch a missing
+    # _OPS entry -- only this test can.
+    program_file = tmp_path / "encode.rain"
+    program_file.write_text('construct s = "ID: " + encode 42\n')
+
+    exit_code = main(["parse", str(program_file)])
+
+    assert exit_code == 0
+    assert "encode" in capsys.readouterr().out
