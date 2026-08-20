@@ -201,3 +201,34 @@ def test_an_unrelated_runtime_error_gains_no_input_guidance():
     message = events[-1]["message"]
     assert "cannot add" in message
     assert "Input box" not in message
+
+
+def test_running_the_same_program_twice_gives_the_same_events():
+    # THE load-bearing property. Interactive input re-runs a program once per
+    # prompt and shows the reader a continuous history, which is only honest
+    # because a re-run reproduces the previous run exactly. If MatrixLang ever
+    # gains randomness, a clock, or any effect beyond `trace`, this fails --
+    # and it should, because the interactive design breaks silently otherwise.
+    source = 'construct a = jackin\ntrace "got " + a\ntrace 1 + 1\n'
+
+    def stream(stdin):
+        return [(e["kind"], e.get("text") or e.get("message") or "") for e in glue.run(source, stdin=stdin)]
+
+    assert stream("ana") == stream("ana")
+
+
+def test_fewer_answers_produce_a_prefix_of_the_output():
+    # The other half of the property: round n+1 must reproduce everything
+    # round n showed, in order, before adding anything new. That is what lets
+    # playground.js feed the cascade only the new suffix instead of replaying
+    # the whole animation on every answer.
+    source = 'trace "first"\nconstruct a = jackin\ntrace "then " + a\n'
+
+    def outputs(stdin):
+        return [e["text"] for e in glue.run(source, stdin=stdin) if e["kind"] == "output"]
+
+    short = outputs("")
+    long = outputs("ana")
+    assert short == ["first"]
+    assert long == ["first", "then ana"]
+    assert long[: len(short)] == short, "a longer answer list changed earlier output"
