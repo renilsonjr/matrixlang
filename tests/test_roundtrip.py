@@ -335,3 +335,55 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     assert splice_over_fork, "no `a splice (b fork c)` shape in 300 seeds"
     assert unplug_under_eq, "no `(unplug a) == b` shape in 300 seeds"
     assert unplug_over_splice, "no `unplug (a splice b)` shape in 300 seeds"
+
+
+def test_the_generator_produces_every_unary_operator():
+    # The one the language keeps getting wrong. treegen's unary choice
+    # list is a hand-maintained copy of the vocabulary, and it silently
+    # fell behind twice -- `decode` never joined it, then `encode` nearly
+    # didn't either. Both keywords were excluded from the round trip
+    # while the round trip looked green, and the mixed face is covered by
+    # nothing else. treegen.py is the third file a new keyword must
+    # touch, after render._OPS and treeview._OPS; this is what says so.
+    from matrixlang.tokens import TokenType
+
+    expected = {
+        TokenType.MINUS,
+        TokenType.LENGTH,
+        TokenType.UNPLUG,
+        TokenType.DECODE,
+        TokenType.ENCODE,
+    }
+    found = set()
+
+    def walk_expr(expr):
+        if isinstance(expr, Unary):
+            found.add(expr.op)
+            walk_expr(expr.operand)
+        elif isinstance(expr, Binary):
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+
+    def walk_stmt(stmt):
+        for field in ("value", "condition", "target", "index"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    assert found == expected, f"missing from 300 seeds: {expected - found}"
