@@ -488,3 +488,14 @@ def test_the_input_keywords_lex_in_both_faces():
             t for t in lex(GLYPHS[ascii_word]) if t.type is not TokenType.NEWLINE
         ]
         assert glyph_token.type is token.type, f"{ascii_word}'s glyph face did not lex"
+
+
+def test_encode_lexes_in_both_faces():
+    from matrixlang.glyphs import GLYPHS
+
+    (token, _eof) = [t for t in lex("encode") if t.type is not TokenType.NEWLINE]
+    assert token.type is KEYWORDS["encode"]
+    (glyph_token, _) = [
+        t for t in lex(GLYPHS["encode"]) if t.type is not TokenType.NEWLINE
+    ]
+    assert glyph_token.type is token.type
