@@ -143,6 +143,36 @@ def test_run_reports_an_over_long_decode_rather_than_raising():
     assert "decode" in events[-1]["message"]
 
 
+def test_run_reports_an_over_long_number_rather_than_raising():
+    # The mirror of the decode case above, and the one a program reaches
+    # with no input at all: CPython refuses str(int) past 4300 digits, so
+    # a number built by squaring breaks `trace` and `encode` alike. `run`
+    # catches MatrixLangError and nothing else, so a bare ValueError out
+    # of values.py would leave the playground with an unhandled exception
+    # instead of an error event.
+    squared = "construct n = 10\nconstruct i = 0\ndejavu i < 13\n  n = n * n\n  i = i + 1\nflatline\n"
+
+    traced = glue.run(squared + "trace n\n")
+    assert traced[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in traced[-1]["message"]
+
+    encoded = glue.run(squared + "trace encode n\n")
+    assert encoded[-1]["kind"] == "error"
+    assert "encode" in encoded[-1]["message"]
+
+
+def test_run_reports_an_over_long_number_literal_rather_than_raising():
+    # The third door to the same CPython ceiling, and the one that needs
+    # no arithmetic at all: a long enough run of digits typed -- or
+    # pasted -- straight into the editor. `run` catches MatrixLangError
+    # and nothing else, so the bare ValueError out of the lexer's int()
+    # left the playground with an unhandled exception rather than an
+    # error event, exactly as the two above did.
+    events = glue.run("trace " + "1" * (sys.int_info.default_max_str_digits + 1) + "\n")
+    assert events[-1]["kind"] == "error"
+    assert "number too long to read" in events[-1]["message"]
+
+
 def test_an_empty_input_box_is_named_when_a_program_runs_out_of_input():
     # "no input left to read" is correct and stays surface-neutral -- the CLI
     # and the REPL share it. But glue.py IS the browser, so it can say which
