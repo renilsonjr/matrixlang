@@ -44,6 +44,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
     TokenType.DECODE: "decode",
+    TokenType.ENCODE: "encode",
     TokenType.UNPLUG: "unplug",
     TokenType.SPLICE: "splice",
     TokenType.FORK: "fork",

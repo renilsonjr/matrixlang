@@ -295,3 +295,26 @@ def test_the_glyph_face_uses_the_table_not_the_words():
     assert GLYPHS["jackin"] in rendered
     assert "decode" not in rendered
     assert "jackin" not in rendered
+
+
+def test_both_faces_round_trip_a_program_using_encode():
+    source = 'construct s = "ID: " + encode 42\ntrace s\n'
+    tree = parse(lex(source))
+    for render in (render_ascii, render_glyph):
+        assert parse(lex(render(tree))) == tree, f"{render.__name__} did not round-trip"
+
+
+def test_the_ascii_face_keeps_encode_separated_from_its_operand():
+    # Without the separator this renders as `encode42`, which re-lexes as
+    # one identifier -- a silent change of meaning.
+    tree = parse(lex("construct s = encode 42\n"))
+    assert "encode 42" in render_ascii(tree)
+
+
+def test_the_glyph_face_uses_the_table_for_encode():
+    from matrixlang.glyphs import GLYPHS
+
+    tree = parse(lex("construct s = encode 42\n"))
+    rendered = render_glyph(tree)
+    assert GLYPHS["encode"] in rendered
+    assert "encode" not in rendered
