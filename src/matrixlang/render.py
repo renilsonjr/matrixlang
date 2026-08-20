@@ -1,7 +1,7 @@
 """Canonical source rendering: syntax tree in, source text out.
 
 One emitter serves both faces (design S4-5). The walk is identical; a
-face table maps the 43 glyph slots at emission time, so identifiers,
+face table maps the 44 glyph slots at emission time, so identifiers,
 string contents, and comment text bypass the table BY CONSTRUCTION —
 the reason this is not textual substitution, which would corrupt the
 digit in `x2` and the keyword inside "trace".

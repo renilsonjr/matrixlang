@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has sixteen keywords, four types, and two ways of writing
+MatrixLang has seventeen keywords, four types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -797,8 +797,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Sixteen keywords, eleven operators, parentheses, a comma, two brackets,
-ten digits, and the comment marker — 43 slots in all.
+Seventeen keywords, eleven operators, parentheses, a comma, two brackets,
+ten digits, and the comment marker — 44 slots in all.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -806,7 +806,7 @@ ten digits, and the comment marker — 43 slots in all.
 | `agent` `ｴ` | `jackout` `ﾖ` | `length` `ﾙ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` |
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
-| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | | |
+| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1019,7 +1019,7 @@ those by hand — which, having read this far, you can.
 
 ---
 
-## 17. Input — `jackin` and `decode`
+## 17. Input — `jackin`, `decode`, and `encode`
 
 `jackin` reads one line and gives you the text of it.
 
@@ -1079,6 +1079,76 @@ Note that `unplug` goes the other way — `unplug n == 1` means
 *consumes* a boolean that comparison *produces*, so it has to reach across
 the comparison; `decode` *produces* a number that arithmetic *consumes*, so
 reaching across the `+` would only ever produce an error.
+
+### `encode` reverses `decode`
+
+`encode` turns a number into text — the mirror of `decode`.
+
+```
+construct id = 7
+trace "ID: " + encode id
+```
+
+```bash
+.venv/bin/matrixlang run --no-window id.rain
+```
+
+```
+ID: 7
+```
+
+It is numbers-only and just as strict: a value that is already text is
+refused rather than passed through, the same way `decode` refuses a value
+that is already a number.
+
+```
+trace encode "5"
+```
+
+```
+matrixlang: [line 1, column 7] 'encode' takes a number, got string
+```
+
+`encode` sits at the same precedence as `decode` — tighter than arithmetic,
+for the same reason: both produce a value that the arithmetic around them
+then consumes. `encode n + 1` means `(encode n) + 1`, not `encode (n + 1)`,
+and since `encode` produces text, adding the `1` to it fails with the same
+error `+` gives any other mismatched pair:
+
+```
+construct n = 7
+trace encode n + 1
+```
+
+```
+matrixlang: [line 2, column 16] cannot add string and integer
+```
+
+`decode encode n == n` holds for every number — encoding and then decoding
+gets you back where you started:
+
+```
+construct n = 7
+trace decode encode n == n
+```
+
+```
+true
+```
+
+The reverse does not hold. `decode` tolerates whitespace either side and a
+leading `-`; `encode` never produces either, so a value that made the trip
+through `decode` first can come out shorter than it went in:
+
+```
+construct raw = " 3 "
+construct n = decode raw
+trace encode n
+```
+
+```
+3
+```
 
 ### Running out of input
 
