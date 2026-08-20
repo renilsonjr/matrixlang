@@ -417,6 +417,20 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     ) from error
+            if expr.op is TokenType.ENCODE:
+                # Numbers only, and is_int is deliberately narrow: in Python
+                # a bool IS an int, so `is_int` (which checks type exactly)
+                # is what keeps `encode true` an error rather than "1".
+                if not is_int(operand):
+                    raise RuntimeErrorML(
+                        f"'encode' takes a number, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # to_display, not str(): `trace` renders numbers through it
+                # already, and two renderings of one integer would be two
+                # answers to the same question. They would drift.
+                return to_display(operand)
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:

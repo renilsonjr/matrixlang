@@ -497,3 +497,79 @@ def test_the_default_source_is_empty_never_stdin():
     with pytest.raises(MatrixLangError) as caught:
         Interpreter(out=io.StringIO()).run(parse(lex("trace jackin\n")))
     assert "no input left to read" in caught.value.message
+
+
+def _run(source_text: str) -> list[str]:
+    import io
+
+    from matrixlang.interpreter import Interpreter
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    out = io.StringIO()
+    Interpreter(out=out).run(parse(lex(source_text)))
+    return out.getvalue().splitlines()
+
+
+def test_encode_turns_a_number_into_text():
+    assert _run('trace "ID: " + encode 42\n') == ["ID: 42"]
+
+
+def test_encode_handles_negatives_and_zero():
+    assert _run('trace encode -3 + "/" + encode 0\n') == ["-3/0"]
+
+
+def test_encode_agrees_with_what_trace_prints():
+    # One answer to "how does a number look", not two. If encode ever
+    # formats integers itself, this is what catches the divergence.
+    for n in ["0", "7", "-3", "1000", "-1000"]:
+        (encoded,) = _run(f"trace encode {n}\n")
+        (printed,) = _run(f"trace {n}\n")
+        assert encoded == printed, f"encode {n} disagreed with trace {n}"
+
+
+def test_decode_of_encode_returns_the_number():
+    # The round-trip invariant. The REVERSE does not hold -- decode
+    # tolerates whitespace and a leading sign, so it is many-to-one --
+    # and the design doc says so; do not add the symmetric test.
+    for n in ["0", "7", "-3", "1000"]:
+        assert _run(f"trace decode encode {n}\n") == [n]
+
+
+def test_encode_rejects_text():
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run('trace encode "already text"\n')
+    # values.type_name maps str to "string" (see values.py), the same word
+    # every other type error in this file uses -- not "text", which is
+    # decode's ROLE word for what it wants, never type_name's output for
+    # what it got. The brief's literal said "text"; corrected here to match
+    # the language's actual vocabulary and this file's own convention.
+    assert "'encode' takes a number, got string" in caught.value.message
+
+
+def test_encode_rejects_a_boolean():
+    # Strict like splice, which refuses a non-boolean rather than coercing.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run("trace encode true\n")
+    assert "'encode' takes a number, got boolean" in caught.value.message
+
+
+def test_encode_rejects_a_list():
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run("trace encode [1, 2]\n")
+    assert "'encode' takes a number, got list" in caught.value.message
+
+
+def test_adding_a_number_to_text_is_still_an_error():
+    # encode exists precisely so this stays an error. No implicit coercion.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run('trace "ID: " + 1\n')
+    assert "cannot add" in caught.value.message
