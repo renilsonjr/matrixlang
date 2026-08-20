@@ -8,7 +8,8 @@ def test_the_table_covers_exactly_the_44_slots():
     # Language spec §3.1, plus Stage 6: 11 keywords (agent and jackout
     # join, length in Stage 7) + 11 operators + 2 parens + a comma +
     # 2 brackets + 10 digits + the '#' comment marker + Stage 9: 3 logical
-    # operators (splice, fork, unplug) + input: jackin and decode.
+    # operators (splice, fork, unplug) + input: jackin and decode
+    # + encode.
     # Nothing more (identifiers and string contents stay ASCII, per D-03),
     # nothing less.
     expected = (

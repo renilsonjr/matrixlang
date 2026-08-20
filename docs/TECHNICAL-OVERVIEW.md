@@ -89,11 +89,11 @@ anything about the language, which is the whole point of the split.
 | `tokens.py` | 96 | Token vocabulary. Pure data |
 | `nodes.py` | 185 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 221 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `values.py` | 251 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
 | `glyphs.py` | 87 | The 44-slot bijective glyph table. 12 slots left of the block |
-| `lexer.py` | 247 | Source text → token list. Handles both faces |
+| `lexer.py` | 268 | Source text → token list. Handles both faces |
 | `parser.py` | 522 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 717 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `interpreter.py` | 742 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
 | `render.py` | 314 | AST → source text, in either face |
 | `treeview.py` | 163 | AST → indented text, for teaching |
 | `repl.py` | 138 | Interactive session with multi-line block buffering |
@@ -106,7 +106,7 @@ anything about the language, which is the whole point of the split.
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 244 | Command-line entry point |
 | `scribe.py` | 632 | Plain language → AST, by pattern. Pure, keyless, and imports no `operator` |
-| `operator/prompt.py` | 140 | The system prompt. The language's rules, as text |
+| `operator/prompt.py` | 141 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 96 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
 | `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |
@@ -115,7 +115,7 @@ Outside the package, and deliberately not installable:
 
 | Path | Lines | Responsibility |
 | --- | --- | --- |
-| `server/sse.py` | 91 | Event → wire payload, and the SSE framing. One source of truth for both |
+| `server/sse.py` | 99 | Event → wire payload, and the SSE framing. One source of truth for both |
 | `server/runs.py` | 147 | A run's lifecycle: worker thread, queue, wall-clock deadline |
 | `server/app.py` | 262 | Three endpoints and static file serving. Binds `127.0.0.1` only. Dispatches `/api/chat` to Scribe or Operator |
 | `web-ui/cascade.js` | 211 | The cascade again, in a canvas. Mirrors `cascade.py` decision for decision |

@@ -1014,8 +1014,9 @@ cannot be a variable name — `store 5 as trace` is a miss, because
 
 Everything Scribe hands you has already been parsed and executed once, so
 it runs. What it does **not** cover yet: `splice` and `fork` (§8), writing
-to a list element (§6), and calling a function you just defined. Write
-those by hand — which, having read this far, you can.
+to a list element (§6), calling a function you just defined, and the whole
+of input — `jackin`, `decode` and `encode` (§17). Write those by hand —
+which, having read this far, you can.
 
 ---
 
@@ -1124,8 +1125,8 @@ trace encode n + 1
 matrixlang: [line 2, column 16] cannot add string and integer
 ```
 
-`decode encode n == n` holds for every number — encoding and then decoding
-gets you back where you started:
+`decode encode n == n` holds for every number the language can write out —
+encoding and then decoding gets you back where you started:
 
 ```
 construct n = 7
@@ -1135,6 +1136,12 @@ trace decode encode n == n
 ```
 true
 ```
+
+"The language can write out" is the whole of the exception, and it takes
+some doing to find: past 4,300 digits a number has no text form, and
+`encode` says so rather than producing one. `trace` refuses the same
+number for the same reason — both write a number out the same way, so
+there is one ceiling and not two.
 
 The reverse does not hold. `decode` tolerates whitespace either side and a
 leading `-`; `encode` never produces either, so a value that made the trip
