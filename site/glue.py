@@ -64,17 +64,28 @@ class _InteractiveSource:
     four answers. That is honest only because MatrixLang is deterministic
     with `trace` as its only effect -- see tests/test_site_glue.py's
     determinism tests, which fail if that ever stops being true.
+
+    Wraps a `BufferSource` rather than splitting `text` itself: the same
+    Input box must read the same lines whether or not `interactive=True`,
+    and `BufferSource`'s splitting (via `matrixlang.input._split_lines`)
+    already differs from `str.splitlines()` on purpose -- `str.splitlines`
+    also breaks on \\v, \\f, \\x85 and U+2028/9, which `readline` treats as
+    ordinary characters inside a line. Re-deriving that logic here, or
+    reaching into the private helper, is exactly how the two would drift
+    apart again; delegating to `BufferSource` makes that impossible.
     """
 
     def __init__(self, text: str) -> None:
-        self._lines = text.splitlines()
-        self._index = 0
+        self._buffer = BufferSource(text)
 
     def next_line(self) -> str | None:
-        if self._index >= len(self._lines):
+        # BufferSource.next_line() returns None to mean "exhausted", per
+        # the InputSource protocol -- but that branch is unreachable from
+        # here: it is turned into _NeedsInput before it can leave this
+        # method, so this source never actually returns None.
+        line = self._buffer.next_line()
+        if line is None:
             raise _NeedsInput
-        line = self._lines[self._index]
-        self._index += 1
         return line
 
 
@@ -144,8 +155,17 @@ def operator_prompt(request: str) -> str:
 def run(
     source: str,
     stdin: str = "",
-    interactive: bool = False,
+    interactive: bool = False,  # Before max_steps -- do not "tidy" this order.
     max_steps: int = BROWSER_MAX_STEPS,
+    # The JavaScript side calls this positionally, and a JS `undefined`
+    # argument arrives here as Python `None`. `interpreter.py` treats
+    # `max_steps=None` as *no step limit at all*. If `max_steps` came
+    # before `interactive`, the browser's call would have to pass it
+    # explicitly on every call just to reach `interactive`; with
+    # `interactive` here instead, a positional `glue.run(src, stdin, true)`
+    # never has to touch `max_steps`, so it can never accidentally send
+    # `None` and silently delete the runaway-loop protection -- in the one
+    # feature that adds a way to loop forever asking questions.
 ) -> list[dict]:
     """Execute `source`, returning every event in wire shape. Never raises.
 

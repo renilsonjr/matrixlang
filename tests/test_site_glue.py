@@ -268,3 +268,29 @@ def test_non_interactive_run_is_unchanged():
     events = glue.run("trace jackin\n", stdin="")
     assert events[-1]["kind"] == "error"
     assert "no input left to read" in events[-1]["message"]
+
+
+def test_interactive_source_splits_lines_exactly_like_non_interactive():
+    # str.splitlines() also breaks on \x0b (vertical tab), which BufferSource
+    # -- and therefore readline() and the CLI -- treats as an ordinary
+    # character inside a line. The same Input box text must not be read
+    # differently just because interactive mode is on; _InteractiveSource
+    # must delegate to BufferSource's splitting rather than have its own.
+    from matrixlang.input import BufferSource
+
+    text = "a\x0bb\nc"
+
+    buffer_source = BufferSource(text)
+    buffer_lines = []
+    while (line := buffer_source.next_line()) is not None:
+        buffer_lines.append(line)
+
+    interactive_source = glue._InteractiveSource(text)
+    interactive_lines = []
+    while True:
+        try:
+            interactive_lines.append(interactive_source.next_line())
+        except glue._NeedsInput:
+            break
+
+    assert interactive_lines == buffer_lines == ["a\x0bb", "c"]
