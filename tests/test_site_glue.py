@@ -141,3 +141,33 @@ def test_run_reports_an_over_long_decode_rather_than_raising():
     events = glue.run(f'trace decode "{too_long}"\n')
     assert events[-1]["kind"] == "error"
     assert "decode" in events[-1]["message"]
+
+
+def test_an_empty_input_box_is_named_when_a_program_runs_out_of_input():
+    # "no input left to read" is correct and stays surface-neutral -- the CLI
+    # and the REPL share it. But glue.py IS the browser, so it can say which
+    # box is empty. Without this the reader is told what happened and not
+    # where to fix it, which is what actually happened on the live page.
+    events = glue.run("trace jackin\n", stdin="")
+    assert events[-1]["kind"] == "error"
+    message = events[-1]["message"]
+    assert "no input left to read" in message
+    assert "Input box" in message
+
+
+def test_a_part_filled_input_box_says_it_ran_short_not_that_it_is_empty():
+    # Supplying one line to a program that reads two is a different mistake,
+    # and "the box is empty" would be a lie.
+    events = glue.run("trace jackin\ntrace jackin\n", stdin="Neo\n")
+    message = events[-1]["message"]
+    assert "no input left to read" in message
+    assert "Input box" in message
+    assert "empty" not in message
+
+
+def test_an_unrelated_runtime_error_gains_no_input_guidance():
+    # The guidance must be narrow. A type error has nothing to do with input.
+    events = glue.run('trace "id " + 1\n')
+    message = events[-1]["message"]
+    assert "cannot add" in message
+    assert "Input box" not in message
