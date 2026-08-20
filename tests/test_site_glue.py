@@ -232,3 +232,39 @@ def test_fewer_answers_produce_a_prefix_of_the_output():
     assert short == ["first"]
     assert long == ["first", "then ana"]
     assert long[: len(short)] == short, "a longer answer list changed earlier output"
+
+
+def test_interactive_run_asks_instead_of_failing():
+    events = glue.run("trace jackin\n", stdin="", interactive=True)
+    assert events[-1]["kind"] == "needs_input"
+
+
+def test_interactive_run_keeps_the_output_produced_before_it_asked():
+    # The prompt a reader sees IS this output -- the program's own trace.
+    source = 'trace "Digite a matricula ou nome: "\nconstruct a = jackin\n'
+    events = glue.run(source, stdin="", interactive=True)
+    outputs = [e["text"] for e in events if e["kind"] == "output"]
+    assert outputs == ["Digite a matricula ou nome: "]
+    assert events[-1]["kind"] == "needs_input"
+
+
+def test_interactive_run_finishes_when_the_answers_suffice():
+    source = 'construct a = jackin\ntrace "got " + a\n'
+    events = glue.run(source, stdin="ana", interactive=True)
+    assert [e["kind"] for e in events].count("needs_input") == 0
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["got ana"]
+
+
+def test_interactive_run_still_reports_a_real_error_as_an_error():
+    # A type error is not a request for input. Confusing the two would leave
+    # the page asking a question the program never asked.
+    events = glue.run('trace "id " + 1\n', stdin="", interactive=True)
+    assert events[-1]["kind"] == "error"
+    assert "cannot add" in events[-1]["message"]
+
+
+def test_non_interactive_run_is_unchanged():
+    # Existing callers, and the tutorial's description, must keep working.
+    events = glue.run("trace jackin\n", stdin="")
+    assert events[-1]["kind"] == "error"
+    assert "no input left to read" in events[-1]["message"]

@@ -42,6 +42,42 @@ class _Collector:
         self.events.append(payload(event))
 
 
+class _NeedsInput(Exception):
+    """The program asked for a line the reader has not given yet.
+
+    Not a MatrixLangError, and deliberately not the interpreter's own "no
+    input left to read" diagnostic: control flow that depended on the
+    wording of an error message would change behaviour the day somebody
+    reworded it. Same shape as values.CyclicValue and values.Incomparable
+    -- a signal raised low and caught high -- except this one passes
+    THROUGH the interpreter rather than being caught by it, which is safe
+    because the interpreter has no cleanup and `recursion_guard` exits
+    correctly on any exception.
+    """
+
+
+class _InteractiveSource:
+    """Answers so far. Asking past the end suspends rather than fails.
+
+    The browser cannot block, so a program that wants a fourth answer is
+    stopped, the reader is asked, and the whole program is re-run with
+    four answers. That is honest only because MatrixLang is deterministic
+    with `trace` as its only effect -- see tests/test_site_glue.py's
+    determinism tests, which fail if that ever stops being true.
+    """
+
+    def __init__(self, text: str) -> None:
+        self._lines = text.splitlines()
+        self._index = 0
+
+    def next_line(self) -> str | None:
+        if self._index >= len(self._lines):
+            raise _NeedsInput
+        line = self._lines[self._index]
+        self._index += 1
+        return line
+
+
 def write(request: str) -> dict:
     """Ask Scribe for a program. Never raises."""
     result = scribe(request)
@@ -106,7 +142,10 @@ def operator_prompt(request: str) -> str:
 
 
 def run(
-    source: str, stdin: str = "", max_steps: int = BROWSER_MAX_STEPS
+    source: str,
+    stdin: str = "",
+    interactive: bool = False,
+    max_steps: int = BROWSER_MAX_STEPS,
 ) -> list[dict]:
     """Execute `source`, returning every event in wire shape. Never raises.
 
@@ -117,6 +156,12 @@ def run(
     front. The browser cannot block -- JavaScript is single-threaded, so a
     read that waited would freeze the tab and the cascade drawing in it --
     so input is buffered rather than prompted for.
+
+    `interactive=True` changes only what happens when those answers run
+    out: instead of the "no input left to read" error, the events so far
+    come back with a terminal {"kind": "needs_input"}, and the caller is
+    expected to ask the reader and re-run with one more answer. Callers
+    that do not opt in see exactly the old behaviour.
     """
     from matrixlang.errors import MatrixLangError, recursion_guard
 
@@ -127,10 +172,16 @@ def run(
     except MatrixLangError as error:
         return [{"kind": "error", "message": f"[line {error.line}, column {error.column}] {error.message}"}]
 
+    source_for_run = _InteractiveSource(stdin) if interactive else BufferSource(stdin)
     try:
         Interpreter(
-            sink=sink, max_steps=max_steps, source=BufferSource(stdin)
+            sink=sink, max_steps=max_steps, source=source_for_run
         ).run(program)
+    except _NeedsInput:
+        # Caught in the same try that catches MatrixLangError: run() promises
+        # never to raise, and that promise has been broken three times before
+        # by exceptions nobody expected to reach here.
+        sink.events.append({"kind": "needs_input"})
     except MatrixLangError as error:
         message = f"[line {error.line}, column {error.column}] {error.message}"
         sink.events.append({"kind": "error", "message": message + _input_hint(error, stdin)})
