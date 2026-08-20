@@ -410,6 +410,24 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
   min-height: 3.5rem;
 }
 
+/* The interactive answer row. Present only while a program is waiting, so
+   it must read as part of the run rather than as another form field the
+   reader was supposed to fill in beforehand. */
+#answer-row {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--panel);
+  border-left: 2px solid var(--green);
+  border-radius: 0 4px 4px 0;
+}
+
+#answer-prompt {
+  margin: 0 0 0.5rem;
+  color: var(--white);
+  font: 13px/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+
 #cascade {
   display: block;
   width: 100%;

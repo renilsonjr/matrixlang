@@ -137,6 +137,15 @@
           <textarea id="program-input" rows="3" spellcheck="false"
                     placeholder="Refactoring"></textarea>
           <button id="run">Run it</button>
+          <!-- Shown only while a running program is waiting for a line. The
+               prompt is the program's own most recent output, repeated here
+               in readable Latin: the cascade shows glyphs, which is a poor
+               place to read a question. -->
+          <div id="answer-row" hidden>
+            <p id="answer-prompt"></p>
+            <input id="answer" placeholder="your answer" autocomplete="off">
+            <button id="answer-send">Answer</button>
+          </div>
         </div>
         <div class="cascade-pane">
           <button id="cascade-face">Latin</button>
