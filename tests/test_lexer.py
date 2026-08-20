@@ -499,3 +499,45 @@ def test_encode_lexes_in_both_faces():
         t for t in lex(GLYPHS["encode"]) if t.type is not TokenType.NEWLINE
     ]
     assert glyph_token.type is token.type
+
+
+def test_a_number_literal_past_the_digit_ceiling_is_a_lex_error():
+    # CPython refuses int(str) past sys.get_int_max_str_digits() with a
+    # bare ValueError, and this is the one place the language calls
+    # int() on text a person typed. Unguarded it left here as a Python
+    # exception, past every `except MatrixLangError` the CLI, the
+    # operator's dry run and site/glue.py's run() rely on -- run()
+    # promises never to raise. The computed counterpart is guarded in
+    # values.py; this is the literal one.
+    import sys
+
+    limit = sys.get_int_max_str_digits()
+    with pytest.raises(LexError) as excinfo:
+        lex("trace " + "1" * (limit + 1) + "\n")
+    assert "number too long to read" in excinfo.value.message
+    assert str(limit + 1) in excinfo.value.message
+    assert excinfo.value.line == 1
+    assert excinfo.value.column == 7
+
+
+def test_a_number_literal_at_the_digit_ceiling_still_lexes():
+    # The boundary from below. A guard that refused every long literal
+    # would pass the test above and break nothing a test noticed.
+    import sys
+
+    limit = sys.get_int_max_str_digits()
+    (token, *_rest) = lex("1" * limit)
+    assert token.type is TokenType.NUMBER
+    assert token.value == int("1" * limit)
+
+
+def test_a_glyph_number_past_the_ceiling_is_a_lex_error_too():
+    # The digits are transliterated back before int() sees them, so the
+    # glyph face reaches the same ceiling by the same path. Both faces
+    # are the same language or neither is.
+    import sys
+
+    limit = sys.get_int_max_str_digits()
+    with pytest.raises(LexError) as excinfo:
+        lex(GLYPHS["1"] * (limit + 1))
+    assert "number too long to read" in excinfo.value.message
