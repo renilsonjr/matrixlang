@@ -427,3 +427,28 @@ def test_decode_of_a_parenthesised_expression_still_works():
     (declare,) = program_obj.statements
     assert isinstance(declare.value, Unary)
     assert isinstance(declare.value.operand, StringLiteral)
+
+
+def test_encode_parses_as_a_unary():
+    from matrixlang.nodes import NumberLiteral, Unary
+
+    tree = program("construct s = encode 42\n")
+    (declare,) = tree.statements
+    assert isinstance(declare.value, Unary)
+    assert declare.value.op is TokenType.ENCODE
+    assert isinstance(declare.value.operand, NumberLiteral)
+
+
+def test_encode_binds_tighter_than_arithmetic():
+    # `encode n + 1` must be `(encode n) + 1`. The loose reading is not an
+    # error -- it would quietly encode n+1 and produce "43" where "42" was
+    # meant -- which is exactly why this needs pinning. Same level as
+    # `decode` and `length`, and deliberately unlike `unplug`.
+    from matrixlang.nodes import Binary, Unary
+
+    tree = program("construct s = encode 42 + 1\n")
+    (declare,) = tree.statements
+    assert isinstance(declare.value, Binary), "encode swallowed the addition"
+    assert declare.value.op is TokenType.PLUS
+    assert isinstance(declare.value.left, Unary)
+    assert declare.value.left.op is TokenType.ENCODE
