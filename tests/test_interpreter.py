@@ -497,3 +497,165 @@ def test_the_default_source_is_empty_never_stdin():
     with pytest.raises(MatrixLangError) as caught:
         Interpreter(out=io.StringIO()).run(parse(lex("trace jackin\n")))
     assert "no input left to read" in caught.value.message
+
+
+def _run(source_text: str) -> list[str]:
+    import io
+
+    from matrixlang.interpreter import Interpreter
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    out = io.StringIO()
+    Interpreter(out=out).run(parse(lex(source_text)))
+    return out.getvalue().splitlines()
+
+
+def test_encode_turns_a_number_into_text():
+    assert _run('trace "ID: " + encode 42\n') == ["ID: 42"]
+
+
+def test_encode_handles_negatives_and_zero():
+    assert _run('trace encode -3 + "/" + encode 0\n') == ["-3/0"]
+
+
+def test_encode_agrees_with_what_trace_prints():
+    # Necessary but not sufficient. to_display(n) == str(n) for every
+    # plain int (values._display's fallback is `return str(value)`), so
+    # this passes whether encode calls to_display or just reimplements it
+    # with str(). It still catches gross formatting bugs -- a wrong sign,
+    # stray quotes, a digit-grouping change -- for free, so it stays. See
+    # test_encode_delegates_to_to_display for the test that actually pins
+    # the delegation itself.
+    for n in ["0", "7", "-3", "1000", "-1000"]:
+        (encoded,) = _run(f"trace encode {n}\n")
+        (printed,) = _run(f"trace {n}\n")
+        assert encoded == printed, f"encode {n} disagreed with trace {n}"
+
+
+def test_encode_delegates_to_to_display(monkeypatch):
+    # The requirement is that `encode` CALLS to_display rather than
+    # reimplementing its formatting, so that if to_display's rendering
+    # ever changes, encode follows automatically. No black-box test can
+    # observe that: to_display(n) == str(n) for every int today, so a
+    # reimplementation is indistinguishable from delegation by output
+    # alone (see test_encode_agrees_with_what_trace_prints above). This
+    # patches to_display where interpreter.py imports it by name -- the
+    # only place patching takes effect -- and checks the substitution
+    # actually reaches encode's result.
+    import matrixlang.interpreter as interpreter_module
+
+    def fake_to_display(value):
+        # Strings pass through unchanged so `trace`'s OWN final
+        # to_display call -- on encode's already-stringified result --
+        # stays invisible here; only encode's internal call on the raw
+        # int operand should produce the marker. If encode stopped
+        # calling to_display, the marker would never appear and this
+        # assertion would see the real digits instead.
+        if isinstance(value, str):
+            return value
+        return "PATCHED"
+
+    monkeypatch.setattr(interpreter_module, "to_display", fake_to_display)
+    assert _run("trace encode 42\n") == ["PATCHED"]
+
+
+def test_decode_of_encode_returns_the_number():
+    # The round-trip invariant. The REVERSE does not hold -- decode
+    # tolerates whitespace and a leading sign, so it is many-to-one --
+    # and the design doc says so; do not add the symmetric test.
+    for n in ["0", "7", "-3", "1000"]:
+        assert _run(f"trace decode encode {n}\n") == [n]
+
+
+def test_encode_rejects_text():
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run('trace encode "already text"\n')
+    # values.type_name maps str to "string" (see values.py), the same word
+    # every other type error in this file uses -- not "text", which is
+    # decode's ROLE word for what it wants, never type_name's output for
+    # what it got. The brief's literal said "text"; corrected here to match
+    # the language's actual vocabulary and this file's own convention.
+    assert "'encode' takes a number, got string" in caught.value.message
+
+
+def test_encode_rejects_a_boolean():
+    # Strict like splice, which refuses a non-boolean rather than coercing.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run("trace encode true\n")
+    assert "'encode' takes a number, got boolean" in caught.value.message
+
+
+def test_encode_rejects_a_list():
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run("trace encode [1, 2]\n")
+    assert "'encode' takes a number, got list" in caught.value.message
+
+
+def test_adding_a_number_to_text_is_still_an_error():
+    # encode exists precisely so this stays an error. No implicit coercion.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run('trace "ID: " + 1\n')
+    assert "cannot add" in caught.value.message
+
+
+# A number with more digits than CPython will render. Squaring is what
+# makes it reachable: thirteen doublings of the exponent from 10 is
+# 8193 digits, and costs the step budget almost nothing.
+_OVER_LONG = """construct n = 10
+construct i = 0
+dejavu i < 13
+  n = n * n
+  i = i + 1
+flatline
+"""
+
+
+def test_tracing_a_number_too_long_to_render_is_a_language_error():
+    # CPython refuses str(int) past 4300 digits with a bare ValueError.
+    # Nothing in the language stops a program reaching that, so without a
+    # guard the exception leaves the interpreter as a Python traceback --
+    # through the CLI, the operator's dry run and site/glue.py's run(),
+    # none of which catch anything but MatrixLangError.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run(_OVER_LONG + "trace n\n")
+    assert "cannot display a number longer than 4300 digits" in caught.value.message
+    assert caught.value.line == 7
+
+
+def test_encoding_a_number_too_long_to_render_is_a_language_error():
+    # The same ceiling reached through the other door. `trace` is one
+    # statement; `encode` is an expression, so it puts the hazard
+    # everywhere a value can go. Both report, because the guard lives in
+    # values._display rather than in either branch.
+    from matrixlang.errors import MatrixLangError
+
+    with pytest.raises(MatrixLangError) as caught:
+        _run(_OVER_LONG + "trace encode n\n")
+    assert "'encode' got a number too long to write" in caught.value.message
+    assert "4300 digits" in caught.value.message
+
+
+def test_a_number_just_under_the_ceiling_still_traces_and_encodes():
+    # The boundary from below, run through the whole language rather than
+    # through to_display alone: 4299 digits must still print, and must
+    # still encode to text of exactly that length.
+    source = """construct n = 1
+construct i = 0
+dejavu i < 4298
+  n = n * 10
+  i = i + 1
+flatline
+trace length encode n
+"""
+    assert _run(source) == ["4299"]

@@ -31,6 +31,7 @@ class TokenType(Enum):
     UNPLUG = auto()
     JACKIN = auto()
     DECODE = auto()
+    ENCODE = auto()
 
     # Operators
     PLUS = auto()
@@ -75,6 +76,7 @@ KEYWORDS: dict[str, TokenType] = {
     "unplug": TokenType.UNPLUG,
     "jackin": TokenType.JACKIN,
     "decode": TokenType.DECODE,
+    "encode": TokenType.ENCODE,
 }
 
 

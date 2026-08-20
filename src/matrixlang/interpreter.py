@@ -47,6 +47,7 @@ from matrixlang.values import (
     CyclicValue,
     Function,
     Incomparable,
+    TooManyDigits,
     equal,
     is_bool,
     is_function,
@@ -235,6 +236,17 @@ class Interpreter:
                     stmt.line,
                     stmt.column,
                 ) from None
+            except TooManyDigits as size:
+                # Same shape as the cycle above: values.py knows the value
+                # cannot be rendered, this module knows where it was
+                # written. Reachable from `trace n` alone -- squaring in a
+                # loop passes 4300 digits long before the step limit.
+                raise RuntimeErrorML(
+                    f"cannot display a number longer than "
+                    f"{size.limit} digits",
+                    stmt.line,
+                    stmt.column,
+                ) from None
             self._sink.emit(Output(text=text, line=stmt.line))
         elif isinstance(stmt, Declare):
             value = self._value_of(stmt.value, stmt)
@@ -417,6 +429,33 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     ) from error
+            if expr.op is TokenType.ENCODE:
+                # Numbers only, and is_int is deliberately narrow: in Python
+                # a bool IS an int, so `is_int` (which checks type exactly)
+                # is what keeps `encode true` an error rather than "1".
+                if not is_int(operand):
+                    raise RuntimeErrorML(
+                        f"'encode' takes a number, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # to_display, not str(): `trace` renders numbers through it
+                # already, and two renderings of one integer would be two
+                # answers to the same question. They would drift.
+                try:
+                    return to_display(operand)
+                except TooManyDigits as size:
+                    # The mirror of decode's ValueError guard above, and
+                    # for the same CPython cap -- but the guard itself
+                    # lives in values.py, so `trace` gets it too and the
+                    # two operators cannot end up with two answers about
+                    # what a number too long to write looks like.
+                    raise RuntimeErrorML(
+                        f"'encode' got a number too long to write — "
+                        f"more than {size.limit} digits",
+                        expr.line,
+                        expr.column,
+                    ) from None
             self._require_int(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:

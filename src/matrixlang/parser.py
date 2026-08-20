@@ -435,16 +435,17 @@ class _Parser:
         return expr
 
     def _unary(self) -> Expr:
-        # `decode` sits here beside `length` rather than at `_not`'s level,
-        # and for the same reason: it PRODUCES a number that arithmetic
-        # then consumes, so `decode jackin + 1` must be
-        # `(decode jackin) + 1`. `unplug` binds looser because it CONSUMES
-        # a boolean that comparison produces. Different operand types,
-        # different natural reach -- design doc §3.
+        # `decode` and `encode` sit here beside `length` rather than at
+        # `_not`'s level, and for the same reason: they PRODUCE values
+        # that subsequent operations consume, so `decode jackin + 1` and
+        # `encode n + 1` must both be `(op operand) + 1`. `unplug` binds
+        # looser because it CONSUMES a boolean that comparison produces.
+        # Different operand types, different natural reach -- design doc §3.
         if (
             self.check(TokenType.MINUS)
             or self.check(TokenType.LENGTH)
             or self.check(TokenType.DECODE)
+            or self.check(TokenType.ENCODE)
         ):
             op = self.advance()
             operand = self._unary()

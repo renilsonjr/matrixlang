@@ -1,7 +1,7 @@
 """Canonical source rendering: syntax tree in, source text out.
 
 One emitter serves both faces (design S4-5). The walk is identical; a
-face table maps the 43 glyph slots at emission time, so identifiers,
+face table maps the 44 glyph slots at emission time, so identifiers,
 string contents, and comment text bypass the table BY CONSTRUCTION —
 the reason this is not textual substitution, which would corrupt the
 digit in `x2` and the keyword inside "trace".
@@ -60,6 +60,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.GTE: ">=",
     TokenType.LENGTH: "length",
     TokenType.DECODE: "decode",
+    TokenType.ENCODE: "encode",
     TokenType.UNPLUG: "unplug",
     TokenType.SPLICE: "splice",
     TokenType.FORK: "fork",
@@ -250,11 +251,11 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)
-        if expr.op in (TokenType.LENGTH, TokenType.DECODE):
+        if expr.op in (TokenType.LENGTH, TokenType.DECODE, TokenType.ENCODE):
             # A word operator needs a separator or `length xs` renders as
             # `lengthxs` and re-lexes as one identifier — a silent change
             # of meaning, which is exactly what §4.3 exists to catch.
-            # `decode` is the same shape and shares the rule.
+            # `decode` and `encode` are the same shape and share the rule.
             return _map(face, _OPS[expr.op]) + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):

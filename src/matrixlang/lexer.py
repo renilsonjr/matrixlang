@@ -1,6 +1,7 @@
 """The MatrixLang scanner: source text in, token list out."""
 
 import string
+import sys
 
 from matrixlang.errors import LexError
 from matrixlang.glyphs import GLYPHS, REVERSE
@@ -133,7 +134,27 @@ def lex(source: str) -> list[Token]:
                 index += 1
                 column += 1
             lexeme = source[start:index]
-            value = int("".join(REVERSE.get(c, c) for c in lexeme))
+            digits = "".join(REVERSE.get(c, c) for c in lexeme)
+            try:
+                value = int(digits)
+            except ValueError:
+                # CPython caps int(str) at sys.get_int_max_str_digits()
+                # (4300 by default) and raises a bare ValueError. A
+                # literal that long is something a person can type -- and
+                # paste -- so it has to leave here as a LexError like
+                # every other refusal in this module. Everything
+                # downstream (site/glue.py's run(), which promises never
+                # to raise; the operator's dry run; the CLI's diagnostic)
+                # catches MatrixLangError and nothing else. Same ceiling,
+                # and deliberately the same wording, as values.py's
+                # TooManyDigits, which guards the numbers a program
+                # COMPUTES rather than the ones it is written with.
+                raise LexError(
+                    f"number too long to read — {len(digits)} digits, "
+                    f"more than the {sys.get_int_max_str_digits()} allowed",
+                    line,
+                    start_column,
+                ) from None
             tokens.append(
                 Token(TokenType.NUMBER, lexeme, line, start_column, value)
             )

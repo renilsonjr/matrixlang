@@ -170,11 +170,24 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             gen_expression(rng, depth - 1),
         )
     if roll < 0.50:
-        # All three unary operators. unplug over a binary is the shape
-        # that would render as `unplug a == b` re-parsing differently if
-        # its level were wrong.
+        # Every unary operator — all five. Keeping this list complete is
+        # what puts each keyword through the mixed-face round trip, which
+        # nothing else covers: the hand-written render tests read one face
+        # at a time. unplug over a binary is the shape that would render
+        # as `unplug a == b` re-parsing differently if its level were
+        # wrong. The operands are nonsense for `decode` and `encode` — the
+        # property under test is parse(render(t)) == t, which never runs
+        # the tree.
         return Unary(
-            rng.choice([TokenType.MINUS, TokenType.LENGTH, TokenType.UNPLUG]),
+            rng.choice(
+                [
+                    TokenType.MINUS,
+                    TokenType.LENGTH,
+                    TokenType.UNPLUG,
+                    TokenType.DECODE,
+                    TokenType.ENCODE,
+                ]
+            ),
             gen_expression(rng, depth - 1),
         )
     if roll < 0.60:

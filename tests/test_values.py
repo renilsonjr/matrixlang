@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
@@ -268,3 +270,29 @@ def test_a_cyclic_pair_terminates_by_assuming_equality_on_re_entry():
     b = [None]
     b[0] = b
     assert equal(a, b) is True
+
+
+def test_a_number_too_long_to_render_raises_a_named_signal():
+    # CPython refuses str(int) past sys.get_int_max_str_digits(), raising
+    # a bare ValueError. Left alone that escapes the interpreter as a
+    # Python exception -- past every `except MatrixLangError` the CLI,
+    # the operator's dry run and site/glue.py's run() rely on. Named here
+    # for the same reason as CyclicValue: values.py knows the value
+    # cannot be rendered, the interpreter knows where it was written.
+    from matrixlang.values import TooManyDigits, to_display
+
+    with pytest.raises(TooManyDigits) as caught:
+        to_display(10 ** (sys.get_int_max_str_digits() + 1))
+    assert caught.value.limit == sys.get_int_max_str_digits()
+
+
+def test_a_number_just_under_the_ceiling_still_renders():
+    # The boundary in the other direction. A guard that reported every
+    # long number as unrenderable would pass the test above and break
+    # arithmetic nobody thinks of as extreme.
+    from matrixlang.values import to_display
+
+    limit = sys.get_int_max_str_digits()
+    rendered = to_display(10 ** (limit - 2))
+    assert len(rendered) == limit - 1
+
