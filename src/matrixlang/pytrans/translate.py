@@ -10,10 +10,32 @@ construction -- it came from the same classes the parser produces.
 
 import ast
 
-from matrixlang.nodes import Program, Stmt
+from matrixlang.nodes import (
+    Binary, BoolLiteral, Call, DictLiteral, Expr, ExprStmt, Index,
+    ListLiteral, Name, NumberLiteral, Program, Stmt, StringLiteral, Trace,
+    Unary,
+)
 from matrixlang.render import render_ascii
+from matrixlang.tokens import TokenType
 
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
+
+_BINOP = {
+    ast.Add: TokenType.PLUS, ast.Sub: TokenType.MINUS,
+    ast.Mult: TokenType.STAR, ast.Div: TokenType.SLASH,
+}
+
+_COMPARE = {
+    ast.Eq: TokenType.EQ, ast.NotEq: TokenType.NEQ,
+    ast.Lt: TokenType.LT, ast.Gt: TokenType.GT,
+    ast.LtE: TokenType.LTE, ast.GtE: TokenType.GTE,
+}
+
+_NAMED_CALL = {
+    "len": TokenType.LENGTH,
+    "str": TokenType.ENCODE,
+    "int": TokenType.DECODE,
+}
 
 
 def translate(source: str) -> Translated | Refusals:
@@ -55,7 +77,139 @@ class _Translator:
         return out
 
     def statement(self, node: ast.stmt) -> list[Stmt]:
+        if isinstance(node, ast.Expr):
+            return self._expression_statement(node)
         raise _Unsupported(self._no(self._culprit(node)))
+
+    def _expression_statement(self, node: ast.Expr) -> list[Stmt]:
+        call = node.value
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
+            if call.func.id == "print":
+                if len(call.args) != 1 or call.keywords:
+                    raise _Unsupported(
+                        self._no(
+                            node,
+                            'print one value at a time: `print(a)` then `print(b)`, '
+                            'or join them with `+`',
+                        )
+                    )
+                return [Trace(self.expression(call.args[0]))]
+            return [ExprStmt(self.expression(call))]
+        raise _Unsupported(
+            self._no(
+                node,
+                "MatrixLang runs a statement only when it is a call — "
+                "assign the value to a name if you meant to keep it",
+            )
+        )
+
+    def expression(self, node: ast.expr) -> Expr:
+        if isinstance(node, ast.Constant):
+            return self._constant(node)
+        if isinstance(node, ast.Name):
+            return Name(node.id)
+        if isinstance(node, ast.BinOp):
+            op = _BINOP.get(type(node.op))
+            if op is None:
+                raise _Unsupported(self._no(node.op))
+            return Binary(self.expression(node.left), op, self.expression(node.right))
+        if isinstance(node, ast.UnaryOp):
+            if isinstance(node.op, ast.USub):
+                return Unary(TokenType.MINUS, self.expression(node.operand))
+            if isinstance(node.op, ast.Not):
+                return Unary(TokenType.UNPLUG, self.expression(node.operand))
+            raise _Unsupported(self._no(node.op))
+        if isinstance(node, ast.BoolOp):
+            op = TokenType.SPLICE if isinstance(node.op, ast.And) else TokenType.FORK
+            result = self.expression(node.values[0])
+            for value in node.values[1:]:
+                result = Binary(result, op, self.expression(value))
+            return result
+        if isinstance(node, ast.Compare):
+            return self._compare(node)
+        if isinstance(node, ast.List):
+            return ListLiteral([self.expression(e) for e in node.elts])
+        if isinstance(node, ast.Dict):
+            return self._dict(node)
+        if isinstance(node, ast.Subscript):
+            if not isinstance(node.slice, ast.expr) or isinstance(node.slice, ast.Slice):
+                raise _Unsupported(
+                    self._no(node, "MatrixLang has no slicing; copy with a `dejavu` loop")
+                )
+            return Index(self.expression(node.value), self.expression(node.slice))
+        if isinstance(node, ast.Call):
+            return self._call(node)
+        raise _Unsupported(self._no(node))
+
+    def _constant(self, node: ast.Constant) -> Expr:
+        # None and float go through Refusal directly rather than self._no():
+        # both share the ast class "Constant" with every other literal, so
+        # the name-keyed _DESCRIBE catalogue can't tell them apart, and a
+        # reason of "Constant cannot be translated" would name neither.
+        value = node.value
+        if value is True or value is False:
+            return BoolLiteral(value)
+        if value is None:
+            raise _Unsupported(
+                Refusal(
+                    "None cannot be translated",
+                    node.lineno,
+                    node.col_offset,
+                    "MatrixLang has no null; use a value your program can test",
+                )
+            )
+        if isinstance(value, float):
+            raise _Unsupported(
+                Refusal(
+                    "a float cannot be translated",
+                    node.lineno,
+                    node.col_offset,
+                    "MatrixLang has no floats; use whole numbers",
+                )
+            )
+        if isinstance(value, int):
+            return NumberLiteral(value)
+        if isinstance(value, str):
+            return StringLiteral(value)
+        raise _Unsupported(self._no(node))
+
+    def _compare(self, node: ast.Compare) -> Expr:
+        if len(node.ops) != 1:
+            raise _Unsupported(
+                self._no(node, "split the chain with `and`")
+            )
+        op, right = node.ops[0], node.comparators[0]
+        if isinstance(op, ast.In):
+            # Only a dictionary. `in` over a list or a string has no
+            # MatrixLang form -- oracle asks a dictionary for a key.
+            return Binary(
+                self.expression(right), TokenType.ORACLE, self.expression(node.left)
+            )
+        mapped = _COMPARE.get(type(op))
+        if mapped is None:
+            raise _Unsupported(self._no(op))
+        return Binary(self.expression(node.left), mapped, self.expression(right))
+
+    def _dict(self, node: ast.Dict) -> Expr:
+        entries = []
+        for key, value in zip(node.keys, node.values):
+            if key is None:
+                raise _Unsupported(self._no(node))
+            entries.append((self.expression(key), self.expression(value)))
+        return DictLiteral(entries)
+
+    def _call(self, node: ast.Call) -> Expr:
+        if node.keywords:
+            raise _Unsupported(
+                self._no(node, "MatrixLang agents take positional arguments only")
+            )
+        if isinstance(node.func, ast.Name) and node.func.id in _NAMED_CALL:
+            if len(node.args) != 1:
+                raise _Unsupported(self._no(node))
+            return Unary(_NAMED_CALL[node.func.id], self.expression(node.args[0]))
+        if not isinstance(node.func, ast.Name):
+            raise _Unsupported(self._no(node))
+        return Call(Name(node.func.id), [self.expression(a) for a in node.args])
 
     def _culprit(self, node: ast.stmt) -> ast.AST:
         """The construct actually responsible for the refusal.
@@ -105,6 +259,18 @@ _DESCRIBE = {
     "SetComp": "a set comprehension",
     "DictComp": "a dict comprehension",
     "GeneratorExp": "a generator expression",
+    "Tuple": "a tuple",
+    "Set": "a set",
+    "Slice": "a slice",
+    "Is": "`is`",
+    "IsNot": "`is not`",
+    "In": "`in`",
+    "NotIn": "`not in`",
+    # Not in the brief's list: the ast.Compare node itself is the culprit
+    # when a comparison chains more than one operator (`a < b < c`), and
+    # without an entry here the reason falls back to the literal ast class
+    # name "Compare", which the chained-comparison test can't match on.
+    "Compare": "a chained comparison",
 }
 
 _IDIOM = {
@@ -112,4 +278,11 @@ _IDIOM = {
     "SetComp": "MatrixLang has no sets; use a list",
     "DictComp": "build the dictionary with a `dejavu` loop and `d[k] = v`",
     "GeneratorExp": "build the list with a `dejavu` loop",
+    "Tuple": "MatrixLang has no tuples; use a list",
+    "Set": "MatrixLang has no sets; use a list",
+    "Slice": "MatrixLang has no slicing; copy with a `dejavu` loop",
+    "Is": "MatrixLang has no identity check; compare values with `==`",
+    "IsNot": "MatrixLang has no identity check; compare values with `!=`",
+    "In": "MatrixLang's `in` only reads a dictionary; write `d oracle key`",
+    "NotIn": "MatrixLang has no `not in`; write `unplug (d oracle key)`",
 }

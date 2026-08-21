@@ -67,7 +67,7 @@ _ALLOWED: dict[str, set[str]] = {
     # renders them with the real renderer rather than re-deriving precedence
     # rules, which is why it reaches nodes and render.
     "pytrans.refuse": set(),
-    "pytrans.translate": {"nodes", "render", "pytrans.refuse"},
+    "pytrans.translate": {"nodes", "tokens", "render", "pytrans.refuse"},
 }
 
 
