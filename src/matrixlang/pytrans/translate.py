@@ -12,8 +12,8 @@ import ast
 
 from matrixlang.nodes import (
     Assign, Binary, BoolLiteral, Call, Declare, DictLiteral, Expr, ExprStmt,
-    FunctionDef, If, Index, IndexAssign, ListLiteral, Name, NumberLiteral,
-    Program, Return, Stmt, StringLiteral, Trace, Unary, While,
+    FunctionDef, If, Index, IndexAssign, JackIn, ListLiteral, Name,
+    NumberLiteral, Program, Return, Stmt, StringLiteral, Trace, Unary, While,
 )
 from matrixlang.render import render_ascii
 from matrixlang.tokens import TokenType
@@ -206,15 +206,24 @@ class _Translator:
                 self._no(node, "assign one name at a time: `a = 0` then `b = 0`")
             )
         target = node.targets[0]
-        value = self.expression(node.value)
+        prelude: list[Stmt] = []
+        source = node.value
+        if _is_input_call(source):
+            if source.args:
+                if len(source.args) != 1:
+                    raise _Unsupported(self._no(source))
+                prelude.append(Trace(self.expression(source.args[0])))
+            value: Expr = JackIn()
+        else:
+            value = self.expression(source)
         if isinstance(target, ast.Name):
             if self._bind(target.id):
-                return [Declare(target.id, value)]
-            return [Assign(target.id, value)]
+                return prelude + [Declare(target.id, value)]
+            return prelude + [Assign(target.id, value)]
         if isinstance(target, ast.Subscript):
             if isinstance(target.slice, ast.Slice):
                 raise _Unsupported(self._no(target))
-            return [
+            return prelude + [
                 IndexAssign(
                     self.expression(target.value),
                     self.expression(target.slice),
@@ -428,6 +437,8 @@ class _Translator:
             return Index(self.expression(node.value), self.expression(node.slice))
         if isinstance(node, ast.Call):
             return self._call(node)
+        if isinstance(node, ast.JoinedStr):
+            return self._fstring(node)
         raise _Unsupported(self._no(node))
 
     def _constant(self, node: ast.Constant) -> Expr:
@@ -492,6 +503,17 @@ class _Translator:
             raise _Unsupported(
                 self._no(node, "MatrixLang agents take positional arguments only")
             )
+        if isinstance(node.func, ast.Name) and node.func.id == "input":
+            # Reaching here means `input(...)` was not the whole right-hand
+            # side of an assignment -- the only place it can become the two
+            # statements (`trace`, then bind to `jackin`) it needs to be.
+            raise _Unsupported(
+                self._no(
+                    node,
+                    "read the line into its own name first: "
+                    "`answer = input(...)`, then use `answer`",
+                )
+            )
         if isinstance(node.func, ast.Name) and node.func.id in _NAMED_CALL:
             if len(node.args) != 1:
                 raise _Unsupported(self._no(node))
@@ -499,6 +521,37 @@ class _Translator:
         if not isinstance(node.func, ast.Name):
             raise _Unsupported(self._no(node))
         return Call(Name(node.func.id), [self.expression(a) for a in node.args])
+
+    def _fstring(self, node: ast.JoinedStr) -> Expr:
+        """An f-string as a `+` chain, with `encode` around each hole.
+
+        `encode` takes a number, so interpolating a string fails loudly at
+        runtime with a line and column. That is allowed where a silent
+        difference would not be: the reader sees the error and fixes it,
+        rather than getting a program that quietly means something else.
+        """
+        parts: list[Expr] = []
+        for piece in node.values:
+            if isinstance(piece, ast.Constant):
+                if piece.value:
+                    parts.append(StringLiteral(piece.value))
+            elif isinstance(piece, ast.FormattedValue):
+                if piece.conversion != -1 or piece.format_spec is not None:
+                    raise _Unsupported(
+                        self._no(
+                            piece,
+                            "MatrixLang has no formatting; build the text with `+`",
+                        )
+                    )
+                parts.append(Unary(TokenType.ENCODE, self.expression(piece.value)))
+            else:
+                raise _Unsupported(self._no(node))
+        if not parts:
+            return StringLiteral("")
+        result = parts[0]
+        for part in parts[1:]:
+            result = Binary(result, TokenType.PLUS, part)
+        return result
 
     def _culprit(self, node: ast.stmt) -> ast.AST:
         """The construct actually responsible for the refusal.
@@ -533,6 +586,14 @@ class _Translator:
             getattr(node, "col_offset", 0),
             idiom if idiom is not None else _IDIOM.get(name),
         )
+
+
+def _is_input_call(node: ast.expr) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "input"
+    )
 
 
 def _rebinds(body: list[ast.stmt], name: str) -> bool:

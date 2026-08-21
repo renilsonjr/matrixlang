@@ -152,3 +152,37 @@ def test_not_over_a_bare_value_is_refused():
 
 def test_a_while_condition_is_guarded_the_same_way():
     assert "truthiness" in refused("while not xs:\n    print(1)\n")[0].reason
+
+
+def test_input_with_a_prompt_becomes_two_statements():
+    source = 'name = input("Name: ")\n'
+    assert ml(source) == 'trace "Name: "\nconstruct name = jackin\n'
+
+
+def test_input_without_a_prompt_is_one_statement():
+    assert ml("name = input()\n") == "construct name = jackin\n"
+
+
+def test_input_nested_in_an_expression_is_refused():
+    refusal = refused('n = int(input("n: "))\n')[0]
+    assert refusal.idiom is not None
+
+
+def test_an_fstring_becomes_a_concatenation():
+    assert ml('print(f"id: {n}")\n') == 'trace "id: " + encode n\n'
+
+
+def test_an_fstring_with_text_on_both_sides():
+    assert ml('print(f"a{n}b")\n') == 'trace "a" + encode n + "b"\n'
+
+
+def test_an_fstring_with_no_interpolation_is_just_a_string():
+    assert ml('print(f"plain")\n') == 'trace "plain"\n'
+
+
+def test_an_fstring_conversion_is_refused():
+    assert "formatting" in refused('print(f"{n!r}")\n')[0].idiom
+
+
+def test_an_fstring_format_spec_is_refused():
+    assert "formatting" in refused('print(f"{n:>3}")\n')[0].idiom
