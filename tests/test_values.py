@@ -6,7 +6,6 @@ from matrixlang.values import (
     BadKey,
     check_key,
     is_bool,
-    is_dict,
     is_int,
     is_str,
     to_display,

@@ -411,3 +411,74 @@ def test_the_generator_produces_every_unary_operator():
             walk_stmt(statement)
 
     assert found == expected, f"missing from 300 seeds: {expected - found}"
+
+
+def test_the_generator_produces_the_dictionary_shapes_too():
+    # Same reasoning as the coverage meta-tests above, extended to
+    # dictionaries -- and the failure it guards is not hypothetical. On
+    # the `encode` branch, `decode` and `encode` sat outside the round
+    # trip for their entire existence while the property stayed green,
+    # because nothing asserted the corpus contained them. `keymaker` is
+    # already fenced by the unary-operator test below; DictLiteral and
+    # `oracle` were not. Proven by mutation: pointing treegen's dict band
+    # at gen_list, or dropping TokenType.ORACLE from its _BINARY_OPS,
+    # leaves every other test in the suite passing.
+    from matrixlang.nodes import IndexAssign
+    from matrixlang.tokens import TokenType
+
+    empty_dict = False
+    populated_dict = False
+    dict_in_dict = False
+    oracle = False
+
+    def walk_expr(expr):
+        nonlocal empty_dict, populated_dict, dict_in_dict, oracle
+        if isinstance(expr, DictLiteral):
+            if expr.entries:
+                populated_dict = True
+            else:
+                empty_dict = True
+            for key, value in expr.entries:
+                if isinstance(key, DictLiteral) or isinstance(value, DictLiteral):
+                    dict_in_dict = True
+                walk_expr(key)
+                walk_expr(value)
+        elif isinstance(expr, Binary):
+            if expr.op is TokenType.ORACLE:
+                oracle = True
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, Unary):
+            walk_expr(expr.operand)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+
+    def walk_stmt(stmt):
+        if isinstance(stmt, IndexAssign):
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    assert empty_dict, "no {} in 300 seeds"
+    assert populated_dict, "no populated dictionary in 300 seeds"
+    assert dict_in_dict, "no dictionary inside a dictionary in 300 seeds"
+    assert oracle, "no `oracle` binary in 300 seeds"

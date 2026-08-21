@@ -77,6 +77,26 @@ def test_a_key_assigned_later_is_also_checked():
     assert "boolean" in fails('construct d = {}\nd[true] = 1\n').message
 
 
+# A key reaches the checker through four doors -- a literal's entry, an
+# index assignment, an index read, and `oracle`. The two above fence the
+# first pair; these fence the second. Both were unfenced: deleting either
+# check left the whole suite green, and the `oracle` one is not cosmetic
+# -- without it `d oracle [1]` raises `TypeError: unhashable type: 'list'`
+# straight out of the interpreter, a Python exception reaching the reader.
+
+
+def test_a_list_key_is_refused_when_reading():
+    error = fails('construct d = {"a": 1}\ntrace d[[1]]\n')
+    assert "a dictionary key must be a string or a number, got list" in error.message
+    assert error.line == 2
+
+
+def test_a_list_key_is_refused_by_oracle():
+    error = fails('construct d = {"a": 1}\ntrace d oracle [1]\n')
+    assert "a dictionary key must be a string or a number, got list" in error.message
+    assert error.line == 2
+
+
 def test_keymaker_of_a_non_dictionary_is_an_error():
     error = fails("trace keymaker [1, 2]\n")
     assert "'keymaker' takes a dictionary, got list" in error.message
