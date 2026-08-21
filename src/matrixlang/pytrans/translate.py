@@ -60,15 +60,24 @@ class _Translator:
     def _culprit(self, node: ast.stmt) -> ast.AST:
         """The construct actually responsible for the refusal.
 
-        Every statement refuses in this skeleton, but a statement that is
-        otherwise ordinary -- an assignment, say -- can still be carrying an
-        unsupported expression, such as a comprehension. Naming the
-        assignment would be technically true and useless; the reader needs
-        to know it's the `[... for ...]` that has no MatrixLang idiom yet
-        (once translation exists, this is also where that expression would
-        be found).
+        Scoped to the statement's own value expression -- `Assign`, `Expr`,
+        `Return` -- never to the whole subtree. A statement kind that is
+        itself unsupported (`class`, `try`, `raise`, `import`) must report
+        itself, because it refuses no matter what's nested inside it;
+        walking the full subtree would let a `class` body's comprehension
+        steal the refusal from the `class`, and a reader who "fixes" the
+        comprehension would rerun and get a different refusal for the same
+        still-unsupported statement. `xs = [f(x) for x in ys]` still names
+        the comprehension, because there the comprehension genuinely *is*
+        what the statement is built from (and once translation exists, this
+        is also where that expression would be found).
         """
-        for child in ast.walk(node):
+        value = None
+        if isinstance(node, (ast.Assign, ast.Expr, ast.Return)):
+            value = node.value
+        if value is None:
+            return node
+        for child in ast.walk(value):
             if type(child).__name__ in _IDIOM:
                 return child
         return node

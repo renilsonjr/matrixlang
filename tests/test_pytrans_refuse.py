@@ -37,3 +37,17 @@ def test_a_refusal_names_an_idiom_when_one_exists():
     refusal = translate("xs = [f(x) for x in ys]\n").items[0]
     assert refusal.idiom is not None
     assert "dejavu" in refusal.idiom
+
+
+def test_an_unsupported_statement_reports_itself_not_what_it_contains():
+    # `class` is unsupported whatever is inside it. Naming the comprehension
+    # would send the reader to rewrite working code and change nothing.
+    refusal = translate("class A:\n    xs = [f(x) for x in ys]\n").items[0]
+    assert "class" in refusal.reason
+    assert refusal.line == 1
+
+
+def test_a_try_statement_also_reports_itself_not_what_it_contains():
+    refusal = translate("try:\n    xs = [f(x) for x in ys]\nexcept Exception:\n    pass\n").items[0]
+    assert "try" in refusal.reason
+    assert refusal.line == 1
