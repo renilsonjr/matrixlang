@@ -14,7 +14,7 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.nodes import Binary, Call, If, Index, ListLiteral, Unary
+from matrixlang.nodes import Binary, Call, DictLiteral, If, Index, ListLiteral, Unary
 from matrixlang.parser import parse
 from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
@@ -172,7 +172,7 @@ def test_the_generator_produces_the_stage_7_shapes_too():
     # Same reasoning as the two tests above, extended to lists. A
     # generator that never emits an index over a list literal would let
     # a precedence bug in [1,2][0] through while looking green.
-    from matrixlang.nodes import Index, IndexAssign, ListLiteral, Unary
+    from matrixlang.nodes import DictLiteral, Index, IndexAssign, ListLiteral, Unary
     from matrixlang.tokens import TokenType
 
     empty_list = False
@@ -213,6 +213,10 @@ def test_the_generator_produces_the_stage_7_shapes_too():
             walk_expr(expr.callee)
             for arg in expr.args:
                 walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
 
     def walk_stmt(stmt):
         nonlocal index_assignment
@@ -311,6 +315,10 @@ def test_the_generator_produces_the_stage_9_shapes_too():
             walk_expr(expr.callee)
             for arg in expr.args:
                 walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
 
     def walk_stmt(stmt):
         for field in ("value", "condition", "target", "index"):
@@ -385,6 +393,10 @@ def test_the_generator_produces_every_unary_operator():
             walk_expr(expr.callee)
             for arg in expr.args:
                 walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
 
     def walk_stmt(stmt):
         for field in ("value", "condition", "target", "index"):
