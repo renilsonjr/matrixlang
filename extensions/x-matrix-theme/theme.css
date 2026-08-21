@@ -79,7 +79,7 @@ html[data-ml-face="glyph"] [data-testid="primaryColumn"] h2 {
   width: 100vw;
   height: 100vh;
   z-index: 0;
-  opacity: 0.12;
+  opacity: 0.22;
   pointer-events: none;
   background: #000;
 }

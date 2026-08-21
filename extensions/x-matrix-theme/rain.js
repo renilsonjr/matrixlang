@@ -21,13 +21,13 @@
     if (!canvas) {
       canvas = document.createElement("canvas");
       canvas.id = CANVAS_ID;
-      // theme.css already styles #ml-rain fixed 0.12 opacity; inline fallback:
+      // theme.css already styles #ml-rain fixed 0.22 opacity; inline fallback:
       canvas.style.position = "fixed";
       canvas.style.inset = "0";
       canvas.style.width = "100vw";
       canvas.style.height = "100vh";
       canvas.style.zIndex = "0";
-      canvas.style.opacity = "0.12";
+      canvas.style.opacity = "0.22";
       canvas.style.pointerEvents = "none";
       canvas.style.background = "#000";
       (document.body || document.documentElement).prepend(canvas);
