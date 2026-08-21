@@ -51,7 +51,7 @@ class _Nothing:
 
     Not a language value and not reachable as one: a call in statement
     position may produce it, and a call in expression position that
-    produces it is a runtime error. This keeps the language at four types
+    produces it is a runtime error. This keeps the language at five types
     while still allowing a procedure to exist.
     """
 

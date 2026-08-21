@@ -66,9 +66,9 @@ logical operators — <code>splice</code> (and), <code>fork</code> (or),
 has no equivalent concept for logical conjunction; this is stated directly in
 the language's own design records rather than left for a reader to notice.
 
-The language has four types (integer, boolean, string, list), agents
-(functions) with closures, and no null — a value either exists or the name
-does not. There is no <code>eval</code>, no file or network access, and no
+The language has five types (integer, boolean, string, list, dictionary),
+agents (functions) with closures, and no null — a value either exists or
+the name does not. There is no <code>eval</code>, no file or network access, and no
 route from a program into the host language; a <code>.rain</code> file cannot
 do anything beyond compute and print.
 

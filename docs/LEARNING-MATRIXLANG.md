@@ -598,7 +598,7 @@ matrixlang: [line 2, column 13] no key "turma" in this dictionary
 
 There is no null anywhere in this language (§3) — there is nothing it
 could hand back for a key that was never written. Check first with
-`oracle`, below, the same discipline the bounded-search idiom (§7)
+`oracle`, below, the same discipline the bounded-search idiom (§9)
 already teaches for a list index that might be past the end.
 
 ### Writing — insert or update — `d["key"] = v`
@@ -1136,7 +1136,7 @@ cannot be a variable name — `store 5 as trace` is a miss, because
 
 Everything Scribe hands you has already been parsed and executed once, so
 it runs. What it does **not** cover yet: `splice` and `fork` (§9), writing
-to a list element (§6), calling a function you just defined, and the whole
+to a list element (§7), calling a function you just defined, and the whole
 of input — `jackin`, `decode` and `encode` (§18). Write those by hand —
 which, having read this far, you can.
 

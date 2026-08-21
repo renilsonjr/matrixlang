@@ -90,7 +90,7 @@ anything about the language, which is the whole point of the split.
 | `nodes.py` | 185 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
 | `values.py` | 251 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 87 | The 44-slot bijective glyph table. 12 slots left of the block |
+| `glyphs.py` | 87 | The 49-slot bijective glyph table. 7 slots left of the block |
 | `lexer.py` | 268 | Source text → token list. Handles both faces |
 | `parser.py` | 522 | Tokens → AST. Recursive descent |
 | `interpreter.py` | 742 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
@@ -200,7 +200,7 @@ flatline
   finished.
 - **`NOTHING` is a sentinel, not a value.** An agent that never jacks out
   produces it; a call in statement position may, and a call in expression
-  position that does is a runtime error. The language still has four types, and
+  position that does is a runtime error. The language still has five types, and
   no program can hold or compare a null.
 - **`construct` declares; `=` requires a prior declaration.** Re-declaring is an
   error; assigning to an undeclared name is an error. This is what makes
@@ -261,7 +261,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 44 slots is
+and a **per-seed randomly mixed** face where each of the 49 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -302,7 +302,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 44-entry table the renderer writes through, just
+The lexer reads the same 49-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.
