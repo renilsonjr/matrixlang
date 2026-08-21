@@ -11,6 +11,7 @@ from collections.abc import Callable
 from matrixlang.errors import ParseError
 from matrixlang.nodes import (
     Call,
+    DictLiteral,
     ExprStmt,
     FunctionDef,
     Index,
@@ -91,7 +92,13 @@ def _adopt_header_comment(
 _FORK_OPS = (TokenType.FORK,)
 _SPLICE_OPS = (TokenType.SPLICE,)
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
-_COMPARISON_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
+_COMPARISON_OPS = (
+    TokenType.LT,
+    TokenType.GT,
+    TokenType.LTE,
+    TokenType.GTE,
+    TokenType.ORACLE,
+)
 _TERM_OPS = (TokenType.PLUS, TokenType.MINUS)
 _FACTOR_OPS = (TokenType.STAR, TokenType.SLASH)
 
@@ -441,11 +448,15 @@ class _Parser:
         # `encode n + 1` must both be `(op operand) + 1`. `unplug` binds
         # looser because it CONSUMES a boolean that comparison produces.
         # Different operand types, different natural reach -- design doc §3.
+        # `keymaker` joins them for the same reason: it PRODUCES a list of
+        # keys that later operations consume, so `length keymaker d` and
+        # `keymaker alunos[0]` both group tightly.
         if (
             self.check(TokenType.MINUS)
             or self.check(TokenType.LENGTH)
             or self.check(TokenType.DECODE)
             or self.check(TokenType.ENCODE)
+            or self.check(TokenType.KEYMAKER)
         ):
             op = self.advance()
             operand = self._unary()
@@ -515,6 +526,19 @@ class _Parser:
                     self.advance()
             self.expect(TokenType.RBRACKET, "expected ']' to close the list")
             return ListLiteral(elements, line=token.line, column=token.column)
+        if token.type is TokenType.LBRACE:
+            self.advance()
+            entries: list[tuple[Expr, Expr]] = []
+            if not self.check(TokenType.RBRACE):
+                while True:
+                    key = self.expression()
+                    self.expect(TokenType.COLON, "expected ':' after the key")
+                    entries.append((key, self.expression()))
+                    if not self.check(TokenType.COMMA):
+                        break
+                    self.advance()
+            self.expect(TokenType.RBRACE, "expected '}' to close the dictionary")
+            return DictLiteral(entries, line=token.line, column=token.column)
         raise ParseError(
             f"expected an expression, found {_describe(token)}",
             token.line,
