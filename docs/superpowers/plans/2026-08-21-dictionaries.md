@@ -538,7 +538,13 @@ def check_key(key: object) -> None:
         raise BadKey(type_name(key))
 ```
 
-`is_bool` is checked first because Python's `bool` is a subclass of `int`, so `is_int(True)` is True — the same ordering `type_name` already relies on.
+**Correction, found in review:** an earlier draft of this step justified checking
+`is_bool` first by saying Python's `bool` subclasses `int`, so `is_int(True)` is True.
+That is true of Python but **false of this codebase** — `is_int` is `type(value) is int`
+(`values.py:131`), which is already False for `True`. The ordering is therefore
+harmless but not load-bearing, and the real reason to reject boolean keys is the hash
+collision described in `check_key`'s docstring, not an ordering hazard. Do not
+reproduce the subclass rationale in a comment.
 
 - [ ] **Step 4: Add `dictionary` to `type_name`**
 
