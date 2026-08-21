@@ -30,6 +30,7 @@ license covers this repository's code and nothing beyond it.
 | **[docs/NON_TECHNICAL_EXPLANATION.md](docs/NON_TECHNICAL_EXPLANATION.md)** | Explain the project to someone who does not know programming |
 | **[docs/TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md)** | How the implementation works — the pipeline, the module map, the problems that took real effort |
 | **[Clone it and run it](#clone-it-and-run-it)** | A handful of commands and a window full of falling glyphs |
+| **[X Theme for X.com](extensions/x-matrix-theme/README.md)** | Bring the glyph wall to your timeline — faint rain, Mono, and a glyph toggle for X.com |
 
 ## Status
 
@@ -358,6 +359,23 @@ There is one thing the browser cannot do: `tkinter` is not there, so the
 native cascade window has no equivalent. The page draws the same cascade
 on a canvas from the same events, which is what `web-ui/` already did for
 the local server.
+
+## X Theme for X.com
+
+A browser extension that brings MatrixLang to your timeline — the same palette, Mono, faint rain behind the feed, and a global **Glyph ◐ Latin** toggle.
+
+[![X Theme — Download](https://img.shields.io/badge/X%20Theme-%2300ff41?style=for-the-badge&logo=x&logoColor=white)](https://github.com/renilsonjr/matrixlang/releases/latest/download/x-matrix-theme.zip)
+
+**Click to install:**
+
+1. Click the badge above to download `x-matrix-theme.zip` — or get it from the [latest release](https://github.com/renilsonjr/matrixlang/releases) or [Actions artifact](../../actions/workflows/x-theme.yml)
+2. Unzip it
+3. Open `chrome://extensions` (or `brave://extensions`, `edge://extensions`) → **Developer mode** ON → **Load unpacked** → pick the `x-matrix-theme` folder
+4. Open `https://x.com/home` → faint rain behind the timeline, toggle says **Glyph ◐ Latin** — click to flip
+
+Firefox: `about:debugging` → **This Firefox** → **Load Temporary Add-on** → pick `manifest.json`. See `extensions/x-matrix-theme/README.md` for checks and the 6-step manual acceptance.
+
+> Chrome blocks true one-click installs outside the Web Store — this is the closest click-to-install before publishing. When it’s published, this badge will become **Add to Chrome** (one click, auto-updates).
 
 ## The glyphs
 
