@@ -20,6 +20,9 @@ _SINGLE: dict[str, TokenType] = {
     ",": TokenType.COMMA,
     "[": TokenType.LBRACKET,
     "]": TokenType.RBRACKET,
+    "{": TokenType.LBRACE,
+    "}": TokenType.RBRACE,
+    ":": TokenType.COLON,
 }
 
 _DOUBLE: dict[str, TokenType] = {

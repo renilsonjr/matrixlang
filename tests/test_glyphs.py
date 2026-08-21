@@ -4,12 +4,13 @@ from matrixlang.glyphs import BLOCK_END, BLOCK_START, GLYPHS, REVERSE
 from matrixlang.tokens import KEYWORDS
 
 
-def test_the_table_covers_exactly_the_44_slots():
+def test_the_table_covers_exactly_the_49_slots():
     # Language spec §3.1, plus Stage 6: 11 keywords (agent and jackout
     # join, length in Stage 7) + 11 operators + 2 parens + a comma +
     # 2 brackets + 10 digits + the '#' comment marker + Stage 9: 3 logical
     # operators (splice, fork, unplug) + input: jackin and decode
     # + encode.
+    # + dictionaries: keymaker and oracle, and { } : for the literal.
     # Nothing more (identifiers and string contents stay ASCII, per D-03),
     # nothing less.
     expected = (
@@ -17,11 +18,12 @@ def test_the_table_covers_exactly_the_44_slots():
         | {"+", "-", "*", "/", "=", "==", "!=", "<", ">", "<=", ">="}
         | {"(", ")", ","}
         | {"[", "]"}
+        | {"{", "}", ":"}
         | set(string.digits)
         | {"#"}
     )
     assert set(GLYPHS) == expected
-    assert len(expected) == 44
+    assert len(expected) == 49
 
 
 def test_the_glyph_budget_is_tracked_not_discovered():
@@ -29,13 +31,14 @@ def test_the_glyph_budget_is_tracked_not_discovered():
     # spends 3 more for lists: 21 - 3 = 18 left. Stage 9 spends 3 more
     # for logical operators: 18 - 3 = 15 left. Input spends 2 for jackin
     # and decode: 15 - 2 = 13 left. encode spends 1: 13 - 1 = 12 left.
-    # Finite, and worth knowing.
+    # Dictionaries spend 5 -- keymaker, oracle, and the three punctuation
+    # slots { } : -- so 12 - 5 = 7 left. Finite, and worth knowing.
     free = sum(
         1
         for code in range(BLOCK_START, BLOCK_END + 1)
         if chr(code) not in set(GLYPHS.values())
     )
-    assert free == 12
+    assert free == 7
 
 
 def test_the_mapping_is_bijective():
