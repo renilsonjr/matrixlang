@@ -65,14 +65,19 @@ Rules that differ from most languages:
   branch. There is no truthiness. `redpill` may be followed by an
   optional `bluepill` block, which runs when the condition is false —
   MatrixLang's else.
-- Types are integer, boolean, string and list. No floats, no
-  dictionaries, no null.
+- Types are integer, boolean, string, list and dictionary. No floats, no
+  null.
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
   with `xs[i] = v`, and measure one with `length xs` (also works on a
   string). Indexing is 0-based and out of range is an error.
 - A string can be indexed too: `s[i]` reads a one-character string. It
   cannot be written — `s[i] = v` is an error, because a string can never
   change once made. Build a different one with `+` instead.
+- A dictionary literal is `{"a": 1}`; keys must be strings or numbers.
+  Reading a key that is not there is an error, so check first with
+  `oracle`, which is infix and gives a boolean: `d oracle "a"`.
+  `keymaker` takes a dictionary and gives the list of its keys, in
+  insertion order.
 - `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
   and never any other type.
 - `+` adds integers, joins strings, or concatenates lists — never a mix
