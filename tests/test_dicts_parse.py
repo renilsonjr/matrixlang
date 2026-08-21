@@ -81,3 +81,29 @@ def test_oracle_is_looser_than_equality_is_not_true():
     node = program.statements[0].value
     assert node.op is TokenType.EQ
     assert node.left.op is TokenType.ORACLE
+
+
+def test_oracle_binds_tighter_than_equality_with_equality_on_the_left():
+    # Rules out merging `oracle` into `_EQUALITY_OPS`. The tests above don't
+    # catch that mutation because they only ever put `==` to the right of
+    # `oracle`, where both placements agree. Putting `==` on the LEFT
+    # separates them: at the same rung as `==` (left-associative), this
+    # would group as `(a == b) oracle c`. At `_comparison` (tighter than
+    # `==`, correct), it groups as `a == (b oracle c)`.
+    program = parse(lex("trace a == b oracle c\n"))
+    node = program.statements[0].value
+    assert node.op is TokenType.EQ
+    assert node.right.op is TokenType.ORACLE
+
+
+def test_keymaker_binds_tighter_than_equality():
+    # Rules out placing `keymaker` at `_not`'s rung instead of `_unary`.
+    # `test_keymaker_parses_like_length` only ever exercises `keymaker d` in
+    # isolation, which can't distinguish the two rungs. At `_not`'s rung it
+    # would swallow the comparison -- `keymaker (d == x)` -- the same way
+    # `unplug` is supposed to. At `_unary` (correct), it groups as
+    # `(keymaker d) == x`.
+    program = parse(lex("trace keymaker d == x\n"))
+    node = program.statements[0].value
+    assert node.op is TokenType.EQ
+    assert node.left.op is TokenType.KEYMAKER
