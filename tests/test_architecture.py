@@ -61,6 +61,13 @@ _ALLOWED: dict[str, set[str]] = {
     "repl": {
         "errors", "input", "interpreter", "lexer", "parser", "render", "tokens",
     },
+    # The Python-to-MatrixLang translator subpackage. refuse.py is the pure
+    # contract half -- dataclasses only, no sibling imports, same shape as
+    # scribe.py's promise never to raise. translate.py builds real nodes and
+    # renders them with the real renderer rather than re-deriving precedence
+    # rules, which is why it reaches nodes and render.
+    "pytrans.refuse": set(),
+    "pytrans.translate": {"nodes", "render", "pytrans.refuse"},
 }
 
 
