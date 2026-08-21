@@ -71,3 +71,21 @@ def test_a_loop_builds_up_a_list():
         "print(ys)\n"
     )
     assert _translated_output(source) == _run_python(source)
+
+
+def test_a_name_first_bound_inside_a_standalone_while_runs():
+    # The `for` fix hoists via _hoist_declares, and that function already
+    # recurses into a nested `while`'s body -- but only when something
+    # else's walk reaches it. A `while` that is not inside a `for` sits at
+    # the top level of statement(), where nothing was calling the hoist at
+    # all: `construct doubled = n * 2` landed inside the `dejavu` body and
+    # crashed with "already declared" on the second iteration, for an
+    # entirely ordinary Python loop.
+    source = (
+        "n = 0\n"
+        "while n < 3:\n"
+        "    doubled = n * 2\n"
+        "    print(doubled)\n"
+        "    n += 1\n"
+    )
+    assert _translated_output(source) == _run_python(source)

@@ -123,7 +123,19 @@ class _Translator:
         if isinstance(node, ast.While):
             if node.orelse:
                 raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
-            return [While(self.condition(node.test), self.body(node.body))]
+            condition = self.condition(node.test)
+            # Same hazard `_for` hoists around: `construct` inside a
+            # `dejavu` body fails on the second iteration, and a plain
+            # Python `while` lands its first-bound names in exactly that
+            # body just like a `for`'s translated body does. `_for` gets
+            # this by construction (it always runs `_hoist_declares` on
+            # its own body); a `while` needs the same call explicitly,
+            # because `_hoist_declares`'s recursion into a nested `While`
+            # only reaches a `while` sitting *inside* another loop's
+            # body -- a top-level `while` is never visited by anyone
+            # else's walk.
+            body, hoisted = _hoist_declares(self.body(node.body))
+            return [*hoisted, While(condition, body)]
         if isinstance(node, ast.For):
             return self._for(node)
         if isinstance(node, ast.FunctionDef):
