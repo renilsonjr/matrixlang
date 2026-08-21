@@ -1,0 +1,31 @@
+name: x-theme
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extensions/x-matrix-theme/**"
+      - ".github/workflows/x-theme.yml"
+  workflow_dispatch:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Zip the X theme
+        run: |
+          cd extensions
+          zip -r ../x-matrix-theme.zip x-matrix-theme -x "*/.DS_Store" "*/__pycache__/*"
+          unzip -l ../x-matrix-theme.zip | head -20
+          ls -lh ../x-matrix-theme.zip
+      - uses: actions/upload-artifact@6f51ac03ed4a7e2d310600a9ab241ea176ae1991d # v4.5.0
+        with:
+          name: x-matrix-theme
+          path: x-matrix-theme.zip
+          if-no-files-found: error
