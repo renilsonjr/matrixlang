@@ -51,6 +51,19 @@ GLYPHS: dict[str, str] = {
     # the Keymaker's own sounds were long gone by this point in the table.
     "keymaker": "ﾔ",
     "oracle": "ｵ",
+    "mask": "ﾊ",
+    "merge": "ﾕ",
+    "flip": "ﾘ",
+    "invert": "ﾛ",
+    "uplink": "ﾉ",
+    "downlink": "ｰ",
+    # Bitwise operators.
+    "mask": "ﾊ",
+    "merge": "ﾕ",
+    "flip": "ﾘ",
+    "invert": "ﾛ",
+    "uplink": "ﾉ",
+    "downlink": "ｰ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",

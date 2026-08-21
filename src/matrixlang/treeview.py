@@ -51,6 +51,12 @@ _OPS: dict[TokenType, str] = {
     TokenType.FORK: "fork",
     TokenType.KEYMAKER: "keymaker",
     TokenType.ORACLE: "oracle",
+    TokenType.MASK: "mask",
+    TokenType.MERGE: "merge",
+    TokenType.FLIP: "flip",
+    TokenType.INVERT: "invert",
+    TokenType.UPLINK: "uplink",
+    TokenType.DOWNLINK: "downlink",
 }
 
 

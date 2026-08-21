@@ -99,7 +99,10 @@ Rules that differ from most languages:
   `a fork b` runs only if `a` is false, so a side that is never
   evaluated is never type-checked (`false splice 1` is `false`, but
   `true splice 1` is an error). `unplug` binds looser than comparison,
-  so `unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1`."""
+  so `unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1`.
+  - Bitwise operators work on integers only: `mask` is &, `merge` is |,
+    `flip` is ^, and `invert` is ~. `uplink` and `downlink` shift left
+    and right; their shift count must not be negative."""
 
 
 def _keywords() -> str:

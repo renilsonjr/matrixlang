@@ -330,7 +330,7 @@ def test_the_generator_produces_the_stage_9_shapes_too():
         for child in getattr(stmt, "else_body", None) or []:
             walk_stmt(child)
 
-    # 600, not the usual 300: `unplug (a splice b)` was already down to a
+    # 1000, not the usual 300: `unplug (a splice b)` was already down to a
     # single hit in 300 seeds before Task 6, and adding `keymaker` beside
     # `unplug` in treegen's unary choice list (5 options -> 6) dilutes
     # every existing operator's share and reshuffles which seeds land
@@ -341,19 +341,19 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     # round-trip property (test_round_trip) and Step 5's corpus counts
     # stay pinned at the canonical 300 seeds; this is a coverage meta-test
     # sampling the same generator, not that property.
-    for seed in range(600):
+    for seed in range(1000):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert splice, "no splice in 600 seeds"
-    assert fork, "no fork in 600 seeds"
-    assert unplug, "no unplug in 600 seeds"
-    assert unplug_over_binary, "no `unplug (a == b)` shape in 600 seeds"
-    assert fork_over_splice, "no `a fork (b splice c)` shape in 600 seeds"
-    assert logical_over_comparison, "no logical-over-comparison shape in 600 seeds"
-    assert splice_over_fork, "no `a splice (b fork c)` shape in 600 seeds"
-    assert unplug_under_eq, "no `(unplug a) == b` shape in 600 seeds"
-    assert unplug_over_splice, "no `unplug (a splice b)` shape in 600 seeds"
+    assert splice, "no splice in 1000 seeds"
+    assert fork, "no fork in 1000 seeds"
+    assert unplug, "no unplug in 1000 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 1000 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 1000 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 1000 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 1000 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 1000 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 1000 seeds"
 
 
 def test_the_generator_produces_every_unary_operator():
@@ -373,6 +373,7 @@ def test_the_generator_produces_every_unary_operator():
         TokenType.DECODE,
         TokenType.ENCODE,
         TokenType.KEYMAKER,
+        TokenType.INVERT,
     }
     found = set()
 
