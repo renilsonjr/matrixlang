@@ -11,7 +11,7 @@ reason the page cannot drift from the language the way `web/interpreter.js`
 did (see the commit that deleted it, and TECHNICAL-OVERVIEW §5.7).
 """
 
-from matrixlang.input import BufferSource
+from matrixlang.input import BufferSource, ListSource
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
@@ -50,9 +50,18 @@ class _NeedsInput(Exception):
     wording of an error message would change behaviour the day somebody
     reworded it. Same shape as values.CyclicValue and values.Incomparable
     -- a signal raised low and caught high -- except this one passes
-    THROUGH the interpreter rather than being caught by it, which is safe
-    because the interpreter has no cleanup and `recursion_guard` exits
-    correctly on any exception.
+    THROUGH the interpreter rather than being caught by it.
+
+    Three things make escaping mid-execution from arbitrary depth safe, and
+    all three are properties of `interpreter.py` that a future change could
+    take away: it opens no context manager (no `with` anywhere), it catches
+    nothing broad enough to swallow this (`_Jackout`, `RecursionError`,
+    `CyclicValue`, `TooManyDigits`, `ValueError`, `Incomparable` -- never a
+    bare `Exception`), and its one `finally` restores `self._env` after a
+    call frame, which is correct on any exception. Whatever state a
+    half-finished run leaves behind lives on the `Interpreter` instance,
+    and `run()` builds a fresh one every round, so none of it outlives the
+    escape.
     """
 
 
@@ -65,25 +74,43 @@ class _InteractiveSource:
     with `trace` as its only effect -- see tests/test_site_glue.py's
     determinism tests, which fail if that ever stops being true.
 
-    Wraps a `BufferSource` rather than splitting `text` itself: the same
-    Input box must read the same lines whether or not `interactive=True`,
-    and `BufferSource`'s splitting (via `matrixlang.input._split_lines`)
-    already differs from `str.splitlines()` on purpose -- `str.splitlines`
-    also breaks on \\v, \\f, \\x85 and U+2028/9, which `readline` treats as
-    ordinary characters inside a line. Re-deriving that logic here, or
-    reaching into the private helper, is exactly how the two would drift
-    apart again; delegating to `BufferSource` makes that impossible.
+    **Two channels, never one.** The Input box is text and is read through
+    `BufferSource`; each typed answer is already exactly one line and is
+    yielded verbatim. Flattening the two into one string and re-splitting
+    it does not compose: a box ending in a newline -- the common case, the
+    box is a <textarea> and readers press Enter -- shifted every later
+    answer by one, and a blank answer joined to nothing and vanished, so
+    the reader pressed Answer and watched the same question come back.
+
+    The box side wraps a `BufferSource` rather than splitting `text`
+    itself: the same Input box must read the same lines whether or not
+    `interactive=True`, and `BufferSource`'s splitting (via
+    `matrixlang.input._split_lines`) already differs from
+    `str.splitlines()` on purpose -- `str.splitlines` also breaks on \\v,
+    \\f, \\x85 and U+2028/9, which `readline` treats as ordinary
+    characters inside a line. Re-deriving that logic here, or reaching
+    into the private helper, is exactly how the two would drift apart
+    again; delegating to `BufferSource` makes that impossible.
     """
 
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, answers=None) -> None:
         self._buffer = BufferSource(text)
+        # Converted once, here. `answers` arrives from Pyodide as a JsProxy
+        # over a live JS array, not a list: indexing it lazily would both
+        # retain a proxy past the call that owns it and read an array the
+        # page goes on mutating between rounds. `ListSource` yields each
+        # element as one line and splits nothing, which is the guarantee
+        # the answers channel exists to make.
+        self._typed = ListSource(list(answers) if answers else [])
 
     def next_line(self) -> str | None:
-        # BufferSource.next_line() returns None to mean "exhausted", per
-        # the InputSource protocol -- but that branch is unreachable from
-        # here: it is turned into _NeedsInput before it can leave this
-        # method, so this source never actually returns None.
+        # Both sources return None to mean "exhausted", per the InputSource
+        # protocol -- but that branch is unreachable from here: it is turned
+        # into _NeedsInput before it can leave this method, so this source
+        # never actually returns None.
         line = self._buffer.next_line()
+        if line is None:
+            line = self._typed.next_line()
         if line is None:
             raise _NeedsInput
         return line
@@ -155,17 +182,22 @@ def operator_prompt(request: str) -> str:
 def run(
     source: str,
     stdin: str = "",
-    interactive: bool = False,  # Before max_steps -- do not "tidy" this order.
+    interactive: bool = False,  # Both before max_steps -- do not "tidy"
+    answers=None,               # this order; the test below pins it.
     max_steps: int = BROWSER_MAX_STEPS,
     # The JavaScript side calls this positionally, and a JS `undefined`
     # argument arrives here as Python `None`. `interpreter.py` treats
     # `max_steps=None` as *no step limit at all*. If `max_steps` came
-    # before `interactive`, the browser's call would have to pass it
-    # explicitly on every call just to reach `interactive`; with
-    # `interactive` here instead, a positional `glue.run(src, stdin, true)`
-    # never has to touch `max_steps`, so it can never accidentally send
-    # `None` and silently delete the runaway-loop protection -- in the one
-    # feature that adds a way to loop forever asking questions.
+    # before `interactive` and `answers`, the browser's call would have to
+    # pass it explicitly on every call just to reach them; with both here
+    # instead, a positional `glue.run(src, stdin, true, answers)` never has
+    # to touch `max_steps`, so it can never accidentally send `None` and
+    # silently delete the runaway-loop protection -- in the one feature
+    # that adds a way to loop forever asking questions.
+    #
+    # `tests/test_site_glue.py::test_run_takes_interactive_and_answers_
+    # positionally_in_that_order` calls this the way the page does, so a
+    # reorder breaks a test rather than only contradicting this comment.
 ) -> list[dict]:
     """Execute `source`, returning every event in wire shape. Never raises.
 
@@ -173,15 +205,19 @@ def run(
     has one list to walk and no error path of its own.
 
     `stdin` is whatever the reader typed into the input box, supplied up
-    front. The browser cannot block -- JavaScript is single-threaded, so a
-    read that waited would freeze the tab and the cascade drawing in it --
-    so input is buffered rather than prompted for.
+    front, and is read through `BufferSource` in every mode. `answers` is
+    the separate, ordered list of lines the reader gave one at a time when
+    the page asked; each is one line exactly as typed and is never re-split.
+    They stay two arguments because they are two kinds of thing -- see
+    `_InteractiveSource` for what merging them cost.
 
-    `interactive=True` changes only what happens when those answers run
-    out: instead of the "no input left to read" error, the events so far
-    come back with a terminal {"kind": "needs_input"}, and the caller is
-    expected to ask the reader and re-run with one more answer. Callers
-    that do not opt in see exactly the old behaviour.
+    `interactive=True` changes only what happens when both run out. The
+    browser cannot block -- JavaScript is single-threaded, so a read that
+    waited would freeze the tab and the cascade drawing in it -- so instead
+    of the "no input left to read" error, the events so far come back with
+    a terminal {"kind": "needs_input"}, and the caller is expected to ask
+    the reader and re-run from the start with one more answer. Callers that
+    do not opt in see exactly the old behaviour, and `answers` is ignored.
     """
     from matrixlang.errors import MatrixLangError, recursion_guard
 
@@ -192,7 +228,9 @@ def run(
     except MatrixLangError as error:
         return [{"kind": "error", "message": f"[line {error.line}, column {error.column}] {error.message}"}]
 
-    source_for_run = _InteractiveSource(stdin) if interactive else BufferSource(stdin)
+    source_for_run = (
+        _InteractiveSource(stdin, answers) if interactive else BufferSource(stdin)
+    )
     try:
         Interpreter(
             sink=sink, max_steps=max_steps, source=source_for_run
@@ -228,6 +266,14 @@ def _input_hint(error, stdin: str) -> str:
 
     Part-filled is a different mistake and gets a different sentence, because
     "the box is empty" would simply be false.
+
+    The interactive page no longer reaches either sentence: with
+    `interactive=True` the shortfall becomes a `needs_input` marker and a
+    question, never `_EXHAUSTED`, so there is no error to hint at. What still
+    reaches here is every non-interactive caller -- the tests below, and any
+    embedder that runs `glue.run` without opting in. Kept rather than deleted
+    because that path is the one this module has always promised, and the
+    hint is still right for it.
     """
     if _EXHAUSTED not in error.message:
         return ""

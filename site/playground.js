@@ -32,8 +32,13 @@ const GATED_CONTROL_IDS = [
 // slower every round. Bounded the way the interpreter bounds a runaway loop.
 const MAX_ANSWER_ROUNDS = 100;
 
-// The interactive session: answers collected so far, and how many events the
-// cascade has already been given. Both reset when Run is pressed.
+// The interactive session: the answers the reader has typed one at a time,
+// and how many events the cascade has already been given. Both reset when Run
+// is pressed. `answers` holds typed answers ONLY -- the Input box travels as
+// `stdin`, a separate argument, because the box is text that Python splits
+// into lines and an answer is already exactly one line. Merging the two into
+// one string and re-splitting it is what shifted every answer after a box
+// that ended in a newline and made a blank answer disappear entirely.
 let answers = [];
 let drawnCount = 0;
 let rounds = 0;
@@ -144,19 +149,24 @@ function runProgram() {
   // design, and re-clearing would restart the animation on every answer.
   cascade.clear();
   el("miss").hidden = true;
-  answers = el("program-input").value ? [el("program-input").value] : [];
+  answers = [];
   drawnCount = 0;
   rounds = 0;
   runRound();
 }
 
 function runRound() {
-  // Three positional args, no placeholder: `interactive` sits before
-  // `max_steps` precisely so nothing has to pass `undefined` past it. A JS
-  // `undefined` becomes Python None, and None means "no step limit" -- the
-  // browser would lose its runaway-loop protection without a word.
+  // Four positional args, no placeholder: `interactive` and `answers` both
+  // sit before `max_steps` precisely so nothing has to pass `undefined` past
+  // it. A JS `undefined` becomes Python None, and None means "no step limit"
+  // -- the browser would lose its runaway-loop protection without a word.
+  //
+  // The box is read here, not snapshotted at Run, which is the same
+  // treatment the editor beside it already gets: a reader who edits either
+  // one mid-session changes what the re-run replays. Snapshotting the box
+  // alone would fix half of that and hide the half that matters more.
   const events = glue
-    .run(el("editor").value, answers.join("\n"), true)
+    .run(el("editor").value, el("program-input").value, true, answers)
     .toJs({ dict_converter: Object.fromEntries });
 
   // Only what has not been drawn yet. The re-run reproduces every earlier
@@ -302,9 +312,17 @@ function toggleCascadeFace() {
   face = face === "glyph" ? "latin" : "glyph";
   const button = el("cascade-face");
   button.textContent = face === "glyph" ? "Latin" : "Glyph wall";
-  // Applies to the next run: the wall is cleared per run by design, and
-  // toggling mid-fall would need cascade.js to re-render its history —
-  // presentation, not worth touching the copied file for.
+  // Applies to what falls next, not to what is already on the wall: the
+  // wall is cleared per run by design, and toggling mid-fall would need
+  // cascade.js to re-render its history — presentation, not worth touching
+  // the copied file for.
+  //
+  // A run now spans rounds, so "next run" is no longer "next press of Run":
+  // toggling while a question is open draws the remaining suffix in the new
+  // face and leaves a wall in two faces at once. Consistent with the above
+  // rather than a separate bug — the wall shows the face each line had when
+  // it fell — and clearing to fix it would restart the animation, which is
+  // the one thing the round design exists to avoid.
 }
 
 // The glyph face is a face *of the source it was rendered from*. The moment

@@ -268,23 +268,99 @@ test("answering re-runs and feeds the cascade only the new events", () => {
   assert.equal(page.el("answer-row").hidden, true, "the row stayed open after finishing");
 });
 
-test("the answer is passed to the next run, appended to the box's contents", () => {
-  const page = loadPlayground();
-  const seen = [];
+/**
+ * A glue that records every call and keeps asking for one more line, up to
+ * `until` answers. Enough to watch what the page sends across many rounds.
+ */
+function recordingGlue(page, { until = Infinity } = {}) {
+  const calls = [];
   page.setGlue({
-    run: (source, stdin) => {
-      seen.push(stdin);
-      return seen.length === 1
-        ? [{ kind: "needs_input" }]
-        : [{ kind: "output", text: "ok", glyphs: "ok" }];
+    run: (source, stdin, interactive, answers) => {
+      // Copied, not stored by reference: `answers` is the page's own live
+      // array, pushed into between rounds, so every entry would otherwise
+      // read as its final state and a test of what each round sent would
+      // assert nothing. `?? []` so that a page which stops passing a fourth
+      // argument fails the test that is about the argument list, rather than
+      // throwing inside every test that merely needs a glue.
+      calls.push({ source, stdin, interactive, answers: [...(answers ?? [])] });
+      return calls.length > until
+        ? [{ kind: "output", text: "done", glyphs: "done" }]
+        : [{ kind: "output", text: "next?", glyphs: "next?" }, { kind: "needs_input" }];
     },
   });
+  return calls;
+}
+
+test("the program receives exactly the lines the reader supplied", () => {
+  // The box and the typed answers are two channels and must stay two. They
+  // were once flattened into one string here and split apart again in Python,
+  // which composes only by luck: this test's box ends in a newline, the way a
+  // <textarea> the reader pressed Enter in does, and the join-then-split
+  // handed the second question "" and threw the typed answer away. A blank
+  // answer vanished outright. Both are invisible on screen, so nothing but a
+  // test that looks at the arguments can catch them coming back.
+  const page = loadPlayground();
+  const calls = recordingGlue(page, { until: 3 });
 
   page.el("editor").value = "trace jackin";
-  page.el("program-input").value = "first";
+  page.el("program-input").value = "ana\n";
   page.el("run").click();
-  page.el("answer").value = "second";
+  page.el("answer").value = "bob";
+  page.el("answer-send").click();
+  page.el("answer").value = "";
   page.el("answer-send").click();
 
-  assert.deepEqual(seen, ["first", "first\nsecond"]);
+  assert.deepEqual(
+    calls.map((c) => ({ stdin: c.stdin, answers: c.answers })),
+    [
+      { stdin: "ana\n", answers: [] },
+      { stdin: "ana\n", answers: ["bob"] },
+      // The blank answer is a line the reader gave, not an absence.
+      { stdin: "ana\n", answers: ["bob", ""] },
+    ],
+    "the box and the typed answers were merged into one channel again",
+  );
+});
+
+test("glue.run is called with interactive and the answers list positionally", () => {
+  // Verified by mutation: dropping the `true` reverted the whole feature to
+  // the old "no input left to read" error with every test still green,
+  // because the Python tests all call glue.run by keyword and this file
+  // stubbed glue without looking at what it was handed. Position is the
+  // contract between the two halves, so something has to assert it.
+  const page = loadPlayground();
+  const calls = recordingGlue(page, { until: 1 });
+
+  page.el("editor").value = "trace jackin";
+  page.el("program-input").value = "box";
+  page.el("run").click();
+  page.el("answer").value = "typed";
+  page.el("answer-send").click();
+
+  assert.equal(calls[0].source, "trace jackin", "argument 1 is not the program");
+  assert.equal(calls[0].stdin, "box", "argument 2 is not the Input box");
+  assert.equal(calls[0].interactive, true, "argument 3 is not the interactive flag");
+  assert.deepEqual(calls[1].answers, ["typed"], "argument 4 is not the answers list");
+});
+
+test("a program that asks forever is stopped rather than prompting forever", () => {
+  // Each answer costs a full re-run, so an unbounded ask-loop makes the page
+  // slower every round and never stops. The cap is the same promise the
+  // interpreter's step limit makes, and until now nothing tested it: not the
+  // limit, not the message, not that the row goes away when it fires.
+  const page = loadPlayground();
+  const calls = recordingGlue(page); // never satisfied
+
+  page.el("editor").value = "dejavu true\n  trace jackin\nflatline";
+  page.el("run").click();
+  for (let i = 0; i < 100; i += 1) {
+    page.el("answer").value = `answer ${i}`;
+    page.el("answer-send").click();
+  }
+
+  assert.equal(page.el("answer-row").hidden, true, "the page is still asking past the cap");
+  assert.equal(page.el("miss").hidden, false);
+  assert.match(page.el("miss").textContent, /more than 100 answers/);
+  // The first run plus one per answer, and then it stops asking.
+  assert.equal(calls.length, 101, "the cap fired at the wrong round");
 });
