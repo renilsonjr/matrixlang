@@ -26,20 +26,29 @@
     return out;
   }
 
+  // walk text nodes only — preserves a[href] anchors
+  function walk(el, fn) {
+    for (const n of el.childNodes) {
+      if (n.nodeType === 3) fn(n); // TEXT_NODE
+      else if (n.nodeType === 1 && !['A','BUTTON','IMG','SVG','PICTURE','VIDEO'].includes(n.tagName)) walk(n, fn);
+    }
+  }
+
   function applyToTweet(articleEl) {
     try {
       const textEl = articleEl.querySelector('div[data-testid="tweetText"]');
       if (!textEl) return;
       if (textEl.dataset.mlOriginal !== undefined) return; // already in glyph face
-      // Save original text (innerText, not innerHTML — links stay DOM)
-      const original = textEl.innerText;
-      textEl.dataset.mlOriginal = original;
-      textEl.innerText = transliterate(original);
+      const originalText = textEl.innerText;
+      const originalHTML = textEl.innerHTML;
+      textEl.dataset.mlOriginal = originalHTML; // for faithful restore (preserves anchors)
+      textEl.dataset.mlOriginalText = originalText; // for helper
+      walk(textEl, (t) => { t.data = transliterate(t.data); });
       // Append helper line once
       if (!articleEl.querySelector(".ml-original")) {
         const helper = document.createElement("div");
         helper.className = "ml-original";
-        helper.textContent = "↳ original: " + original;
+        helper.textContent = "↳ original: " + originalText;
         textEl.after(helper);
       }
     } catch {}
@@ -49,8 +58,9 @@
     try {
       const textEl = articleEl.querySelector('div[data-testid="tweetText"]');
       if (!textEl || textEl.dataset.mlOriginal === undefined) return;
-      textEl.innerText = textEl.dataset.mlOriginal;
+      textEl.innerHTML = textEl.dataset.mlOriginal;
       delete textEl.dataset.mlOriginal;
+      delete textEl.dataset.mlOriginalText;
       const helper = articleEl.querySelector(".ml-original");
       if (helper) helper.remove();
     } catch {}
