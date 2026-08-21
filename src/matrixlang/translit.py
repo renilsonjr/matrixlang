@@ -65,9 +65,20 @@ _POOL = [chr(code) for code in range(0xFF61, 0xFF9E)]
 
 _LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
-# The 20 punctuation marks that actually appear in MatrixLang output:
-# string contents, the minus sign on negative integers, and ordinary prose.
-_PUNCTUATION = ".,!?'\"-:;()[]/+*=_@#"
+# The 22 punctuation marks that actually appear in MatrixLang output:
+# string contents, the minus sign on negative integers, the brackets and
+# braces of a traced collection, and ordinary prose.
+#
+# ORDER IS IDENTITY HERE. Glyphs are handed out by popping `_available` in
+# sequence, so inserting a character shifts every assignment after it, and
+# SHIFT and ESCAPE are popped after this loop and shift on any growth at
+# all. New marks are therefore APPENDED: that keeps all 26 letters, all 10
+# digits and the 20 marks that came before exactly where they were, and
+# moves only the two markers. Nothing pins a marker's identity — the tests
+# refer to SHIFT and ESCAPE by name and the browser never owns a copy of
+# this table (web-ui/app.js) — but site/intro.json ships transliterated
+# text and must be regenerated whenever anything here moves.
+_PUNCTUATION = ".,!?'\"-:;()[]/+*=_@#{}"
 
 # Digits reuse the LANGUAGE's own glyphs, so a number looks identical in
 # program text and in transliterated output. Consistency costs nothing.
