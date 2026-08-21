@@ -94,6 +94,19 @@ class Incomparable(Exception):
         super().__init__(f"cannot compare {left} with {right}")
 
 
+class BadKey(Exception):
+    """A value was used as a dictionary key that cannot be one.
+
+    Position-less, and converted to a MatrixLangError by the interpreter,
+    for the same reason as CyclicValue and Incomparable: this module has
+    no source positions and must not invent them.
+    """
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.name = name
+
+
 class TooManyDigits(Exception):
     """A number with more digits than Python will turn into text.
 
@@ -135,6 +148,24 @@ def is_list(value: object) -> bool:
     return type(value) is list
 
 
+def is_dict(value: object) -> bool:
+    return type(value) is dict
+
+
+def check_key(key: object) -> None:
+    """Refuse keys that cannot work, before one reaches a dictionary.
+
+    Strings and integers only. Booleans are refused because CPython gives
+    True and 1 the same hash and calls them equal, so `{true: "a", 1: "b"}`
+    would collapse into one entry -- the reader writes two keys and gets
+    one, with nothing to tell them. Lists and dictionaries are refused
+    because they are mutable: a key that changes after insertion is a
+    lookup that stops working for reasons invisible where it is written.
+    """
+    if is_bool(key) or not (is_str(key) or is_int(key)):
+        raise BadKey(type_name(key))
+
+
 def type_name(value: object) -> str:
     """The language's own word for a value's type, for error messages."""
     if is_int(value):
@@ -147,6 +178,8 @@ def type_name(value: object) -> str:
         return "agent"
     if is_list(value):
         return "list"
+    if is_dict(value):
+        return "dictionary"
     return type(value).__name__
 
 
@@ -182,6 +215,15 @@ def _display(value: object, nested: bool, seen: frozenset) -> str:
             raise CyclicValue
         seen = seen | {id(value)}
         return "[" + ", ".join(_display(v, True, seen) for v in value) + "]"
+    if is_dict(value):
+        if id(value) in seen:
+            raise CyclicValue
+        seen = seen | {id(value)}
+        inner = ", ".join(
+            f"{_display(k, True, seen)}: {_display(v, True, seen)}"
+            for k, v in value.items()
+        )
+        return "{" + inner + "}"
     try:
         return str(value)
     except ValueError:
@@ -213,6 +255,26 @@ def equal(left: object, right: object) -> bool:
 def _equal(left: object, right: object, seen: set) -> bool:
     if type_name(left) != type_name(right):
         raise Incomparable(type_name(left), type_name(right))
+    if is_dict(left):
+        # Same hole as the list branch, twice over: Python says
+        # {"a": 1} == {"a": True} and {1: "x"} == {True: "x"}. The second
+        # is closed upstream -- check_key refuses boolean keys before one
+        # ever reaches a dictionary, so `key not in right` below can trust
+        # Python's own hashing/equality on KEYS. The first is not closed
+        # anywhere else, so values are recursed into manually here exactly
+        # as list elements are, rather than compared with Python's `==`.
+        if len(left) != len(right):
+            return False
+        pair = (id(left), id(right))
+        if pair in seen:
+            return True
+        seen.add(pair)
+        for key, value in left.items():
+            if key not in right:
+                return False
+            if not _equal(value, right[key], seen):
+                return False
+        return True
     if not is_list(left):
         # Agents are identity-compared by Function.__eq__; scalars are
         # value-compared. Both are correct here because the type check
