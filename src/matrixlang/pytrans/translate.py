@@ -12,8 +12,8 @@ import ast
 
 from matrixlang.nodes import (
     Assign, Binary, BoolLiteral, Call, Declare, DictLiteral, Expr, ExprStmt,
-    Index, IndexAssign, ListLiteral, Name, NumberLiteral, Program, Stmt,
-    StringLiteral, Trace, Unary,
+    FunctionDef, If, Index, IndexAssign, ListLiteral, Name, NumberLiteral,
+    Program, Return, Stmt, StringLiteral, Trace, Unary, While,
 )
 from matrixlang.render import render_ascii
 from matrixlang.tokens import TokenType
@@ -95,6 +95,22 @@ class _Translator:
             return self._assign(node)
         if isinstance(node, ast.AugAssign):
             return self._aug_assign(node)
+        if isinstance(node, ast.If):
+            return [
+                If(
+                    self.condition(node.test),
+                    self.body(node.body),
+                    self.body(node.orelse) if node.orelse else None,
+                )
+            ]
+        if isinstance(node, ast.While):
+            if node.orelse:
+                raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
+            return [While(self.condition(node.test), self.body(node.body))]
+        if isinstance(node, ast.FunctionDef):
+            return self._function(node)
+        if isinstance(node, ast.Return):
+            return [Return(self.expression(node.value) if node.value else None)]
         raise _Unsupported(self._no(self._culprit(node)))
 
     def _expression_statement(self, node: ast.Expr) -> list[Stmt]:
@@ -190,6 +206,55 @@ class _Translator:
                 Binary(Name(node.target.id), op, self.expression(node.value)),
             )
         ]
+
+    def condition(self, node: ast.expr) -> Expr:
+        """A condition, refusing anything that leans on truthiness.
+
+        MatrixLang's `redpill` takes a boolean and nothing else -- an empty
+        list is not false, and 0 is not false. Python's `if xs:` means four
+        different things depending on a runtime type, and choosing between
+        them would mean inferring that type and sometimes guessing wrong.
+        A program that runs and means something slightly different is the
+        one outcome worth engineering against, so this refuses instead.
+        """
+        if isinstance(node, (ast.Compare, ast.BoolOp)):
+            return self.expression(node)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return self.expression(node)
+        if isinstance(node, ast.Constant) and node.value in (True, False):
+            return self.expression(node)
+        shown = ast.unparse(node)
+        raise _Unsupported(
+            Refusal(
+                f"`{shown}` relies on truthiness, which MatrixLang does not "
+                "have — a condition must already be a boolean",
+                node.lineno,
+                node.col_offset,
+                f"a list or string →  len({shown}) > 0\n"
+                f"a number        →  {shown} != 0",
+            )
+        )
+
+    def _function(self, node: ast.FunctionDef) -> list[Stmt]:
+        args = node.args
+        if (
+            args.defaults or args.kw_defaults or args.vararg or args.kwarg
+            or args.posonlyargs or args.kwonlyargs
+        ):
+            raise _Unsupported(
+                self._no(node, "MatrixLang agents take plain positional parameters")
+            )
+        if node.decorator_list:
+            raise _Unsupported(self._no(node, "MatrixLang has no decorators"))
+        names = [a.arg for a in args.args]
+        # An agent body is its own frame, so it gets its own scope, seeded
+        # with the parameters -- they are bound on entry and must not be
+        # re-declared inside.
+        self.scopes.append(set(names))
+        body = self.body(node.body)
+        self.scopes.pop()
+        self._bind(node.name)
+        return [FunctionDef(node.name, names, body)]
 
     def expression(self, node: ast.expr) -> Expr:
         if isinstance(node, ast.Constant):

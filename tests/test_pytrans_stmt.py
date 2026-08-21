@@ -61,3 +61,78 @@ def test_multiple_assignment_is_refused():
 
 def test_tuple_unpacking_is_refused():
     assert refused("a, b = 1, 2\n")[0].idiom is not None
+
+
+def test_if_becomes_redpill():
+    assert ml("if a == 1:\n    print(a)\n") == "redpill a == 1\n  trace a\nflatline\n"
+
+
+def test_if_else_becomes_redpill_bluepill():
+    source = "if a == 1:\n    print(1)\nelse:\n    print(2)\n"
+    assert ml(source) == (
+        "redpill a == 1\n  trace 1\nbluepill\n  trace 2\nflatline\n"
+    )
+
+
+def test_elif_nests_inside_the_else():
+    source = "if a == 1:\n    print(1)\nelif a == 2:\n    print(2)\n"
+    assert ml(source) == (
+        "redpill a == 1\n"
+        "  trace 1\n"
+        "bluepill\n"
+        "  redpill a == 2\n"
+        "    trace 2\n"
+        "  flatline\n"
+        "flatline\n"
+    )
+
+
+def test_while_becomes_dejavu():
+    source = "n = 0\nwhile n < 3:\n    n += 1\n"
+    assert ml(source) == "construct n = 0\ndejavu n < 3\n  n = n + 1\nflatline\n"
+
+
+def test_a_function_becomes_an_agent():
+    source = "def double(x):\n    return x * 2\n"
+    assert ml(source) == "agent double(x)\n  jackout x * 2\nflatline\n"
+
+
+def test_a_bare_return_becomes_a_bare_jackout():
+    source = "def f(x):\n    return\n"
+    assert ml(source) == "agent f(x)\n  jackout\nflatline\n"
+
+
+def test_a_function_body_is_its_own_scope():
+    # `x` is declared in the agent and again outside it, because MatrixLang
+    # gives an agent body its own frame.
+    source = "def f():\n    x = 1\n    return x\nx = 2\n"
+    assert ml(source) == (
+        "agent f()\n  construct x = 1\n  jackout x\nflatline\nconstruct x = 2\n"
+    )
+
+
+def test_truthiness_is_refused_with_both_rewrites():
+    refusal = refused("result = f()\nif result:\n    print(1)\n")[0]
+    assert "truthiness" in refusal.reason
+    assert "len(result) > 0" in refusal.idiom
+    assert "result != 0" in refusal.idiom
+
+
+def test_a_comparison_condition_is_not_refused():
+    assert ml("if a == 1:\n    print(1)\n").startswith("redpill a == 1")
+
+
+def test_a_boolean_operator_condition_is_not_refused():
+    assert ml("if a == 1 and b == 2:\n    print(1)\n").startswith("redpill")
+
+
+def test_a_not_condition_is_not_refused():
+    assert ml("if not a == 1:\n    print(1)\n").startswith("redpill unplug")
+
+
+def test_a_while_with_a_truthy_condition_is_refused():
+    assert "truthiness" in refused("while xs:\n    print(1)\n")[0].reason
+
+
+def test_default_arguments_are_refused():
+    assert "positional" in refused("def f(a=1):\n    return a\n")[0].idiom
