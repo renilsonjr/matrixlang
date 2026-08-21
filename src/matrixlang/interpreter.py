@@ -89,6 +89,7 @@ def _display_key(key: object) -> str:
     """
     return to_display([key])[1:-1]
 
+
 # Explicit ASCII set, matching lexer._DIGITS. Bare int() is far more
 # tolerant than the lexer's own number grammar -- it accepts "1_000",
 # Arabic-Indic digits ("٣٤٥"), and other Unicode decimal digits, none of
@@ -245,10 +246,15 @@ class Interpreter:
                 text = to_display(value)
             except CyclicValue:
                 # NOT "expression is nested too deeply", which is what the
-                # RecursionError path reports and which is false: a list
+                # RecursionError path reports and which is false: a value
                 # that contains itself may be one element long.
+                #
+                # "a value", not "a list": a dictionary can hold itself
+                # too (`d["me"] = d`), and naming a list in that case is
+                # simply false — the message reaches the browser verbatim
+                # in the SSE error payload.
                 raise RuntimeErrorML(
-                    "cannot display a list that contains a cycle",
+                    "cannot display a value that contains a cycle",
                     stmt.line,
                     stmt.column,
                 ) from None
@@ -419,7 +425,7 @@ class Interpreter:
             if expr.op is TokenType.LENGTH:
                 if not (is_list(operand) or is_str(operand) or is_dict(operand)):
                     raise RuntimeErrorML(
-                        f"'length' takes a list or a string, got "
+                        f"'length' takes a list, a string or a dictionary, got "
                         f"{type_name(operand)}",
                         expr.line,
                         expr.column,

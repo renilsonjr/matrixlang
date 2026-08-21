@@ -107,6 +107,16 @@ def test_oracle_on_a_non_dictionary_is_an_error():
     assert "'oracle' takes a dictionary, got list" in error.message
 
 
+def test_tracing_a_cyclic_dictionary_does_not_call_it_a_list():
+    # There is no list in this program. The diagnostic reaches the
+    # browser verbatim in the SSE error payload, so naming the wrong
+    # container is a lie a reader can see.
+    error = fails('construct d = {}\nd["me"] = d\ntrace d\n')
+    assert "cycle" in error.message.lower()
+    assert "list" not in error.message
+    assert error.line == 3
+
+
 def test_a_later_duplicate_key_wins():
     assert run('trace {"a": 1, "a": 2}["a"]\n') == "2\n"
 

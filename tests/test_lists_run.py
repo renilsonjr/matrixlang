@@ -184,7 +184,7 @@ def test_adding_an_integer_to_a_list_is_an_error():
 
 def test_length_of_an_integer_is_an_error():
     error = fails("trace length 5\n")
-    assert "'length' takes a list or a string" in error.message
+    assert "'length' takes a list, a string or a dictionary" in error.message
 
 
 def test_length_of_a_boolean_is_an_error():

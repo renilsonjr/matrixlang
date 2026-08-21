@@ -70,7 +70,11 @@ NOTHING = _Nothing()
 
 
 class CyclicValue(Exception):
-    """A list that contains itself, directly or through other lists.
+    """A value that contains itself, directly or through other values.
+
+    Lists were the only container that could when this was written;
+    dictionaries can too (`d["me"] = d`), and the walk in `_display`
+    descends into both.
 
     Raised rather than recursing forever. It is NOT a MatrixLangError,
     because this module may import nothing (tests/test_architecture.py)

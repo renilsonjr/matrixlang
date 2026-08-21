@@ -57,8 +57,10 @@ flatline"""
 # looks plausible and fails.
 _RULES = """\
 Rules that differ from most languages:
-- Blocks are opened by a keyword and closed by `flatline`. There are no
-  braces, no colons and no significant indentation.
+- Blocks are opened by a keyword and closed by `flatline`. A block is
+  never wrapped in braces, never introduced by a colon, and indentation is
+  never significant. Braces and colons are real punctuation, but only
+  inside a dictionary literal.
 - `construct` declares a name. Plain `=` assigns and requires the name to
   have been declared already. Re-declaring in the same scope is an error.
 - Conditions must be a boolean. `redpill 1` is an error, not a taken
