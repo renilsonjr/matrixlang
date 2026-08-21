@@ -55,7 +55,9 @@ xs[n] != target` never reads past the end of `xs` — **dictionaries** —
 `d["a"] = v` to write or insert, `length` for the entry count, `keymaker`
 for the keys in insertion order, and the infix `oracle` to ask whether a
 key is there before reading it, since reading a missing one is an error —
-and **Operator**, an assistive companion that writes MatrixLang from
+**bitwise operators** — `mask`, `merge`, `flip`, `invert`, `uplink` and
+`downlink` operate on integers, with non-negative shift counts — **Operator**,
+**Operator**, an assistive companion that writes MatrixLang from
 plain language, in the terminal or in a browser, and **Scribe**, a
 keyless, deterministic companion that does the same without a key, an
 SDK, or the network.
@@ -129,7 +131,7 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — nineteen keywords, five types, and both faces —
+teaches the whole language — twenty-five keywords, five types, and both faces —
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade

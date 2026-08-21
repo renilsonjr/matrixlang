@@ -76,6 +76,8 @@ _BINARY_OPS = [
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH,
     TokenType.ORACLE,
+    TokenType.MASK, TokenType.MERGE, TokenType.FLIP,
+    TokenType.UPLINK, TokenType.DOWNLINK,
 ]
 
 
@@ -195,6 +197,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
                     TokenType.DECODE,
                     TokenType.ENCODE,
                     TokenType.KEYMAKER,
+                    TokenType.INVERT,
                 ]
             ),
             gen_expression(rng, depth - 1),

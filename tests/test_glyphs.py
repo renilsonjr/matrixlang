@@ -23,7 +23,7 @@ def test_the_table_covers_exactly_the_49_slots():
         | {"#"}
     )
     assert set(GLYPHS) == expected
-    assert len(expected) == 49
+    assert len(expected) == 55
 
 
 def test_the_glyph_budget_is_tracked_not_discovered():
@@ -38,7 +38,7 @@ def test_the_glyph_budget_is_tracked_not_discovered():
         for code in range(BLOCK_START, BLOCK_END + 1)
         if chr(code) not in set(GLYPHS.values())
     )
-    assert free == 7
+    assert free == 1
 
 
 def test_the_mapping_is_bijective():
