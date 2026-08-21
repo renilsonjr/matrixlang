@@ -18,7 +18,13 @@ children drawn from the full expression space (so `a fork (b splice
 c)` and logical-over-comparison shapes occur), and `unplug` alongside
 the other unary operators (so `unplug (a == b)` occurs). Stage 9
 renumbered every level in render._LEVEL, and these are the shapes that
-make a wrong level in that table loud instead of silent.
+make a wrong level in that table loud instead of silent. And — Stage 10
+— dict literals (empty and populated, keys drawn from the full
+expression space rather than only strings, so a nonsense key like a
+binary expression still exercises precedence), `keymaker` alongside the
+other unary operators, and `oracle` alongside the other binary
+operators: a node type added to the language but not here would sit
+outside this property exactly as `decode`/`encode` once did, silently.
 test_roundtrip has a test asserting this coverage actually occurs — a
 generator that stops producing the hard shapes would quietly gut the
 property.
@@ -31,6 +37,7 @@ from matrixlang.nodes import (
     Binary,
     BoolLiteral,
     Declare,
+    DictLiteral,
     Expr,
     If,
     Index,
@@ -68,6 +75,7 @@ _BINARY_OPS = [
     TokenType.EQ, TokenType.NEQ,
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH,
+    TokenType.ORACLE,
 ]
 
 
@@ -170,14 +178,14 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             gen_expression(rng, depth - 1),
         )
     if roll < 0.50:
-        # Every unary operator — all five. Keeping this list complete is
+        # Every unary operator — all six. Keeping this list complete is
         # what puts each keyword through the mixed-face round trip, which
         # nothing else covers: the hand-written render tests read one face
         # at a time. unplug over a binary is the shape that would render
         # as `unplug a == b` re-parsing differently if its level were
-        # wrong. The operands are nonsense for `decode` and `encode` — the
-        # property under test is parse(render(t)) == t, which never runs
-        # the tree.
+        # wrong. The operands are nonsense for `decode`, `encode` and
+        # `keymaker` — the property under test is parse(render(t)) == t,
+        # which never runs the tree.
         return Unary(
             rng.choice(
                 [
@@ -186,6 +194,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
                     TokenType.UNPLUG,
                     TokenType.DECODE,
                     TokenType.ENCODE,
+                    TokenType.KEYMAKER,
                 ]
             ),
             gen_expression(rng, depth - 1),
@@ -194,8 +203,16 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
         # Calls, with arguments drawn from the full space so f(a + b)
         # occurs constantly rather than by luck.
         return gen_call(rng, depth - 1)
-    if roll < 0.72:
+    if roll < 0.66:
+        # List and dict literals split this band down the middle rather
+        # than dict stealing a slice from a neighbouring band. The split
+        # reuses the `roll` already drawn for this node instead of a
+        # fresh rng.random() call, so it doesn't shift the RNG stream
+        # consumed by this node's children and siblings relative to
+        # before dict literals existed.
         return gen_list(rng, depth - 1)
+    if roll < 0.72:
+        return gen_dict(rng, depth - 1)
     if roll < 0.82:
         return gen_index(rng, depth - 1)
     return gen_atom(rng)
@@ -216,6 +233,23 @@ def gen_list(rng: random.Random, depth: int) -> ListLiteral:
         return ListLiteral([])
     return ListLiteral(
         [gen_expression(rng, max(0, depth)) for _ in range(rng.randint(1, 3))]
+    )
+
+
+def gen_dict(rng: random.Random, depth: int) -> DictLiteral:
+    """A dict literal, empty a fifth of the time so {} is covered. Keys
+    are drawn from the full expression space like values, not just string
+    literals: parse(render(t)) == t never evaluates the tree, so a key
+    that could never be a real key at runtime is still a valid shape to
+    render and re-parse, and it's the shape most likely to expose a
+    precedence bug."""
+    if depth <= 0 or rng.random() < 0.2:
+        return DictLiteral([])
+    return DictLiteral(
+        [
+            (gen_expression(rng, depth - 1), gen_expression(rng, depth - 1))
+            for _ in range(rng.randint(1, 3))
+        ]
     )
 
 
