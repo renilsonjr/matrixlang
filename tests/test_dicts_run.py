@@ -1,0 +1,96 @@
+"""Stage 8 — running dictionary programs end to end."""
+
+import io
+
+import pytest
+
+from matrixlang.errors import RuntimeErrorML
+from matrixlang.interpreter import Interpreter
+from matrixlang.lexer import lex
+from matrixlang.parser import parse
+
+
+def run(source):
+    out = io.StringIO()
+    Interpreter(out=out).run(parse(lex(source)))
+    return out.getvalue()
+
+
+def fails(source):
+    with pytest.raises(RuntimeErrorML) as caught:
+        run(source)
+    return caught.value
+
+
+def test_a_dictionary_literal_evaluates():
+    assert run('construct d = {"a": 1}\ntrace d["a"]\n') == "1\n"
+
+
+def test_lookup_of_a_missing_key_is_an_error():
+    error = fails('construct d = {"a": 1}\ntrace d["b"]\n')
+    assert 'no key "b" in this dictionary' in error.message
+
+
+def test_assignment_inserts_a_new_key():
+    assert run('construct d = {"a": 1}\nd["b"] = 2\ntrace d["b"]\n') == "2\n"
+
+
+def test_assignment_updates_an_existing_key_without_moving_it():
+    source = 'construct d = {"a": 1, "b": 2}\nd["a"] = 9\ntrace keymaker d\n'
+    assert run(source) == '["a", "b"]\n'
+
+
+def test_length_of_a_dictionary_is_its_entry_count():
+    assert run('trace length {"a": 1, "b": 2}\n') == "2\n"
+
+
+def test_keymaker_returns_keys_in_insertion_order():
+    # Insertion order is a REQUIREMENT, not an accident of CPython. The
+    # playground re-runs a program from the start when it needs input and
+    # draws only the events it has not drawn yet, which is honest only
+    # because a re-run reproduces the one before it exactly. A keymaker
+    # whose order varied would make the second run diverge from the first
+    # and the reader would watch their own output change underneath them.
+    source = 'construct d = {"z": 1, "a": 2}\nd["m"] = 3\ntrace keymaker d\n'
+    assert run(source) == '["z", "a", "m"]\n'
+
+
+def test_oracle_finds_a_present_key():
+    assert run('trace {"a": 1} oracle "a"\n') == "true\n"
+
+
+def test_oracle_rejects_an_absent_key():
+    assert run('trace {"a": 1} oracle "b"\n') == "false\n"
+
+
+def test_a_boolean_key_is_refused_with_a_position():
+    error = fails("construct d = {true: 1}\n")
+    assert "boolean" in error.message
+    assert error.line == 1
+
+
+def test_a_list_key_is_refused():
+    assert "list" in fails("construct d = {[1]: 2}\n").message
+
+
+def test_a_key_assigned_later_is_also_checked():
+    assert "boolean" in fails('construct d = {}\nd[true] = 1\n').message
+
+
+def test_keymaker_of_a_non_dictionary_is_an_error():
+    error = fails("trace keymaker [1, 2]\n")
+    assert "'keymaker' takes a dictionary, got list" in error.message
+
+
+def test_oracle_on_a_non_dictionary_is_an_error():
+    error = fails('trace [1, 2] oracle "a"\n')
+    assert "'oracle' takes a dictionary, got list" in error.message
+
+
+def test_a_later_duplicate_key_wins():
+    assert run('trace {"a": 1, "a": 2}["a"]\n') == "2\n"
+
+
+def test_nested_dictionaries_index_through():
+    source = 'construct xs = [{"g": "A"}, {"g": "B"}]\ntrace xs[1]["g"]\n'
+    assert run(source) == "B\n"
