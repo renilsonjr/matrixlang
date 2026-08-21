@@ -161,3 +161,27 @@ def test_the_reader_table_documents_the_shift_glyph():
 
 def test_the_reader_table_documents_passthrough():
     assert "pass through unchanged" in table_for_readers()
+
+
+# --- The samples this table is published alongside ----------------------
+
+
+def test_the_published_wake_up_neo_sample_still_decodes():
+    # README.md and the learning guide both print a transliterated
+    # `wake up, Neo` and tell the reader it decodes. Nothing pinned them.
+    # When the brace slots were added and SHIFT moved two pool glyphs
+    # later, site/intro.json was caught at once -- it is generated and
+    # tested against a fresh run -- while these two hand-written samples
+    # silently began decoding as `wake up, {neo`, in the project's front
+    # door. This is the pin they were missing: it fails the next time the
+    # table shifts, and the fix is to re-render the sample.
+    from pathlib import Path
+
+    sample = transliterate("wake up, Neo")
+    root = Path(__file__).parent.parent
+    for name in ("README.md", "docs/LEARNING-MATRIXLANG.md"):
+        text = (root / name).read_text()
+        assert sample in text, (
+            f"{name} shows a stale glyph face for 'wake up, Neo' — "
+            f"the current table renders it {sample!r}"
+        )

@@ -191,6 +191,11 @@ def _minimal(annotation):
     if origin is list:
         (item,) = typing.get_args(annotation)
         return [_minimal(item)]
+    if origin is tuple:
+        # DictLiteral.entries is list[tuple[Expr, Expr]] -- a fixed-shape
+        # pair, not a homogeneous sequence, so it gets its own branch
+        # rather than reusing the list one.
+        return tuple(_minimal(arg) for arg in typing.get_args(annotation))
     if annotation is bool:
         return True
     if annotation is int:

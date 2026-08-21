@@ -2,7 +2,15 @@ import sys
 
 import pytest
 
-from matrixlang.values import is_bool, is_int, is_str, to_display, type_name
+from matrixlang.values import (
+    BadKey,
+    check_key,
+    is_bool,
+    is_int,
+    is_str,
+    to_display,
+    type_name,
+)
 
 
 def test_bool_is_not_an_integer():
@@ -295,4 +303,91 @@ def test_a_number_just_under_the_ceiling_still_renders():
     limit = sys.get_int_max_str_digits()
     rendered = to_display(10 ** (limit - 2))
     assert len(rendered) == limit - 1
+
+
+def test_a_dictionary_names_itself_dictionary():
+    assert type_name({}) == "dictionary"
+
+
+def test_a_dictionary_displays_with_quoted_string_keys():
+    assert to_display({"a": 1, "b": "x"}) == '{"a": 1, "b": "x"}'
+
+
+def test_a_dictionary_displays_integer_keys_unquoted():
+    assert to_display({1: "x"}) == '{1: "x"}'
+
+
+def test_an_empty_dictionary_displays_as_empty_braces():
+    assert to_display({}) == "{}"
+
+
+def test_a_self_containing_dictionary_raises_cyclic():
+    from matrixlang.values import CyclicValue
+
+    d = {}
+    d["self"] = d
+    with pytest.raises(CyclicValue):
+        to_display(d)
+
+
+def test_dictionary_equality_ignores_order():
+    from matrixlang.values import equal
+
+    assert equal({"a": 1, "b": 2}, {"b": 2, "a": 1})
+
+
+def test_dictionary_equality_does_not_use_pythons_equals():
+    # Python says {"a": 1} == {"a": True}. The language must not: 1 and
+    # true are different types, and comparing them is an error at every
+    # depth. This is the list bug -- [1] == [true] -- one level down.
+    from matrixlang.values import Incomparable, equal
+
+    with pytest.raises(Incomparable):
+        equal({"a": 1}, {"a": True})
+
+
+def test_dictionaries_with_different_keys_are_unequal():
+    from matrixlang.values import equal
+
+    assert not equal({"a": 1}, {"b": 1})
+
+
+def test_dictionaries_of_different_size_are_unequal():
+    from matrixlang.values import equal
+
+    assert not equal({"a": 1}, {"a": 1, "b": 2})
+
+
+def test_two_mutually_referential_dictionaries_compare_without_recursing_forever():
+    from matrixlang.values import equal
+
+    a, b = {}, {}
+    a["x"], b["x"] = b, a
+    assert equal(a, b)
+
+
+def test_a_string_key_is_accepted():
+    check_key("a")
+
+
+def test_an_integer_key_is_accepted():
+    check_key(1)
+
+
+def test_a_boolean_key_is_rejected():
+    # Not squeamishness. Python hashes True and 1 identically, so a
+    # dictionary holding both would silently collapse to one entry --
+    # two keys written, one given, and no diagnostic anywhere.
+    with pytest.raises(BadKey):
+        check_key(True)
+
+
+def test_a_list_key_is_rejected():
+    with pytest.raises(BadKey):
+        check_key([1])
+
+
+def test_a_dictionary_key_is_rejected():
+    with pytest.raises(BadKey):
+        check_key({})
 

@@ -87,6 +87,16 @@ class ListLiteral(Expr):
 
 
 @dataclass
+class DictLiteral(Expr):
+    """`{"a": 1}`. Entries are pairs rather than a dict so the AST records
+    what was WRITTEN: a duplicate key written twice survives to render,
+    which is what keeps D-03's round-trip property true. Each key and each
+    value is its own precedence context, like ListLiteral.elements."""
+
+    entries: list[tuple[Expr, Expr]]
+
+
+@dataclass
 class Index(Expr):
     """`xs[0]`. Postfix, so it binds tighter than every operator — see
     render.py's _CALL_LEVEL, which this shares for exactly that reason."""

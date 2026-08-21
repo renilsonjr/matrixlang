@@ -14,7 +14,7 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.nodes import Binary, Call, If, Index, ListLiteral, Unary
+from matrixlang.nodes import Binary, Call, DictLiteral, If, Index, ListLiteral, Unary
 from matrixlang.parser import parse
 from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
@@ -172,7 +172,7 @@ def test_the_generator_produces_the_stage_7_shapes_too():
     # Same reasoning as the two tests above, extended to lists. A
     # generator that never emits an index over a list literal would let
     # a precedence bug in [1,2][0] through while looking green.
-    from matrixlang.nodes import Index, IndexAssign, ListLiteral, Unary
+    from matrixlang.nodes import DictLiteral, Index, IndexAssign, ListLiteral, Unary
     from matrixlang.tokens import TokenType
 
     empty_list = False
@@ -213,6 +213,10 @@ def test_the_generator_produces_the_stage_7_shapes_too():
             walk_expr(expr.callee)
             for arg in expr.args:
                 walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
 
     def walk_stmt(stmt):
         nonlocal index_assignment
@@ -311,6 +315,10 @@ def test_the_generator_produces_the_stage_9_shapes_too():
             walk_expr(expr.callee)
             for arg in expr.args:
                 walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
 
     def walk_stmt(stmt):
         for field in ("value", "condition", "target", "index"):
@@ -322,19 +330,30 @@ def test_the_generator_produces_the_stage_9_shapes_too():
         for child in getattr(stmt, "else_body", None) or []:
             walk_stmt(child)
 
-    for seed in range(300):
+    # 600, not the usual 300: `unplug (a splice b)` was already down to a
+    # single hit in 300 seeds before Task 6, and adding `keymaker` beside
+    # `unplug` in treegen's unary choice list (5 options -> 6) dilutes
+    # every existing operator's share and reshuffles which seeds land
+    # where in the RNG stream. That pushed this compound's first
+    # occurrence in this run past seed 300 (to 549) with no change to the
+    # shape's real generation probability -- widening the seed pool here
+    # restores the check rather than papering over it. The primary
+    # round-trip property (test_round_trip) and Step 5's corpus counts
+    # stay pinned at the canonical 300 seeds; this is a coverage meta-test
+    # sampling the same generator, not that property.
+    for seed in range(600):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert splice, "no splice in 300 seeds"
-    assert fork, "no fork in 300 seeds"
-    assert unplug, "no unplug in 300 seeds"
-    assert unplug_over_binary, "no `unplug (a == b)` shape in 300 seeds"
-    assert fork_over_splice, "no `a fork (b splice c)` shape in 300 seeds"
-    assert logical_over_comparison, "no logical-over-comparison shape in 300 seeds"
-    assert splice_over_fork, "no `a splice (b fork c)` shape in 300 seeds"
-    assert unplug_under_eq, "no `(unplug a) == b` shape in 300 seeds"
-    assert unplug_over_splice, "no `unplug (a splice b)` shape in 300 seeds"
+    assert splice, "no splice in 600 seeds"
+    assert fork, "no fork in 600 seeds"
+    assert unplug, "no unplug in 600 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 600 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 600 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 600 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 600 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 600 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 600 seeds"
 
 
 def test_the_generator_produces_every_unary_operator():
@@ -353,6 +372,7 @@ def test_the_generator_produces_every_unary_operator():
         TokenType.UNPLUG,
         TokenType.DECODE,
         TokenType.ENCODE,
+        TokenType.KEYMAKER,
     }
     found = set()
 
@@ -373,6 +393,10 @@ def test_the_generator_produces_every_unary_operator():
             walk_expr(expr.callee)
             for arg in expr.args:
                 walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
 
     def walk_stmt(stmt):
         for field in ("value", "condition", "target", "index"):
@@ -387,3 +411,74 @@ def test_the_generator_produces_every_unary_operator():
             walk_stmt(statement)
 
     assert found == expected, f"missing from 300 seeds: {expected - found}"
+
+
+def test_the_generator_produces_the_dictionary_shapes_too():
+    # Same reasoning as the coverage meta-tests above, extended to
+    # dictionaries -- and the failure it guards is not hypothetical. On
+    # the `encode` branch, `decode` and `encode` sat outside the round
+    # trip for their entire existence while the property stayed green,
+    # because nothing asserted the corpus contained them. `keymaker` is
+    # already fenced by the unary-operator test below; DictLiteral and
+    # `oracle` were not. Proven by mutation: pointing treegen's dict band
+    # at gen_list, or dropping TokenType.ORACLE from its _BINARY_OPS,
+    # leaves every other test in the suite passing.
+    from matrixlang.nodes import IndexAssign
+    from matrixlang.tokens import TokenType
+
+    empty_dict = False
+    populated_dict = False
+    dict_in_dict = False
+    oracle = False
+
+    def walk_expr(expr):
+        nonlocal empty_dict, populated_dict, dict_in_dict, oracle
+        if isinstance(expr, DictLiteral):
+            if expr.entries:
+                populated_dict = True
+            else:
+                empty_dict = True
+            for key, value in expr.entries:
+                if isinstance(key, DictLiteral) or isinstance(value, DictLiteral):
+                    dict_in_dict = True
+                walk_expr(key)
+                walk_expr(value)
+        elif isinstance(expr, Binary):
+            if expr.op is TokenType.ORACLE:
+                oracle = True
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, Unary):
+            walk_expr(expr.operand)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+
+    def walk_stmt(stmt):
+        if isinstance(stmt, IndexAssign):
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    assert empty_dict, "no {} in 300 seeds"
+    assert populated_dict, "no populated dictionary in 300 seeds"
+    assert dict_in_dict, "no dictionary inside a dictionary in 300 seeds"
+    assert oracle, "no `oracle` binary in 300 seeds"

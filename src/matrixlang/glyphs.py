@@ -1,4 +1,4 @@
-"""The 44-slot glyph table — D-03's fixed bijective mapping.
+"""The 49-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
@@ -46,6 +46,11 @@ GLYPHS: dict[str, str] = {
     # `encode` takes ﾏ ("ma") — arbitrary, like most of the table. It is
     # decode's mirror in meaning, not in sound; ｺ's neighbours were taken.
     "encode": "ﾏ",
+    # Dictionaries. `oracle` takes ｵ for the "o" it starts with, the same
+    # kind of mnemonic as ｲ for jackin. `keymaker` takes ﾔ arbitrarily --
+    # the Keymaker's own sounds were long gone by this point in the table.
+    "keymaker": "ﾔ",
+    "oracle": "ｵ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
@@ -65,6 +70,10 @@ GLYPHS: dict[str, str] = {
     # Adjacent, mirroring ( and ) which are adjacent too.
     "[": "ﾍ",
     "]": "ﾎ",
+    # Adjacent, for the same reason ( ) and [ ] are adjacent.
+    "{": "ﾐ",
+    "}": "ﾑ",
+    ":": "ﾓ",
     # digits, per-digit (§6.2: 10 renders as two glyphs)
     "0": "ｦ",
     "1": "ｧ",

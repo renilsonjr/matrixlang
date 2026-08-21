@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has seventeen keywords, four types, and two ways of writing
+MatrixLang has nineteen keywords, five types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -22,7 +22,7 @@ trace "wake up, Neo"
 
 `trace` prints. That is the only way a program produces output; there is
 no `print` and no `return` to a console. Reading input has its own two
-keywords — see §17.
+keywords — see §18.
 
 Save it as `hello.rain` and run it:
 
@@ -35,7 +35,7 @@ wake up, Neo
 ```
 
 `--no-window` prints to the terminal. Without it, a window opens and the
-program falls through it as glyphs — see §12.
+program falls through it as glyphs — see §13.
 
 ---
 
@@ -71,7 +71,7 @@ tells you the name already exists somewhere above.
 
 ---
 
-## 3. Types — there are four
+## 3. Types — there are five
 
 | Type | Examples |
 | --- | --- |
@@ -79,13 +79,16 @@ tells you the name already exists somewhere above.
 | boolean | `true`, `false` |
 | string | `"Neo"`, `""`, `"wake up"` |
 | list | `[1, 2, 3]`, `[]`, `["Neo", true]` |
+| dictionary | `{"id": 1}`, `{}` |
 
-No floats, no dictionaries, no sets, and **no null**. If you are used to
-a language where a missing value is `null` or `None`, there is nothing
-here that corresponds — a name either holds a value or does not exist.
-Lists get their own section (§7) once agents have been introduced,
-because the interesting thing about them — that they are shared, not
-copied — is easiest to show with one.
+No floats, no sets, and **no null**. If you are used to a language
+where a missing value is `null` or `None`, there is nothing here that
+corresponds — a name either holds a value or does not exist. Lists and
+dictionaries each get their own section (§7, §8) once agents have been
+introduced: lists because the interesting thing about them — that they
+are shared, not copied — is easiest to show with one; dictionaries
+because they build on what lists already teach about indexing and
+mutation.
 
 ### Arithmetic
 
@@ -549,7 +552,124 @@ matrixlang: [line 2, column 11] an index cannot be negative — use s[length s -
 
 ---
 
-## 8. Logical operators — `splice`, `fork`, `unplug`
+## 8. Dictionaries
+
+A list gets you a sequence, but a student is more than one fact. Kept
+as two lists — `ids` and `grades`, in step by position — nothing in
+the language stops them drifting apart: an edit to one and not the
+other, and `ids[2]` and `grades[2]` are quietly no longer the same
+student. A dictionary keeps facts about one thing together, under
+names instead of positions:
+
+```
+construct aluno = {"id": 1, "grade": "A"}
+trace aluno
+```
+
+```
+{"id": 1, "grade": "A"}
+```
+
+A dictionary literal is `{`, comma-separated `key: value` pairs, `}`.
+**Keys are strings or integers only**, and like a list literal (§7),
+the whole thing is **one line, with no trailing comma**.
+
+### Reading a value — `d["key"]`
+
+```
+construct aluno = {"id": 1, "grade": "A"}
+trace aluno["grade"]
+```
+
+```
+A
+```
+
+### A missing key is an error, not null
+
+```
+construct aluno = {"id": 1, "grade": "A"}
+trace aluno["turma"]
+```
+
+```
+matrixlang: [line 2, column 13] no key "turma" in this dictionary
+```
+
+There is no null anywhere in this language (§3) — there is nothing it
+could hand back for a key that was never written. Check first with
+`oracle`, below, the same discipline the bounded-search idiom (§9)
+already teaches for a list index that might be past the end.
+
+### Writing — insert or update — `d["key"] = v`
+
+```
+construct aluno = {"id": 1, "grade": "A"}
+aluno["grade"] = "B"
+aluno["turma"] = "3B"
+trace aluno
+```
+
+```
+{"id": 1, "grade": "B", "turma": "3B"}
+```
+
+The same syntax does both jobs. A key already in the dictionary updates
+in place, without moving; a key that was not there is inserted at the
+end. Keys keep the order they were first written in — a dictionary
+never reorders itself.
+
+### `length` and `keymaker`
+
+```
+construct aluno = {"id": 1, "grade": "B", "turma": "3B"}
+trace length aluno
+trace keymaker aluno
+```
+
+```
+3
+["id", "grade", "turma"]
+```
+
+`length` already worked on lists and strings (§7); on a dictionary it
+counts entries. `keymaker` is new — a prefix keyword like `length`, not
+a function call — and returns a dictionary's keys as a list, in that
+same insertion order.
+
+### `oracle` — is a key there?
+
+```
+construct aluno = {"id": 1, "grade": "B"}
+trace aluno oracle "grade"
+trace aluno oracle "turma"
+```
+
+```
+true
+false
+```
+
+`oracle` is infix, like `splice` and `fork` (§9) — it sits between the
+dictionary and the key being asked about, and answers with a boolean.
+Guard a lookup with it before indexing a key you are not sure is there:
+
+```
+construct aluno = {"id": 1, "grade": "A"}
+redpill aluno oracle "turma"
+  trace aluno["turma"]
+bluepill
+  trace "no turma yet"
+flatline
+```
+
+```
+no turma yet
+```
+
+---
+
+## 9. Logical operators — `splice`, `fork`, `unplug`
 
 ```
 trace true splice false     # false
@@ -678,7 +798,7 @@ missing, which is exactly what happened here.
 
 ---
 
-## 9. Scope, and agents that remember
+## 10. Scope, and agents that remember
 
 A name declared inside an agent is local to it:
 
@@ -748,7 +868,7 @@ trace inc             # <agent inc>
 
 ---
 
-## 10. Comments
+## 11. Comments
 
 ```
 # this is a comment
@@ -760,7 +880,7 @@ and back and your comments are still there, in place.
 
 ---
 
-## 11. The two faces
+## 12. The two faces
 
 Every program can be written and read two ways. This:
 
@@ -797,8 +917,9 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Seventeen keywords, eleven operators, parentheses, a comma, two brackets,
-ten digits, and the comment marker — 44 slots in all.
+Nineteen keywords, eleven operators, parentheses, a comma, two brackets,
+a pair of braces, a colon, ten digits, and the comment marker — 49 slots
+in all.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -806,7 +927,8 @@ ten digits, and the comment marker — 44 slots in all.
 | `agent` `ｴ` | `jackout` `ﾖ` | `length` `ﾙ` | `true` `ｼ` | `false` `ｷ` | `(` `ｸ` | `)` `ｹ` |
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
-| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | |
+| `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | `oracle` `ｵ` |
+| `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | | | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -820,7 +942,7 @@ is what makes the glyph face usable rather than decorative.
 
 ---
 
-## 12. Watching a program run
+## 13. Watching a program run
 
 ```bash
 .venv/bin/matrixlang run program.rain
@@ -831,7 +953,7 @@ the values it produced brighter and slower, looping for as long as the
 window is open. Nothing on screen is random — every glyph came from your
 program.
 
-Output in the cascade is **decodable**, not decoration. `ﾁ｡ｵ･ ｿｺﾆ ﾙｸ･ｹ`
+Output in the cascade is **decodable**, not decoration. `ﾁ｡ｵ･ ｿｺﾆ ﾛｸ･ｹ`
 is `wake up, Neo`, and the table that decodes it is printable.
 
 Three things worth knowing:
@@ -845,7 +967,7 @@ Three things worth knowing:
 
 ---
 
-## 13. When something goes wrong
+## 14. When something goes wrong
 
 Every error carries a line and a column:
 
@@ -878,7 +1000,7 @@ The ones you will meet first:
 
 ---
 
-## 14. Seeing the shape of a program
+## 15. Seeing the shape of a program
 
 ```bash
 .venv/bin/matrixlang parse program.rain
@@ -915,7 +1037,7 @@ the glyph face; `:ascii` turns that off.
 
 ---
 
-## 15. A whole program
+## 16. A whole program
 
 ```
 # Count down, then greet — using an agent and a closure.
@@ -947,7 +1069,7 @@ wake up, Neo
 
 ---
 
-## 16. Having it written for you — Scribe
+## 17. Having it written for you — Scribe
 
 Everything above teaches you to write MatrixLang. **Scribe** goes the other
 way: you describe what you want in English and get MatrixLang back. It
@@ -985,7 +1107,7 @@ Some of what it knows, and what each one produces:
 | `get element 1 of xs` | a three-element list, then `trace xs[1]` |
 | `get character 0 of name` | `construct name = "neo"`, then `trace name[0]` |
 | `define a function that doubles` | `agent double(n)` … `jackout n * 2` |
-| `define an adder factory` | the nested closure from §9 |
+| `define an adder factory` | the nested closure from §10 |
 
 `print`, `show` and `display` all mean `trace`, so "print 42" works as well
 as "trace 42".
@@ -1013,14 +1135,14 @@ cannot be a variable name — `store 5 as trace` is a miss, because
 `construct trace = 5` would not parse.
 
 Everything Scribe hands you has already been parsed and executed once, so
-it runs. What it does **not** cover yet: `splice` and `fork` (§8), writing
-to a list element (§6), calling a function you just defined, and the whole
-of input — `jackin`, `decode` and `encode` (§17). Write those by hand —
+it runs. What it does **not** cover yet: `splice` and `fork` (§9), writing
+to a list element (§7), calling a function you just defined, and the whole
+of input — `jackin`, `decode` and `encode` (§18). Write those by hand —
 which, having read this far, you can.
 
 ---
 
-## 17. Input — `jackin`, `decode`, and `encode`
+## 18. Input — `jackin`, `decode`, and `encode`
 
 `jackin` reads one line and gives you the text of it.
 
@@ -1186,7 +1308,7 @@ A program that uses `jackin` prints to the terminal rather than opening the
 cascade window, even without `--no-window`. The window has no input box, so
 a windowed run would sit there waiting for a line you had no way to see it
 wanting. Only the display changes; the program itself runs the same either
-way. Every other program still gets the window described in §12.
+way. Every other program still gets the window described in §13.
 
 In the browser you can answer either way. Fill the input box beside the editor
 before you press Run and `jackin` reads it one line at a time, or leave it
@@ -1207,11 +1329,13 @@ output, every time. The playground is built on that.
 
 Being clear about this saves more time than any feature list:
 
-- no floats, dictionaries, sets, or null
+- no floats, sets, or null
 - no slicing (`name[0:2]`) and no string methods — indexing one character
   at a time (§7) is as far as string access goes
+- no removing a key from a dictionary (§8) — only reading, inserting, and
+  updating one
 - no `for`, `break`, `continue`, or `else if`
-- no way to *prompt* for input and wait — `jackin` (§17) reads lines that
+- no way to *prompt* for input and wait — `jackin` (§18) reads lines that
   were already supplied, from the terminal or from the box beside the
   editor, and a program cannot stop mid-run to ask a question
 - no modules, imports, or standard library

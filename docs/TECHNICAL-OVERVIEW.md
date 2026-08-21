@@ -86,27 +86,27 @@ anything about the language, which is the whole point of the split.
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 96 | Token vocabulary. Pure data |
-| `nodes.py` | 185 | AST node definitions. Pure data |
+| `tokens.py` | 103 | Token vocabulary. Pure data |
+| `nodes.py` | 195 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 251 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 87 | The 44-slot bijective glyph table. 12 slots left of the block |
-| `lexer.py` | 268 | Source text → token list. Handles both faces |
-| `parser.py` | 522 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 742 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 314 | AST → source text, in either face |
-| `treeview.py` | 163 | AST → indented text, for teaching |
+| `values.py` | 317 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `glyphs.py` | 96 | The 49-slot bijective glyph table. 7 slots left of the block |
+| `lexer.py` | 271 | Source text → token list. Handles both faces |
+| `parser.py` | 546 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 866 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 338 | AST → source text, in either face |
+| `treeview.py` | 173 | AST → indented text, for teaching |
 | `repl.py` | 138 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
-| `input.py` | 117 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |
-| `translit.py` | 162 | The reversible display table. Pure |
+| `input.py` | 124 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |
+| `translit.py` | 173 | The reversible display table. Pure |
 | `display.py` | 96 | The display protocol and backend selection. Pure |
 | `cascade.py` | 271 | The content-carrying field simulation. Pure |
 | `window.py` | 217 | The Tk backend. The only impure module in the package |
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 244 | Command-line entry point |
 | `scribe.py` | 632 | Plain language → AST, by pattern. Pure, keyless, and imports no `operator` |
-| `operator/prompt.py` | 141 | The system prompt. The language's rules, as text |
+| `operator/prompt.py` | 149 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 96 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
 | `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |
@@ -200,7 +200,7 @@ flatline
   finished.
 - **`NOTHING` is a sentinel, not a value.** An agent that never jacks out
   produces it; a call in statement position may, and a call in expression
-  position that does is a runtime error. The language still has four types, and
+  position that does is a runtime error. The language still has five types, and
   no program can hold or compare a null.
 - **`construct` declares; `=` requires a prior declaration.** Re-declaring is an
   error; assigning to an undeclared name is an error. This is what makes
@@ -261,7 +261,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 44 slots is
+and a **per-seed randomly mixed** face where each of the 49 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -302,7 +302,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 44-entry table the renderer writes through, just
+The lexer reads the same 49-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.

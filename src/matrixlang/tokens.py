@@ -32,6 +32,8 @@ class TokenType(Enum):
     JACKIN = auto()
     DECODE = auto()
     ENCODE = auto()
+    KEYMAKER = auto()
+    ORACLE = auto()
 
     # Operators
     PLUS = auto()
@@ -52,6 +54,9 @@ class TokenType(Enum):
     COMMA = auto()
     LBRACKET = auto()
     RBRACKET = auto()
+    LBRACE = auto()
+    RBRACE = auto()
+    COLON = auto()
 
     # Structural
     COMMENT = auto()
@@ -77,6 +82,8 @@ KEYWORDS: dict[str, TokenType] = {
     "jackin": TokenType.JACKIN,
     "decode": TokenType.DECODE,
     "encode": TokenType.ENCODE,
+    "keymaker": TokenType.KEYMAKER,
+    "oracle": TokenType.ORACLE,
 }
 
 

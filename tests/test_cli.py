@@ -442,7 +442,7 @@ def test_a_program_that_reads_input_runs_as_text_even_on_a_tty(
 ):
     # The cascade window has no input field, so a windowed `jackin` blocks
     # the worker thread on stdin behind an empty window with nothing on
-    # screen explaining why. LEARNING-MATRIXLANG §17 says the terminal
+    # screen explaining why. LEARNING-MATRIXLANG §18 says the terminal
     # reads what you type; text is the backend where that is true.
     monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(cli, "tk_is_available", lambda: True)
