@@ -54,24 +54,26 @@
         sync();
       });
       // Place near top bar — fallback to body if header not found
-      const anchor = document.querySelector('header [role="navigation"]') || document.querySelector("header") || document.body;
+      const anchor = document.querySelector('header [role="navigation"]') || document.querySelector("header") || document.body || document.documentElement;
       anchor.appendChild(btn);
       sync();
       return true;
     };
     if (tryMount()) return;
+    const target = document.body || document.documentElement;
     const obs = new MutationObserver(() => { if (tryMount()) obs.disconnect(); });
-    obs.observe(document.body, { childList: true, subtree: true });
+    obs.observe(target, { childList: true, subtree: true });
   }
 
   function observeTimeline() {
     const col = document.querySelector('[data-testid="primaryColumn"]');
     if (!col) {
+      const target2 = document.body || document.documentElement;
       const bodyObs = new MutationObserver(() => {
         const c = document.querySelector('[data-testid="primaryColumn"]');
         if (c) { bodyObs.disconnect(); observeTimeline(); }
       });
-      bodyObs.observe(document.body, { childList: true, subtree: true });
+      bodyObs.observe(target2, { childList: true, subtree: true });
       return;
     }
     const applyIfGlyph = (article) => {

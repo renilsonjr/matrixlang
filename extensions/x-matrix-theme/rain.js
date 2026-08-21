@@ -30,7 +30,7 @@
       canvas.style.opacity = "0.12";
       canvas.style.pointerEvents = "none";
       canvas.style.background = "#000";
-      document.body.prepend(canvas);
+      (document.body || document.documentElement).prepend(canvas);
     }
     ctx = canvas.getContext("2d");
     return canvas;
