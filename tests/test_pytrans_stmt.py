@@ -136,3 +136,19 @@ def test_a_while_with_a_truthy_condition_is_refused():
 
 def test_default_arguments_are_refused():
     assert "positional" in refused("def f(a=1):\n    return a\n")[0].idiom
+
+
+def test_a_bare_operand_inside_a_boolean_operator_is_refused():
+    # The outer node is a BoolOp, which the guard admits -- but `y` is a
+    # bare value, and admitting the wrapper must not admit its operands.
+    assert "truthiness" in refused("if a == 1 or y:\n    print(1)\n")[0].reason
+
+
+def test_not_over_a_bare_value_is_refused():
+    # `if not xs:` is the ordinary Python emptiness test, and the single
+    # most likely way this hole would have reached a reader.
+    assert "truthiness" in refused("if not xs:\n    print(1)\n")[0].reason
+
+
+def test_a_while_condition_is_guarded_the_same_way():
+    assert "truthiness" in refused("while not xs:\n    print(1)\n")[0].reason

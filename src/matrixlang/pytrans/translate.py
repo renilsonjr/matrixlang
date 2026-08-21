@@ -108,6 +108,10 @@ class _Translator:
                 raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
             return [While(self.condition(node.test), self.body(node.body))]
         if isinstance(node, ast.FunctionDef):
+            # A `def` nested inside another `def` falls out of this
+            # recursion for free and happens to work, but neither the brief
+            # nor the spec says anything about it -- noted as untested
+            # territory, not overlooked.
             return self._function(node)
         if isinstance(node, ast.Return):
             return [Return(self.expression(node.value) if node.value else None)]
@@ -217,10 +221,22 @@ class _Translator:
         A program that runs and means something slightly different is the
         one outcome worth engineering against, so this refuses instead.
         """
-        if isinstance(node, (ast.Compare, ast.BoolOp)):
+        if isinstance(node, ast.Compare):
+            # Admitted wholesale: a comparison's operands are values being
+            # compared (`a == len(xs)`), not conditions, so they don't get
+            # re-checked here.
             return self.expression(node)
+        if isinstance(node, ast.BoolOp):
+            # Admitting the wrapper must not admit its operands -- each one
+            # is itself a condition (`a == 1 or y` must refuse on `y`), so
+            # each recurses through condition(), not expression().
+            op = TokenType.SPLICE if isinstance(node.op, ast.And) else TokenType.FORK
+            result = self.condition(node.values[0])
+            for value in node.values[1:]:
+                result = Binary(result, op, self.condition(value))
+            return result
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            return self.expression(node)
+            return Unary(TokenType.UNPLUG, self.condition(node.operand))
         if isinstance(node, ast.Constant) and node.value in (True, False):
             return self.expression(node)
         shown = ast.unparse(node)
