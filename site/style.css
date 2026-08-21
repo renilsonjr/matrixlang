@@ -403,9 +403,10 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
   white-space: pre-wrap;
 }
 
-/* The input box. Deliberately short: it is supplied up front rather than
-   prompted for, because the browser cannot block on a read without
-   freezing the tab and the cascade with it. */
+/* The input box. Deliberately short: it holds the lines a reader chooses to
+   supply up front, and anything the program still wants is asked for one
+   line at a time in #answer-row below. Short because filling it in advance
+   is now the shortcut rather than the only way in. */
 #program-input {
   min-height: 3.5rem;
 }
