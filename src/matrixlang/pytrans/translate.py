@@ -11,9 +11,9 @@ construction -- it came from the same classes the parser produces.
 import ast
 
 from matrixlang.nodes import (
-    Binary, BoolLiteral, Call, DictLiteral, Expr, ExprStmt, Index,
-    ListLiteral, Name, NumberLiteral, Program, Stmt, StringLiteral, Trace,
-    Unary,
+    Assign, Binary, BoolLiteral, Call, Declare, DictLiteral, Expr, ExprStmt,
+    Index, IndexAssign, ListLiteral, Name, NumberLiteral, Program, Stmt,
+    StringLiteral, Trace, Unary,
 )
 from matrixlang.render import render_ascii
 from matrixlang.tokens import TokenType
@@ -61,6 +61,18 @@ def translate(source: str) -> Translated | Refusals:
 class _Translator:
     def __init__(self) -> None:
         self.refusals: list[Refusal] = []
+        # One set of bound names per MatrixLang scope. An agent body is its
+        # own scope, so a name declared inside one does not collide with the
+        # same name outside it. `construct` is emitted the first time a name
+        # is bound in the current scope and never again -- re-declaring is an
+        # error in MatrixLang and Python draws no such distinction.
+        self.scopes: list[set[str]] = [set()]
+
+    def _bind(self, name: str) -> bool:
+        """Record a binding. True if this is the first one in this scope."""
+        first = name not in self.scopes[-1]
+        self.scopes[-1].add(name)
+        return first
 
     def body(self, statements: list[ast.stmt]) -> list[Stmt]:
         """Translate a block, collecting refusals rather than stopping.
@@ -79,10 +91,43 @@ class _Translator:
     def statement(self, node: ast.stmt) -> list[Stmt]:
         if isinstance(node, ast.Expr):
             return self._expression_statement(node)
+        if isinstance(node, ast.Assign):
+            return self._assign(node)
+        if isinstance(node, ast.AugAssign):
+            return self._aug_assign(node)
         raise _Unsupported(self._no(self._culprit(node)))
 
     def _expression_statement(self, node: ast.Expr) -> list[Stmt]:
         call = node.value
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute):
+            if call.func.attr != "append" or len(call.args) != 1:
+                # Built via Refusal directly, not self._no(): the reason
+                # needs to name the method (`.sort()`), and self._no's
+                # reason is always "<ast class name> cannot be translated" --
+                # here that would say "Expr", naming neither the method nor
+                # the fact that it's a method at all.
+                raise _Unsupported(
+                    Refusal(
+                        f"MatrixLang has no `.{call.func.attr}()` method",
+                        node.lineno,
+                        node.col_offset,
+                        "the only list method it can translate is `.append()`",
+                    )
+                )
+            if not isinstance(call.func.value, ast.Name):
+                raise _Unsupported(self._no(node))
+            # Concatenation, not mutation: `+` copies, which is what makes
+            # this an assignment rather than a call.
+            target = call.func.value.id
+            return [
+                Assign(
+                    target,
+                    Binary(
+                        Name(target), TokenType.PLUS,
+                        ListLiteral([self.expression(call.args[0])]),
+                    ),
+                )
+            ]
         if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
             if call.func.id == "print":
                 if len(call.args) != 1 or call.keywords:
@@ -102,6 +147,49 @@ class _Translator:
                 "assign the value to a name if you meant to keep it",
             )
         )
+
+    def _assign(self, node: ast.Assign) -> list[Stmt]:
+        if len(node.targets) != 1:
+            raise _Unsupported(
+                self._no(node, "assign one name at a time: `a = 0` then `b = 0`")
+            )
+        target = node.targets[0]
+        value = self.expression(node.value)
+        if isinstance(target, ast.Name):
+            if self._bind(target.id):
+                return [Declare(target.id, value)]
+            return [Assign(target.id, value)]
+        if isinstance(target, ast.Subscript):
+            if isinstance(target.slice, ast.Slice):
+                raise _Unsupported(self._no(target))
+            return [
+                IndexAssign(
+                    self.expression(target.value),
+                    self.expression(target.slice),
+                    value,
+                )
+            ]
+        raise _Unsupported(
+            self._no(target, "assign to one name or one element at a time")
+        )
+
+    def _aug_assign(self, node: ast.AugAssign) -> list[Stmt]:
+        op = _BINOP.get(type(node.op))
+        if op is None or not isinstance(node.target, ast.Name):
+            raise _Unsupported(self._no(node))
+        if node.target.id not in self.scopes[-1]:
+            raise _Unsupported(
+                self._no(
+                    node,
+                    f"give `{node.target.id}` a value before changing it",
+                )
+            )
+        return [
+            Assign(
+                node.target.id,
+                Binary(Name(node.target.id), op, self.expression(node.value)),
+            )
+        ]
 
     def expression(self, node: ast.expr) -> Expr:
         if isinstance(node, ast.Constant):
