@@ -37,7 +37,14 @@ class EmptySource:
 
 
 class ListSource:
-    """Lines from a list. What the tests use."""
+    """Lines from a list, each element one line, nothing split.
+
+    The tests use it, and so does the playground: `site/glue.py` gives it the
+    answers a reader typed one at a time, precisely because it splits nothing.
+    An answer is already exactly one line, and putting it back through a
+    splitter is what once made a blank answer vanish and shifted every answer
+    after a box that ended in a newline.
+    """
 
     def __init__(self, lines: Sequence[str]) -> None:
         self._lines = list(lines)
