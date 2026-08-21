@@ -94,3 +94,29 @@ def test_a_later_duplicate_key_wins():
 def test_nested_dictionaries_index_through():
     source = 'construct xs = [{"g": "A"}, {"g": "B"}]\ntrace xs[1]["g"]\n'
     assert run(source) == "B\n"
+
+
+def test_the_students_search_program_runs():
+    # This is the program that motivated the feature: a reader's Python
+    # translated to MatrixLang. `alunos[n]` is indexed directly inside
+    # the loop rather than bound with `construct aluno = alunos[n]`,
+    # because `construct` inside a loop body fails on the second
+    # iteration with "already declared" — it runs once per program, not
+    # once per pass through the loop.
+    source = (
+        'construct alunos = [{"id": 1, "grade": "A"}, {"id": 2, "grade": "B"}, '
+        '{"id": 3, "grade": "A"}]\n'
+        "agent find_students(alunos, busca)\n"
+        "  construct encontrados = []\n"
+        "  construct n = 0\n"
+        "  dejavu n < length alunos\n"
+        '    redpill busca == encode alunos[n]["id"] fork busca == alunos[n]["grade"]\n'
+        '      encontrados = encontrados + [alunos[n]["id"]]\n'
+        "    flatline\n"
+        "    n = n + 1\n"
+        "  flatline\n"
+        "  jackout encontrados\n"
+        "flatline\n"
+        'trace find_students(alunos, "A")\n'
+    )
+    assert run(source) == "[1, 3]\n"
