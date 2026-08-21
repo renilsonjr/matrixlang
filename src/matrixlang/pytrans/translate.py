@@ -276,24 +276,19 @@ class _Translator:
             )
 
         body = self.body(node.body)
-        # Any `construct` left inside the loop body fails on the second
-        # iteration -- not only a name the reader first binds here, but
-        # also a nested loop's own counter or holder, which is *also* a
-        # Declare sitting at the top of this body (a `for` returns its
-        # `before` declarations and its `While` together, so a nested
-        # loop's counter arrives here exactly like any other statement).
-        # Every one of them is hoisted above THIS loop with a 0 placeholder
-        # -- safe because assignment may change a value's type -- and left
-        # behind as a plain assignment, which re-initialises it correctly
-        # on every pass through this loop, including a reset inner counter.
-        hoisted_body: list[Stmt] = []
-        for statement in body:
-            if isinstance(statement, Declare):
-                before.append(Declare(statement.name, NumberLiteral(0)))
-                hoisted_body.append(_as_assignment(statement))
-            else:
-                hoisted_body.append(statement)
-        body = hoisted_body
+        # Any `construct` left ANYWHERE inside the loop body fails on the
+        # second iteration -- not only a name the reader first binds at the
+        # body's top level, but one bound inside an `if`, or inside a
+        # nested `while`, because "inside the loop body" doesn't stop at
+        # the first nesting level. This also catches a nested `for`'s own
+        # counter/holder Declare, which a recursive `for` call already
+        # hoisted to just above itself -- that Declare now sits at THIS
+        # body's top level (a `for` returns its `before` declarations and
+        # its `While` flattened together), so it is hoisted again, one
+        # level further out, same as anything else found here. See
+        # _hoist_declares for what the walk does and does not reach.
+        body, hoisted = _hoist_declares(body)
+        before.extend(hoisted)
 
         del self.substitutions[node.target.id]
         body.append(
@@ -548,6 +543,54 @@ def _as_assignment(statement: Stmt) -> Stmt:
     if isinstance(statement, Declare):
         return Assign(statement.name, statement.value)
     return statement
+
+
+def _hoist_declares(body: list[Stmt]) -> tuple[list[Stmt], list[Declare]]:
+    """Rewrite every `Declare` anywhere in `body` to a plain `Assign` in
+    place, and return placeholder declarations (each initialised to `0`)
+    to hoist above the enclosing loop.
+
+    Recurses into `If.then_body`/`If.else_body` and `While.body`: a name
+    first bound inside a nested `if`, or inside a Python `while` nested in
+    the loop body, is still bound "inside the loop body" for rule (c)'s
+    purposes -- MatrixLang's `construct` fails on the second pass through
+    a `dejavu` no matter how many branches deep it sits, and conditional
+    accumulation (`if cond: total = ...`) is one of the most common shapes
+    a `for` loop takes.
+
+    Deliberately does NOT recurse into a `FunctionDef` body. A nested
+    agent's body is its own MatrixLang scope (see `_function`), re-entered
+    fresh on every call rather than replayed on every pass through this
+    `dejavu` -- so a `construct` inside it never hits the same-scope-twice
+    quirk this hoist exists to dodge, and hoisting it out would be wrong,
+    not just unnecessary.
+
+    Order is the statements' own order: a pre-order, left-to-right walk
+    (an `If`'s `then_body` fully before its `else_body`), so the hoisted
+    declarations appear above the loop in the same order the reader's
+    names first appear in it -- deterministic without needing a sort.
+    """
+    hoisted: list[Declare] = []
+
+    def walk(statements: list[Stmt]) -> list[Stmt]:
+        out: list[Stmt] = []
+        for statement in statements:
+            if isinstance(statement, Declare):
+                hoisted.append(Declare(statement.name, NumberLiteral(0)))
+                out.append(_as_assignment(statement))
+            elif isinstance(statement, If):
+                statement.then_body = walk(statement.then_body)
+                if statement.else_body is not None:
+                    statement.else_body = walk(statement.else_body)
+                out.append(statement)
+            elif isinstance(statement, While):
+                statement.body = walk(statement.body)
+                out.append(statement)
+            else:
+                out.append(statement)
+        return out
+
+    return walk(body), hoisted
 
 
 # What a reader calls each construct, keyed by its ast class name. Without
