@@ -19,6 +19,7 @@ from matrixlang.render import render_ascii
 from matrixlang.tokens import TokenType
 
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
+from matrixlang.pytrans.names import bound_names, free_name
 
 _BINOP = {
     ast.Add: TokenType.PLUS, ast.Sub: TokenType.MINUS,
@@ -51,7 +52,7 @@ def translate(source: str) -> Translated | Refusals:
             )
         ])
 
-    walker = _Translator()
+    walker = _Translator(bound_names(tree))
     statements = walker.body(tree.body)
     if walker.refusals:
         return Refusals(sorted(walker.refusals, key=lambda r: (r.line, r.column)))
@@ -59,7 +60,7 @@ def translate(source: str) -> Translated | Refusals:
 
 
 class _Translator:
-    def __init__(self) -> None:
+    def __init__(self, taken: set[str] | None = None) -> None:
         self.refusals: list[Refusal] = []
         # One set of bound names per MatrixLang scope. An agent body is its
         # own scope, so a name declared inside one does not collide with the
@@ -67,6 +68,22 @@ class _Translator:
         # is bound in the current scope and never again -- re-declaring is an
         # error in MatrixLang and Python draws no such distinction.
         self.scopes: list[set[str]] = [set()]
+        # Every name the reader's program binds anywhere, seeded up front
+        # (see names.py) so a generated counter or holder never collides
+        # with one they wrote -- even one bound in a scope this walker
+        # hasn't reached yet.
+        self.taken: set[str] = set(taken or ())
+        # Loop variable -> the expression it stands for (a counter, or an
+        # index into a hoisted holder). `for` has no declared variable in
+        # the output, so every `ast.Name` read of it is rewritten in place
+        # instead. Scoped to the loop's own body: popped before the loop
+        # returns, so a name outside it is never rewritten.
+        self.substitutions: dict[str, Expr] = {}
+
+    def _fresh(self, stem: str = "n") -> str:
+        name = free_name(self.taken, stem)
+        self.taken.add(name)
+        return name
 
     def _bind(self, name: str) -> bool:
         """Record a binding. True if this is the first one in this scope."""
@@ -107,6 +124,8 @@ class _Translator:
             if node.orelse:
                 raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
             return [While(self.condition(node.test), self.body(node.body))]
+        if isinstance(node, ast.For):
+            return self._for(node)
         if isinstance(node, ast.FunctionDef):
             # A `def` nested inside another `def` falls out of this
             # recursion for free and happens to work, but neither the brief
@@ -211,6 +230,93 @@ class _Translator:
             )
         ]
 
+    def _for(self, node: ast.For) -> list[Stmt]:
+        if node.orelse:
+            raise _Unsupported(self._no(node, "MatrixLang has no `for ... else`"))
+        if not isinstance(node.target, ast.Name):
+            raise _Unsupported(
+                self._no(node.target, "loop over one name at a time")
+            )
+        if _rebinds(node.body, node.target.id):
+            # Built via Refusal directly, not self._no(): self._no's reason
+            # is always "<ast class name> cannot be translated" -- here
+            # that would say "For cannot be translated", never naming the
+            # loop variable the test (and the reader) needs to see.
+            raise _Unsupported(
+                Refusal(
+                    f"the loop reassigns `{node.target.id}`; copy it to another "
+                    "name first",
+                    node.lineno,
+                    node.col_offset,
+                )
+            )
+
+        before: list[Stmt] = []
+        counter = self._fresh()
+
+        start, stop = self._range_bounds(node.iter)
+        if stop is not None:
+            # `for i in range(...)`: the counter IS the value.
+            self.substitutions[node.target.id] = Name(counter)
+            before.append(Declare(counter, start))
+            condition = Binary(Name(counter), TokenType.LT, stop)
+        else:
+            source = node.iter
+            if isinstance(source, ast.Name):
+                holder = source.id
+            else:
+                # Evaluated once. Substituting a call inline would run it
+                # on every iteration -- a different program.
+                holder = self._fresh("xs")
+                before.append(Declare(holder, self.expression(source)))
+            self.substitutions[node.target.id] = Index(Name(holder), Name(counter))
+            before.append(Declare(counter, NumberLiteral(0)))
+            condition = Binary(
+                Name(counter), TokenType.LT, Unary(TokenType.LENGTH, Name(holder))
+            )
+
+        body = self.body(node.body)
+        # Any `construct` left inside the loop body fails on the second
+        # iteration -- not only a name the reader first binds here, but
+        # also a nested loop's own counter or holder, which is *also* a
+        # Declare sitting at the top of this body (a `for` returns its
+        # `before` declarations and its `While` together, so a nested
+        # loop's counter arrives here exactly like any other statement).
+        # Every one of them is hoisted above THIS loop with a 0 placeholder
+        # -- safe because assignment may change a value's type -- and left
+        # behind as a plain assignment, which re-initialises it correctly
+        # on every pass through this loop, including a reset inner counter.
+        hoisted_body: list[Stmt] = []
+        for statement in body:
+            if isinstance(statement, Declare):
+                before.append(Declare(statement.name, NumberLiteral(0)))
+                hoisted_body.append(_as_assignment(statement))
+            else:
+                hoisted_body.append(statement)
+        body = hoisted_body
+
+        del self.substitutions[node.target.id]
+        body.append(
+            Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(1)))
+        )
+        return before + [While(condition, body)]
+
+    def _range_bounds(self, node: ast.expr) -> tuple[Expr, Expr | None]:
+        """(start, stop) for a `range(...)` iterable, or (0, None) otherwise."""
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "range"
+        ):
+            return NumberLiteral(0), None
+        if len(node.args) == 1:
+            return NumberLiteral(0), self.expression(node.args[0])
+        if len(node.args) == 2:
+            return self.expression(node.args[0]), self.expression(node.args[1])
+        raise _Unsupported(
+            self._no(node, "count with a `dejavu` loop and your own step")
+        )
+
     def condition(self, node: ast.expr) -> Expr:
         """A condition, refusing anything that leans on truthiness.
 
@@ -276,6 +382,11 @@ class _Translator:
         if isinstance(node, ast.Constant):
             return self._constant(node)
         if isinstance(node, ast.Name):
+            replacement = self.substitutions.get(node.id)
+            if replacement is not None:
+                # Shared, not copied: rendering never mutates a node, and
+                # line/column do not take part in equality.
+                return replacement
             return Name(node.id)
         if isinstance(node, ast.BinOp):
             op = _BINOP.get(type(node.op))
@@ -413,6 +524,30 @@ class _Translator:
             getattr(node, "col_offset", 0),
             idiom if idiom is not None else _IDIOM.get(name),
         )
+
+
+def _rebinds(body: list[ast.stmt], name: str) -> bool:
+    """Does this block assign to `name`? Substitution cannot express that."""
+    for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            if node.id == name:
+                return True
+        if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == name:
+                return True
+    return False
+
+
+def _as_assignment(statement: Stmt) -> Stmt:
+    """A Declare becomes an Assign; everything else is unchanged.
+
+    Paired with hoisting the Declare above the loop -- together they turn
+    a first binding inside a loop body into a declaration outside it and a
+    plain assignment inside, which is the only shape MatrixLang accepts.
+    """
+    if isinstance(statement, Declare):
+        return Assign(statement.name, statement.value)
+    return statement
 
 
 # What a reader calls each construct, keyed by its ast class name. Without

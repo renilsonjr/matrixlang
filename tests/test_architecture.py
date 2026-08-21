@@ -67,7 +67,12 @@ _ALLOWED: dict[str, set[str]] = {
     # renders them with the real renderer rather than re-deriving precedence
     # rules, which is why it reaches nodes and render.
     "pytrans.refuse": set(),
-    "pytrans.translate": {"nodes", "tokens", "render", "pytrans.refuse"},
+    # names.py invents counters and holder names for `for`; it only walks
+    # the Python ast, so it reaches no matrixlang sibling at all.
+    "pytrans.names": set(),
+    "pytrans.translate": {
+        "nodes", "tokens", "render", "pytrans.refuse", "pytrans.names",
+    },
 }
 
 
