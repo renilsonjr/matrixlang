@@ -151,9 +151,12 @@ def test_glyph_input_runs_without_any_mode():
 
 def test_a_face_command_mid_block_is_just_source():
     # Meta-commands exist only at a fresh prompt. Mid-block, ':glyph' is
-    # source text, and ':' is not a MatrixLang character.
+    # source text, not a command. ':' used to be rejected by the lexer,
+    # but dictionaries made it valid punctuation (COLON), so ':glyph' now
+    # lexes cleanly and the rejection moves one stage later: the parser
+    # sees a bare ':' where a statement is expected and reports that.
     output = feed_all(["dejavu false", ":glyph", "flatline"])
-    assert "unexpected character" in output
+    assert "expected a statement, found ':'" in output
 
 
 def test_echo_still_prints_when_execution_fails():

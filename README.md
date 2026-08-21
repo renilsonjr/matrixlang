@@ -49,12 +49,17 @@ codepoint, while `name[0] = "X"` is refused because strings, unlike
 lists, cannot be written to — **logical operators** — `splice` (and),
 `fork` (or) and `unplug` (not), boolean operands only, with `splice` and
 `fork` short-circuiting so a bounded search like `n < length xs splice
-xs[n] != target` never reads past the end of `xs` — and **Operator**, an
-assistive companion that writes MatrixLang from plain language, in the
-terminal or in a browser, and **Scribe**, a keyless, deterministic
-companion that does the same without a key, an SDK, or the network.
+xs[n] != target` never reads past the end of `xs` — **dictionaries** —
+`{"a": 1}` literals keyed by strings or integers, `d["a"]` to read and
+`d["a"] = v` to write or insert, `length` for the entry count, `keymaker`
+for the keys in insertion order, and the infix `oracle` to ask whether a
+key is there before reading it, since reading a missing one is an error —
+and **Operator**, an assistive companion that writes MatrixLang from
+plain language, in the terminal or in a browser, and **Scribe**, a
+keyless, deterministic companion that does the same without a key, an
+SDK, or the network.
 
-1,395 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+1,627 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```
@@ -123,7 +128,7 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — seventeen keywords, four types, and both faces —
+teaches the whole language — nineteen keywords, five types, and both faces —
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade
@@ -137,7 +142,7 @@ window in those contexts is correct behaviour, not a fault.
 What falls is your program, and nothing else. Source lines and output
 are both transliterated, so the cascade is a **pure glyph wall** with no
 Latin in it. It is decodable rather than decorative: the table is
-reversible, so `ﾁ｡ｵ･ ｿｺﾆ ﾙｸ･ｹ` reads back as `wake up, Neo`.
+reversible, so `ﾁ｡ｵ･ ｿｺﾆ ﾛｸ･ｹ` reads back as `wake up, Neo`.
 
 Source falls faster; output falls slower and brighter, so results linger.
 When everything has fallen off the bottom it starts again — a screen that

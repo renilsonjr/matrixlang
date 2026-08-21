@@ -146,7 +146,7 @@ def _command_run(
     # has no input field. Windowed, the worker thread blocks on stdin with
     # nothing on screen saying why, and the reader has to type blind into
     # the terminal underneath an empty window. Text keeps the prompt and
-    # the program in one place, which is what LEARNING-MATRIXLANG §17
+    # the program in one place, which is what LEARNING-MATRIXLANG §18
     # promises the terminal does. Only the DISPLAY is chosen this way —
     # the program runs identically either side of the decision.
     backend = choose_backend(

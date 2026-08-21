@@ -23,6 +23,7 @@ from matrixlang.nodes import (
     BoolLiteral,
     Call,
     Declare,
+    DictLiteral,
     Expr,
     ExprStmt,
     FunctionDef,
@@ -44,12 +45,15 @@ from matrixlang.nodes import (
 from matrixlang.tokens import TokenType
 from matrixlang.values import (
     NOTHING,
+    BadKey,
     CyclicValue,
     Function,
     Incomparable,
     TooManyDigits,
+    check_key,
     equal,
     is_bool,
+    is_dict,
     is_function,
     is_int,
     is_list,
@@ -72,6 +76,19 @@ _LOGICAL_OPS = (TokenType.SPLICE, TokenType.FORK)
 # render into the interpreter would put a presentation module underneath
 # execution, which tests/test_architecture.py forbids.
 _OP_WORDS = {TokenType.SPLICE: "splice", TokenType.FORK: "fork"}
+
+
+def _display_key(key: object) -> str:
+    """A key as it should read inside a diagnostic: strings quoted.
+
+    Routed through to_display's own nested rules, via a one-element list,
+    rather than reimplementing "quote if it's a string": that is what
+    keeps the quoting and escaping in this error message from ever
+    drifting away from the quoting `trace` would produce for the same
+    value.
+    """
+    return to_display([key])[1:-1]
+
 
 # Explicit ASCII set, matching lexer._DIGITS. Bare int() is far more
 # tolerant than the lexer's own number grammar -- it accepts "1_000",
@@ -229,10 +246,15 @@ class Interpreter:
                 text = to_display(value)
             except CyclicValue:
                 # NOT "expression is nested too deeply", which is what the
-                # RecursionError path reports and which is false: a list
+                # RecursionError path reports and which is false: a value
                 # that contains itself may be one element long.
+                #
+                # "a value", not "a list": a dictionary can hold itself
+                # too (`d["me"] = d`), and naming a list in that case is
+                # simply false — the message reaches the browser verbatim
+                # in the SSE error payload.
                 raise RuntimeErrorML(
-                    "cannot display a list that contains a cycle",
+                    "cannot display a value that contains a cycle",
                     stmt.line,
                     stmt.column,
                 ) from None
@@ -266,6 +288,24 @@ class Interpreter:
             target = self._value_of(stmt.target, stmt)
             index = self._value_of(stmt.index, stmt)
             value = self._value_of(stmt.value, stmt)
+            if is_dict(target):
+                # Insert, not error, on a missing key: a write is how a
+                # dictionary gains entries. A read, by contrast, errors on
+                # a missing key in the Index branch of `_evaluate` — the
+                # same asymmetry the language already has between reading
+                # past a list's end (error) and appending to it (no such
+                # operation exists, so the question does not arise there).
+                try:
+                    check_key(index)
+                except BadKey as bad:
+                    raise RuntimeErrorML(
+                        f"a dictionary key must be a string or a number, "
+                        f"got {bad.name}",
+                        stmt.index.line,
+                        stmt.index.column,
+                    ) from None
+                target[index] = value
+                return
             # Three ways, not two. A string IS indexable — _element reads
             # one happily — so `cannot index string` would now be a lie.
             # And widening this to `is_list or is_str` the way _element
@@ -383,14 +423,26 @@ class Interpreter:
                     )
                 return not operand
             if expr.op is TokenType.LENGTH:
-                if not (is_list(operand) or is_str(operand)):
+                if not (is_list(operand) or is_str(operand) or is_dict(operand)):
                     raise RuntimeErrorML(
-                        f"'length' takes a list or a string, got "
+                        f"'length' takes a list, a string or a dictionary, got "
                         f"{type_name(operand)}",
                         expr.line,
                         expr.column,
                     )
                 return len(operand)
+            if expr.op is TokenType.KEYMAKER:
+                if not is_dict(operand):
+                    raise RuntimeErrorML(
+                        f"'keymaker' takes a dictionary, got "
+                        f"{type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # A copy, not the dict's own view: mutating what the
+                # caller does with the returned list must never reach
+                # back into the dictionary.
+                return list(operand.keys())
             if expr.op is TokenType.DECODE:
                 if not is_str(operand):
                     raise RuntimeErrorML(
@@ -479,8 +531,63 @@ class Interpreter:
             # position through _value_of is what keeps NOTHING from being
             # stored, compared, printed or added to anything.
             return [self._value_of(element, expr) for element in expr.elements]
+        if isinstance(expr, DictLiteral):
+            result: dict = {}
+            for key_expr, value_expr in expr.entries:
+                key = self._value_of(key_expr, expr)
+                try:
+                    check_key(key)
+                except BadKey as bad:
+                    raise RuntimeErrorML(
+                        f"a dictionary key must be a string or a number, "
+                        f"got {bad.name}",
+                        key_expr.line,
+                        key_expr.column,
+                    ) from None
+                # A later duplicate overwrites an earlier one, which is
+                # what dict.__setitem__ does and what a reader expects;
+                # the FIRST write's insertion position is kept, which is
+                # also what CPython does. The AST kept both entries (see
+                # DictLiteral's own docstring) so this overwrite is where
+                # a written duplicate actually collapses to one.
+                result[key] = self._value_of(value_expr, expr)
+            return result
         if isinstance(expr, Index):
             target = self._value_of(expr.target, expr)
+            if is_dict(target):
+                key = self._value_of(expr.index, expr)
+                try:
+                    check_key(key)
+                except BadKey as bad:
+                    raise RuntimeErrorML(
+                        f"a dictionary key must be a string or a number, "
+                        f"got {bad.name}",
+                        expr.index.line,
+                        expr.index.column,
+                    ) from None
+                if key not in target:
+                    try:
+                        shown = _display_key(key)
+                    except TooManyDigits as size:
+                        # The third door onto values.py's digit ceiling,
+                        # after `trace` and `encode`, and the same guard
+                        # they carry. Naming the key in the diagnostic
+                        # RENDERS it, so a key past CPython's cap would
+                        # turn a missing-key error into a raw Python
+                        # exception -- which Interpreter.run() must never
+                        # emit and site/glue.py's run() promises never to.
+                        raise RuntimeErrorML(
+                            f"cannot display a number longer than "
+                            f"{size.limit} digits",
+                            expr.index.line,
+                            expr.index.column,
+                        ) from None
+                    raise RuntimeErrorML(
+                        f"no key {shown} in this dictionary",
+                        expr.index.line,
+                        expr.index.column,
+                    )
+                return target[key]
             index = self._value_of(expr.index, expr)
             return self._element(target, index, expr)
         raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
@@ -619,6 +726,23 @@ class Interpreter:
     def _binary(self, node: Binary, left: object, right: object) -> object:
         if node.op in _EQUALITY_OPS or node.op in _ORDERING_OPS:
             return self._comparison(node, left, right)
+        if node.op is TokenType.ORACLE:
+            if not is_dict(left):
+                raise RuntimeErrorML(
+                    f"'oracle' takes a dictionary, got {type_name(left)}",
+                    node.line,
+                    node.column,
+                )
+            try:
+                check_key(right)
+            except BadKey as bad:
+                raise RuntimeErrorML(
+                    f"a dictionary key must be a string or a number, "
+                    f"got {bad.name}",
+                    node.line,
+                    node.column,
+                ) from None
+            return right in left
         if node.op is TokenType.PLUS and is_str(left) and is_str(right):
             return left + right
         if node.op is TokenType.PLUS and is_str(left) != is_str(right):

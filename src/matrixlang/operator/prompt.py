@@ -57,22 +57,30 @@ flatline"""
 # looks plausible and fails.
 _RULES = """\
 Rules that differ from most languages:
-- Blocks are opened by a keyword and closed by `flatline`. There are no
-  braces, no colons and no significant indentation.
+- Blocks are opened by a keyword and closed by `flatline`. A block is
+  never wrapped in braces, never introduced by a colon, and indentation is
+  never significant. Braces and colons are real punctuation, but only
+  inside a dictionary literal.
 - `construct` declares a name. Plain `=` assigns and requires the name to
   have been declared already. Re-declaring in the same scope is an error.
 - Conditions must be a boolean. `redpill 1` is an error, not a taken
   branch. There is no truthiness. `redpill` may be followed by an
   optional `bluepill` block, which runs when the condition is false —
   MatrixLang's else.
-- Types are integer, boolean, string and list. No floats, no
-  dictionaries, no null.
+- Types are integer, boolean, string, list and dictionary. No floats, no
+  null.
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
   with `xs[i] = v`, and measure one with `length xs` (also works on a
-  string). Indexing is 0-based and out of range is an error.
+  string, and on a dictionary, where it gives the number of entries).
+  Indexing is 0-based and out of range is an error.
 - A string can be indexed too: `s[i]` reads a one-character string. It
   cannot be written — `s[i] = v` is an error, because a string can never
   change once made. Build a different one with `+` instead.
+- A dictionary literal is `{"a": 1}`; keys must be strings or numbers.
+  Reading a key that is not there is an error, so check first with
+  `oracle`, which is infix and gives a boolean: `d oracle "a"`.
+  `keymaker` takes a dictionary and gives the list of its keys, in
+  insertion order.
 - `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
   and never any other type.
 - `+` adds integers, joins strings, or concatenates lists — never a mix
