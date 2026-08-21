@@ -120,3 +120,27 @@ def test_the_students_search_program_runs():
         'trace find_students(alunos, "A")\n'
     )
     assert run(source) == "[1, 3]\n"
+
+
+# A key with more digits than CPython will render. Squaring is what makes
+# it reachable: fourteen doublings of the exponent from 10 is 16385
+# digits, and costs about 45 steps of a 200,000-step budget.
+_OVER_LONG = """construct n = 10
+construct i = 0
+dejavu i < 14
+  n = n * n
+  i = i + 1
+flatline
+construct d = {}
+"""
+
+
+def test_a_missing_key_too_long_to_render_is_a_language_error():
+    # The third door onto values.py's digit ceiling, after `trace` and
+    # `encode`. The missing-key diagnostic names the key, and naming it
+    # renders it -- so an unguarded render here puts a raw Python
+    # TooManyDigits through Interpreter.run(), the CLI's diagnostic and
+    # site/glue.py's run(), which promises never to emit one at all.
+    error = fails(_OVER_LONG + "trace d[n]\n")
+    assert "cannot display a number longer than 4300 digits" in error.message
+    assert error.line == 8

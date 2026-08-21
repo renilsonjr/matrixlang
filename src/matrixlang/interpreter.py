@@ -560,8 +560,24 @@ class Interpreter:
                         expr.index.column,
                     ) from None
                 if key not in target:
+                    try:
+                        shown = _display_key(key)
+                    except TooManyDigits as size:
+                        # The third door onto values.py's digit ceiling,
+                        # after `trace` and `encode`, and the same guard
+                        # they carry. Naming the key in the diagnostic
+                        # RENDERS it, so a key past CPython's cap would
+                        # turn a missing-key error into a raw Python
+                        # exception -- which Interpreter.run() must never
+                        # emit and site/glue.py's run() promises never to.
+                        raise RuntimeErrorML(
+                            f"cannot display a number longer than "
+                            f"{size.limit} digits",
+                            expr.index.line,
+                            expr.index.column,
+                        ) from None
                     raise RuntimeErrorML(
-                        f"no key {_display_key(key)} in this dictionary",
+                        f"no key {shown} in this dictionary",
                         expr.index.line,
                         expr.index.column,
                     )
