@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "MatrixLang — X Theme",
+  "version": "0.1.0",
+  "description": "Full Matrix theme for X.com timeline — palette, Mono, glyph toggle, faint rain.",
+  "permissions": ["storage"],
+  "host_permissions": ["*://x.com/*", "*://twitter.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://x.com/*", "*://twitter.com/*"],
+      "run_at": "document_start",
+      "js": ["rain.js", "glyph.js", "content.js"],
+      "css": ["theme.css"]
+    }
+  ]
+}

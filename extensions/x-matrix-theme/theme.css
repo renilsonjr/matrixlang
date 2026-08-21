@@ -1,0 +1,91 @@
+/* X Matrix Theme — paint only. No JS. */
+/* Palette verbatim from site/style.css:10-20 */
+:root {
+  --ml-bg: #05070a;
+  --ml-panel: #0b0f14;
+  --ml-edge: #16202a;
+  --ml-green: #00ff41;
+  --ml-dim: #0d7a2a;
+  --ml-head: #ccffcc;
+  --ml-text: #c8d4cd;
+  --ml-muted: #5d6f66;
+  --ml-white: #e8f0ea;
+  --ml-amber: #d68a2a;
+  --ml-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+/* Timeline column — the reading column */
+body,
+[data-testid="primaryColumn"] {
+  background: var(--ml-bg) !important;
+}
+
+/* Tweet cards */
+article[data-testid="tweet"] {
+  background: var(--ml-panel) !important;
+  border: 1px solid var(--ml-edge) !important;
+  border-radius: 4px !important;
+}
+
+/* Tweet text — Latin face */
+div[data-testid="tweetText"] {
+  font-family: var(--ml-mono) !important;
+  color: var(--ml-text) !important;
+}
+
+/* Glyph face — green + glow, driven by html[data-ml-face="glyph"] */
+html[data-ml-face="glyph"] div[data-testid="tweetText"] {
+  color: var(--ml-green) !important;
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.35);
+}
+
+/* Preserve original helper underneath glyph tweet */
+.ml-original {
+  margin-top: 4px;
+  color: var(--ml-muted);
+  font: 10px/1.4 var(--ml-mono);
+  white-space: pre-wrap;
+}
+
+/* Column header glyph swap — keep DOM header for a11y, hide visually when needed */
+html[data-ml-face="glyph"] [data-testid="primaryColumn"] h2 {
+  /* optional: add glyph pseudo if header exists — left empty for v1, ready for B chrome later */
+}
+
+/* Promoted posts — amber warning like site .warning */
+[data-testid="tweet"] [data-testid="placementTracking"] {
+  background: #120d06 !important;
+  border-left: 3px solid var(--ml-amber) !important;
+}
+
+/* Top bar toggle — injected by content.js, styled here so CSS owns paint */
+#ml-face-toggle {
+  margin: 0 0 0 12px;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--ml-dim);
+  border-radius: 3px;
+  font: 11px/1.2 var(--ml-mono);
+  color: var(--ml-muted);
+  background: transparent;
+  cursor: pointer;
+}
+#ml-face-toggle:hover { color: var(--ml-head); background: #08120c; }
+#ml-face-toggle[aria-pressed="true"] { color: var(--ml-green); background: #0a1a0f; }
+
+/* Rain canvas sits behind feed — feed paints over it */
+#ml-rain {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  opacity: 0.12;
+  pointer-events: none;
+  background: #000;
+}
+[data-testid="primaryColumn"] { position: relative; z-index: 1; }
+
+/* Reduced motion — no glow animation */
+@media (prefers-reduced-motion: reduce) {
+  html[data-ml-face="glyph"] div[data-testid="tweetText"] { text-shadow: none; }
+}
