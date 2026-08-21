@@ -403,11 +403,30 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
   white-space: pre-wrap;
 }
 
-/* The input box. Deliberately short: it is supplied up front rather than
-   prompted for, because the browser cannot block on a read without
-   freezing the tab and the cascade with it. */
+/* The input box. Deliberately short: it holds the lines a reader chooses to
+   supply up front, and anything the program still wants is asked for one
+   line at a time in #answer-row below. Short because filling it in advance
+   is now the shortcut rather than the only way in. */
 #program-input {
   min-height: 3.5rem;
+}
+
+/* The interactive answer row. Present only while a program is waiting, so
+   it must read as part of the run rather than as another form field the
+   reader was supposed to fill in beforehand. */
+#answer-row {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--panel);
+  border-left: 2px solid var(--green);
+  border-radius: 0 4px 4px 0;
+}
+
+#answer-prompt {
+  margin: 0 0 0.5rem;
+  color: var(--white);
+  font: 13px/1.5 var(--mono);
+  white-space: pre-wrap;
 }
 
 #cascade {

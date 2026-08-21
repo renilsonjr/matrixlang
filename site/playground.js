@@ -24,8 +24,24 @@ const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
 // reader is left with a page that looks alive but has dead buttons on it.
 const GATED_CONTROL_IDS = [
   "write", "run", "ask-operator", "editor-face", "cascade-face",
-  "translit-latin", "translit-glyphs", "program-input",
+  "translit-latin", "translit-glyphs", "program-input", "answer", "answer-send",
 ];
+
+// A program can read input inside a loop that never ends. Each answer costs
+// a full re-run, so without a cap the page would prompt forever and get
+// slower every round. Bounded the way the interpreter bounds a runaway loop.
+const MAX_ANSWER_ROUNDS = 100;
+
+// The interactive session: the answers the reader has typed one at a time,
+// and how many events the cascade has already been given. Both reset when Run
+// is pressed. `answers` holds typed answers ONLY -- the Input box travels as
+// `stdin`, a separate argument, because the box is text that Python splits
+// into lines and an answer is already exactly one line. Merging the two into
+// one string and re-splitting it is what shifted every answer after a box
+// that ended in a newline and made a blank answer disappear entirely.
+let answers = [];
+let drawnCount = 0;
+let rounds = 0;
 
 async function boot() {
   const buttons = BOOT_BUTTON_IDS.map(el);
@@ -129,12 +145,34 @@ function writeProgram() {
 }
 
 function runProgram() {
-  const events = glue
-    .run(el("editor").value, el("program-input").value)
-    .toJs({ dict_converter: Object.fromEntries });
+  // Cleared once per Run, never per round: rounds repeat earlier output by
+  // design, and re-clearing would restart the animation on every answer.
   cascade.clear();
   el("miss").hidden = true;
-  for (const event of events) {
+  answers = [];
+  drawnCount = 0;
+  rounds = 0;
+  runRound();
+}
+
+function runRound() {
+  // Four positional args, no placeholder: `interactive` and `answers` both
+  // sit before `max_steps` precisely so nothing has to pass `undefined` past
+  // it. A JS `undefined` becomes Python None, and None means "no step limit"
+  // -- the browser would lose its runaway-loop protection without a word.
+  //
+  // The box is read here, not snapshotted at Run, which is the same
+  // treatment the editor beside it already gets: a reader who edits either
+  // one mid-session changes what the re-run replays. Snapshotting the box
+  // alone would fix half of that and hide the half that matters more.
+  const events = glue
+    .run(el("editor").value, el("program-input").value, true, answers)
+    .toJs({ dict_converter: Object.fromEntries });
+
+  // Only what has not been drawn yet. The re-run reproduces every earlier
+  // event exactly -- see tests/test_site_glue.py's determinism tests -- so
+  // anything before drawnCount is already on screen.
+  for (const event of events.slice(drawnCount)) {
     if (event.kind === "statement") {
       // `source` is the pure glyph wall, `latin` keeps identifiers readable.
       // One toggle governs both faces — output too — per FL-7.
@@ -149,6 +187,50 @@ function runProgram() {
       el("miss").hidden = false;
     }
   }
+
+  const wants = events.length > 0 && events[events.length - 1].kind === "needs_input";
+  // A needs_input marker is not something to draw, so it is excluded from the
+  // count -- the next round re-sends the events before it and stops there.
+  drawnCount = wants ? events.length - 1 : events.length;
+
+  if (!wants) {
+    hideAnswerRow();
+    return;
+  }
+  if (rounds >= MAX_ANSWER_ROUNDS) {
+    hideAnswerRow();
+    el("miss").textContent =
+      `this program asked for more than ${MAX_ANSWER_ROUNDS} answers — stopped`;
+    el("miss").hidden = false;
+    return;
+  }
+  showAnswerRow(lastOutput(events));
+}
+
+/** The program's own most recent output, which is the question it asked. */
+function lastOutput(events) {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i].kind === "output") return events[i].text;
+  }
+  // A program may read before it prints; a blank row would look broken.
+  return "The program is waiting for a line.";
+}
+
+function showAnswerRow(prompt) {
+  el("answer-prompt").textContent = prompt;
+  el("answer").value = "";
+  el("answer-row").hidden = false;
+}
+
+function hideAnswerRow() {
+  el("answer-row").hidden = true;
+}
+
+function sendAnswer() {
+  answers.push(el("answer").value);
+  rounds += 1;
+  hideAnswerRow();
+  runRound();
 }
 
 // The key is a local, never stored. Not localStorage, not a cookie, not a
@@ -221,14 +303,26 @@ el("request").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); writeProgram(); }
 });
 el("ask-operator").addEventListener("click", askOperator);
+el("answer-send").addEventListener("click", sendAnswer);
+el("answer").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); sendAnswer(); }
+});
 
 function toggleCascadeFace() {
   face = face === "glyph" ? "latin" : "glyph";
   const button = el("cascade-face");
   button.textContent = face === "glyph" ? "Latin" : "Glyph wall";
-  // Applies to the next run: the wall is cleared per run by design, and
-  // toggling mid-fall would need cascade.js to re-render its history —
-  // presentation, not worth touching the copied file for.
+  // Applies to what falls next, not to what is already on the wall: the
+  // wall is cleared per run by design, and toggling mid-fall would need
+  // cascade.js to re-render its history — presentation, not worth touching
+  // the copied file for.
+  //
+  // A run now spans rounds, so "next run" is no longer "next press of Run":
+  // toggling while a question is open draws the remaining suffix in the new
+  // face and leaves a wall in two faces at once. Consistent with the above
+  // rather than a separate bug — the wall shows the face each line had when
+  // it fell — and clearing to fix it would restart the animation, which is
+  // the one thing the round design exists to avoid.
 }
 
 // The glyph face is a face *of the source it was rendered from*. The moment

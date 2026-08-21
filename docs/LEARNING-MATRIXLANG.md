@@ -1188,9 +1188,18 @@ a windowed run would sit there waiting for a line you had no way to see it
 wanting. Only the display changes; the program itself runs the same either
 way. Every other program still gets the window described in §12.
 
-In the browser `jackin` reads the input box beside the editor, one line per
-`jackin`, supplied before you press Run — a web page cannot stop and wait for
-you without freezing the tab.
+In the browser you can answer either way. Fill the input box beside the editor
+before you press Run and `jackin` reads it one line at a time, or leave it
+empty and the page will ask you: when a program wants a line it does not have,
+an answer box appears under the editor showing whatever the program printed
+last — its question — and typing a line and pressing Answer carries on.
+
+A web page still cannot stop and wait for you without freezing the tab, so the
+page does not wait. It runs your program again from the beginning with your
+answer added, and shows you only the part that is new. You see one continuous
+run because that is what it is: MatrixLang programs do nothing but compute and
+`trace`, so running one twice with the same input gives exactly the same
+output, every time. The playground is built on that.
 
 ---
 

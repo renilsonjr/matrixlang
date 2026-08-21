@@ -198,6 +198,23 @@ class _InteractiveSource:
         return line
 ```
 
+> **Correction — this sample is wrong twice, and both were caught in review.**
+> Kept as written so the record shows what was planned, with the faults named:
+>
+> 1. `text.splitlines()` re-derives line splitting that `matrixlang.input`
+>    deliberately does differently — `str.splitlines` also breaks on `\v`,
+>    `\f`, `\x85` and U+2028/9, which `readline` treats as ordinary characters
+>    inside a line. Delegate to `BufferSource` instead.
+> 2. Taking the answers as one `text: str` at all. The design spec had
+>    `__init__(self, answers: list[str])` and was right: flattening the Input
+>    box and the typed answers into one string that Python re-splits does not
+>    round-trip. A box ending in a newline shifts every later answer by one,
+>    and a blank answer disappears entirely. They must stay two channels —
+>    the box as text through `BufferSource`, each answer verbatim through
+>    `ListSource`.
+>
+> See `site/glue.py`'s `_InteractiveSource` for what shipped.
+
 - [ ] **Step 4: Add the `interactive` parameter**
 
 Change `run`'s signature and docstring opening:

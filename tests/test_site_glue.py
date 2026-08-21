@@ -201,3 +201,160 @@ def test_an_unrelated_runtime_error_gains_no_input_guidance():
     message = events[-1]["message"]
     assert "cannot add" in message
     assert "Input box" not in message
+
+
+def test_running_the_same_program_twice_gives_the_same_events():
+    # THE load-bearing property. Interactive input re-runs a program once per
+    # prompt and shows the reader a continuous history, which is only honest
+    # because a re-run reproduces the previous run exactly. If MatrixLang ever
+    # gains randomness, a clock, or any effect beyond `trace`, this fails --
+    # and it should, because the interactive design breaks silently otherwise.
+    #
+    # Whole dicts, not a projection: `source`, `latin` and `glyphs` are what
+    # playground.js hands the cascade, so a projection that dropped them would
+    # stay green while the wall diverged -- the day `render_glyph` or
+    # `transliterate` became order- or identity-dependent.
+    source = 'construct a = jackin\ntrace "got " + a\ntrace 1 + 1\n'
+
+    assert glue.run(source, stdin="ana") == glue.run(source, stdin="ana")
+
+
+def test_fewer_answers_produce_a_prefix_of_the_full_event_stream():
+    # The other half of the property: round n+1 must reproduce everything
+    # round n showed, in order, before adding anything new. That is what lets
+    # playground.js feed the cascade only the new suffix instead of replaying
+    # the whole animation on every answer.
+    #
+    # Over the FULL event list, because `drawnCount` indexes the full list.
+    # Comparing only outputs would miss an extra or reordered statement event
+    # on re-run, which misaligns the slice and duplicates or swallows lines.
+    source = 'trace "first"\nconstruct a = jackin\ntrace "then " + a\n'
+
+    short = glue.run(source, stdin="", interactive=True)
+    long = glue.run(source, stdin="ana", interactive=True)
+
+    # The marker is the suspension itself, not something the cascade draws;
+    # playground.js excludes it from `drawnCount` for exactly this reason.
+    assert short[-1] == {"kind": "needs_input"}
+    drawn = short[:-1]
+    assert [e["text"] for e in drawn if e["kind"] == "output"] == ["first"]
+    assert [e["text"] for e in long if e["kind"] == "output"] == ["first", "then ana"]
+    assert long[: len(drawn)] == drawn, "a longer answer list changed earlier events"
+
+
+def test_interactive_run_asks_instead_of_failing():
+    events = glue.run("trace jackin\n", stdin="", interactive=True)
+    assert events[-1]["kind"] == "needs_input"
+
+
+def test_interactive_run_keeps_the_output_produced_before_it_asked():
+    # The prompt a reader sees IS this output -- the program's own trace.
+    source = 'trace "Digite a matricula ou nome: "\nconstruct a = jackin\n'
+    events = glue.run(source, stdin="", interactive=True)
+    outputs = [e["text"] for e in events if e["kind"] == "output"]
+    assert outputs == ["Digite a matricula ou nome: "]
+    assert events[-1]["kind"] == "needs_input"
+
+
+def test_interactive_run_finishes_when_the_answers_suffice():
+    source = 'construct a = jackin\ntrace "got " + a\n'
+    events = glue.run(source, stdin="ana", interactive=True)
+    assert [e["kind"] for e in events].count("needs_input") == 0
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["got ana"]
+
+
+def test_interactive_run_still_reports_a_real_error_as_an_error():
+    # A type error is not a request for input. Confusing the two would leave
+    # the page asking a question the program never asked.
+    events = glue.run('trace "id " + 1\n', stdin="", interactive=True)
+    assert events[-1]["kind"] == "error"
+    assert "cannot add" in events[-1]["message"]
+
+
+def test_non_interactive_run_is_unchanged():
+    # Existing callers, and the tutorial's description, must keep working.
+    events = glue.run("trace jackin\n", stdin="")
+    assert events[-1]["kind"] == "error"
+    assert "no input left to read" in events[-1]["message"]
+
+
+def test_a_trailing_newline_in_the_box_does_not_shift_later_answers():
+    # The box is a <textarea> and readers press Enter, so a trailing newline
+    # is the common case rather than the odd one. When the answers rode in the
+    # same string as the box, `"\n".join(["ana\n", "bob"])` split back into
+    # ["ana", "", "bob"] and the second question silently received "" -- the
+    # typed answer discarded, a phantom blank consumed in its place, and
+    # nothing on screen to say so. Two channels, so there is nothing to shift.
+    source = 'construct a = jackin\nconstruct b = jackin\ntrace "a=" + a\ntrace "b=" + b\n'
+    events = glue.run(source, "ana\n", True, ["bob"])
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["a=ana", "b=bob"]
+
+
+def test_a_blank_answer_is_one_real_line():
+    # Pressing Answer on an empty field is a reader saying "nothing", and a
+    # blank line is real input -- `input.py` returns None for exhausted rather
+    # than "" for precisely this reason. Flattened, [""] joined to "" and split
+    # back to zero lines: the same needs_input stream came back, so the row
+    # reappeared with the same prompt and the button looked broken.
+    source = 'construct a = jackin\ntrace "[" + a + "]"\n'
+    events = glue.run(source, "", True, [""])
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["[]"]
+    assert events[-1]["kind"] != "needs_input"
+
+
+def test_an_answer_is_yielded_verbatim_rather_than_re_split():
+    # The contract that keeps the two channels apart: the box is text and gets
+    # BufferSource's splitting, an answer is already one line and gets none.
+    # The answer row is an <input>, so a reader cannot type this today -- what
+    # is pinned is that answers never go back through a splitter, which is the
+    # single step that caused both faults above.
+    source = 'construct a = jackin\ntrace "[" + a + "]"\n'
+    events = glue.run(source, "", True, ["one\ntwo"])
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["[one\ntwo]"]
+
+
+def test_run_takes_interactive_and_answers_positionally_in_that_order():
+    # The browser calls `run` positionally, and until this test the parameter
+    # order was guarded by a comment alone. Verified by mutation: dropping the
+    # `true` from playground.js's call reverted the whole feature to the old
+    # "no input left to read" error with every Python and JavaScript test still
+    # green. `interactive` and `answers` both sit before `max_steps` so the
+    # page never passes a placeholder past it -- a JS `undefined` arrives as
+    # Python None, and None means no step limit at all.
+    events = glue.run("trace jackin\ntrace jackin\n", "", True, ["ana"])
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["ana"]
+    assert events[-1]["kind"] == "needs_input"
+
+
+def test_answers_are_ignored_when_the_caller_did_not_opt_in():
+    # Non-interactive behaviour must not move: the CLI-shaped path reads the
+    # box and nothing else, and still reports the shortfall as an error.
+    events = glue.run("trace jackin\n", "", False, ["ana"])
+    assert events[-1]["kind"] == "error"
+    assert "no input left to read" in events[-1]["message"]
+
+
+def test_interactive_source_splits_lines_exactly_like_non_interactive():
+    # str.splitlines() also breaks on \x0b (vertical tab), which BufferSource
+    # -- and therefore readline() and the CLI -- treats as an ordinary
+    # character inside a line. The same Input box text must not be read
+    # differently just because interactive mode is on; _InteractiveSource
+    # must delegate to BufferSource's splitting rather than have its own.
+    from matrixlang.input import BufferSource
+
+    text = "a\x0bb\nc"
+
+    buffer_source = BufferSource(text)
+    buffer_lines = []
+    while (line := buffer_source.next_line()) is not None:
+        buffer_lines.append(line)
+
+    interactive_source = glue._InteractiveSource(text)
+    interactive_lines = []
+    while True:
+        try:
+            interactive_lines.append(interactive_source.next_line())
+        except glue._NeedsInput:
+            break
+
+    assert interactive_lines == buffer_lines == ["a\x0bb", "c"]

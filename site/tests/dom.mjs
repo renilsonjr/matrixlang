@@ -69,6 +69,10 @@ export const INITIAL = {
   "editor-glyph": { hidden: true },
   "program-input": {},
   "run": { text: "Run it" },
+  "answer-row": { hidden: true },
+  "answer-prompt": {},
+  "answer": {},
+  "answer-send": { text: "Answer" },
   "cascade": {},
   "cascade-face": { text: "Latin" },
   "api-key": {},
@@ -169,6 +173,12 @@ export function loadPlayground({ faceToggles = 0 } = {}) {
     /** Replace the global playground.js reaches for during load(). */
     setGlobal(name, value) {
       sandbox[name] = value;
+    },
+
+    /** Stand in for the cascade, so a test can watch what gets drawn. */
+    setCascade(stub) {
+      sandbox.__stubCascade = stub;
+      vm.runInContext("cascade = __stubCascade", context);
     },
   };
 }
