@@ -89,3 +89,19 @@ def test_a_name_first_bound_inside_a_standalone_while_runs():
         "    n += 1\n"
     )
     assert _translated_output(source) == _run_python(source)
+
+
+
+def test_a_module_level_function_called_from_a_loop_runs():
+    # A `def` written directly in a loop body is refused (see
+    # tests/test_pytrans_loops.py) -- but a `def` outside any loop, then
+    # called from one, is unaffected by that refusal and must keep
+    # working.
+    source = (
+        "def helper(v):\n"
+        "    return v * 2\n"
+        "xs = [1, 2, 3]\n"
+        "for x in xs:\n"
+        "    print(helper(x))\n"
+    )
+    assert _translated_output(source) == _run_python(source)

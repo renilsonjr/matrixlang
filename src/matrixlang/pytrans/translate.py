@@ -123,6 +123,7 @@ class _Translator:
         if isinstance(node, ast.While):
             if node.orelse:
                 raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
+            _refuse_function_in_loop(node.body)
             condition = self.condition(node.test)
             # Same hazard `_for` hoists around: `construct` inside a
             # `dejavu` body fails on the second iteration, and a plain
@@ -262,6 +263,7 @@ class _Translator:
                     node.col_offset,
                 )
             )
+        _refuse_function_in_loop(node.body)
 
         before: list[Stmt] = []
         counter = self._fresh()
@@ -603,6 +605,63 @@ def _hoist_declares(body: list[Stmt]) -> tuple[list[Stmt], list[Declare]]:
         return out
 
     return walk(body), hoisted
+
+
+def _defines_function(
+    body: list[ast.stmt],
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    """The first `def` sitting directly in `body`, or nested only through
+    `if`/`while` -- the same reach `_hoist_declares` gives a `Declare`,
+    because a `def` binds its name on every pass through a `dejavu`
+    exactly the way a first assignment does (interpreter.py's `FunctionDef`
+    branch calls the same `_env.declare` a `Declare` does, so it hits the
+    identical "already declared" quirk on the second iteration).
+
+    Does not recurse into a nested `for` or `while`: each of those runs
+    this exact check against its own immediate body when IT is
+    translated, so recursing into one here would only re-report the same
+    `def` from a second call site, never catch a new one.
+    """
+    for statement in body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return statement
+        if isinstance(statement, ast.If):
+            found = _defines_function(statement.body) or _defines_function(
+                statement.orelse
+            )
+            if found is not None:
+                return found
+        if isinstance(statement, ast.While):
+            found = _defines_function(statement.body)
+            if found is not None:
+                return found
+    return None
+
+
+def _refuse_function_in_loop(body: list[ast.stmt]) -> None:
+    """Refuse a `def` written directly in a loop body, rather than hoist
+    it above the loop the way a `Declare` gets hoisted.
+
+    Hoisting was considered and rejected: the loop variable is substituted
+    inline (`x` becomes `xs[n]`), never declared, so a function written in
+    Python to close over `x` would -- if hoisted -- close over a counter
+    that means nothing yet at the point the hoisted `agent` sits, above
+    the loop it indexes. That would silently change what the closure
+    captures, which is exactly the kind of difference this translator
+    refuses rather than risk. A `def` outside any loop is unaffected --
+    only one written directly inside a `for` or `while` body is refused.
+    """
+    found = _defines_function(body)
+    if found is None:
+        return
+    raise _Unsupported(
+        Refusal(
+            "a function defined inside a loop cannot be translated",
+            found.lineno,
+            found.col_offset,
+            "define the agent once, outside the loop",
+        )
+    )
 
 
 # What a reader calls each construct, keyed by its ast class name. Without

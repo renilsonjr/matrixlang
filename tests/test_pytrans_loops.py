@@ -104,3 +104,49 @@ def test_a_name_first_bound_inside_a_loop_is_hoisted():
 def test_for_else_is_refused():
     source = "xs = [1]\nfor x in xs:\n    print(x)\nelse:\n    print(2)\n"
     assert "for ... else" in refused(source)[0].idiom
+
+
+
+def test_a_function_defined_directly_in_a_loop_is_refused():
+    # Not hoisted, unlike a Declare: the loop variable is substituted
+    # inline (`x` becomes `xs[n]`), never declared, so a def written to
+    # close over `x` would -- hoisted above the loop -- close over a
+    # counter that means nothing there yet. Refusing avoids silently
+    # changing what the closure captures.
+    source = (
+        "xs = [1]\n"
+        "for x in xs:\n"
+        "    def helper(v):\n"
+        "        return v * 2\n"
+        "    print(helper(x))\n"
+    )
+    refusal = refused(source)[0]
+    assert "inside a loop" in refusal.reason
+    assert "outside the loop" in refusal.idiom
+
+
+def test_a_function_defined_inside_an_if_inside_a_loop_is_refused():
+    # Same hazard, one level deeper: a `def` nested under `if` inside the
+    # loop body hits interpreter.py's FunctionDef branch on every pass
+    # exactly like a top-level one does.
+    source = (
+        "xs = [1]\n"
+        "for x in xs:\n"
+        "    if x > 0:\n"
+        "        def helper(v):\n"
+        "            return v * 2\n"
+        "        print(helper(x))\n"
+    )
+    assert "inside a loop" in refused(source)[0].reason
+
+
+def test_a_function_defined_directly_in_a_while_is_refused():
+    source = (
+        "n = 0\n"
+        "while n < 3:\n"
+        "    def helper(v):\n"
+        "        return v * 2\n"
+        "    print(helper(n))\n"
+        "    n += 1\n"
+    )
+    assert "inside a loop" in refused(source)[0].reason
