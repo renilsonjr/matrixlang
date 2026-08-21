@@ -404,7 +404,7 @@ def test_slicing_is_refused():
 
 
 def test_is_is_refused():
-    assert refused("print(a is b)\n")[0] is not None
+    assert "is" in refused("print(a is b)\n")[0].reason
 
 
 def test_print_with_several_arguments_is_refused():
@@ -416,7 +416,7 @@ def test_a_bare_expression_statement_is_refused():
     # MatrixLang's grammar accepts an expression statement only when it is a
     # call: `1 + 1` alone computes and discards, which the parser treats as a
     # mistake. Python allows it, so it is refused here.
-    assert refused("1 + 1\n")[0] is not None
+    assert refused("1 + 1\n")[0].idiom is not None
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -636,7 +636,7 @@ def test_augmented_assignment_expands():
 
 
 def test_augmented_assignment_before_any_binding_is_refused():
-    assert refused("x += 1\n")[0] is not None
+    assert "before changing it" in refused("x += 1\n")[0].idiom
 
 
 def test_index_assignment():
@@ -652,7 +652,7 @@ def test_append_becomes_concatenation():
 
 
 def test_append_inside_an_expression_is_refused():
-    assert refused("xs = []\ny = xs.append(1)\n")[0] is not None
+    assert refused("xs = []\ny = xs.append(1)\n")[0].reason != ""
 
 
 def test_an_unknown_method_call_is_refused():
@@ -887,7 +887,7 @@ def test_a_while_with_a_truthy_condition_is_refused():
 
 
 def test_default_arguments_are_refused():
-    assert refused("def f(a=1):\n    return a\n")[0] is not None
+    assert "positional" in refused("def f(a=1):\n    return a\n")[0].idiom
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -1132,12 +1132,12 @@ def test_range_with_a_start():
 
 
 def test_range_with_a_step_is_refused():
-    assert refused("for i in range(0, 10, 2):\n    print(i)\n")[0] is not None
+    assert "step" in refused("for i in range(0, 10, 2):\n    print(i)\n")[0].idiom
 
 
 def test_reassigning_the_loop_variable_is_refused():
     source = "xs = [1]\nfor x in xs:\n    x = 2\n"
-    assert refused(source)[0] is not None
+    assert "reassigns `x`" in refused(source)[0].reason
 
 
 def test_a_name_first_bound_inside_a_loop_is_hoisted():
@@ -1151,7 +1151,7 @@ def test_a_name_first_bound_inside_a_loop_is_hoisted():
 
 def test_for_else_is_refused():
     source = "xs = [1]\nfor x in xs:\n    print(x)\nelse:\n    print(2)\n"
-    assert refused(source)[0] is not None
+    assert "for ... else" in refused(source)[0].idiom
 ```
 
 - [ ] **Step 3: Run them to verify they fail**
@@ -1364,11 +1364,11 @@ def test_an_fstring_with_no_interpolation_is_just_a_string():
 
 
 def test_an_fstring_conversion_is_refused():
-    assert refused('print(f"{n!r}")\n')[0] is not None
+    assert "formatting" in refused('print(f"{n!r}")\n')[0].idiom
 
 
 def test_an_fstring_format_spec_is_refused():
-    assert refused('print(f"{n:>3}")\n')[0] is not None
+    assert "formatting" in refused('print(f"{n:>3}")\n')[0].idiom
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
