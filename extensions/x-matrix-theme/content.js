@@ -35,16 +35,19 @@
   }
 
   async function mountToggle() {
-    // X header may not exist yet — observe body until it does
+    // Fixed overlay — not inside X's header, so Chrome/Opera/Brave all land the same
     const tryMount = () => {
       if (document.getElementById("ml-face-toggle")) return true;
-      const header = document.querySelector('header [role="navigation"], header nav, [data-testid="primaryColumn"]');
-      if (!header) return false;
+      const parent = document.body || document.documentElement;
+      if (!parent) return false;
       const btn = document.createElement("button");
       btn.id = "ml-face-toggle";
+      btn.type = "button";
       btn.setAttribute("aria-pressed", "false");
       btn.textContent = "Glyph ◐ Latin";
-      btn.addEventListener("click", async () => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const cur = document.documentElement.dataset.mlFace || "latin";
         const next = cur === "glyph" ? "latin" : "glyph";
         document.documentElement.dataset.mlFace = next;
@@ -53,9 +56,7 @@
         else if (window.MLGlyph) window.MLGlyph.disableAll();
         sync();
       });
-      // Place near top bar — fallback to body if header not found
-      const anchor = document.querySelector('header [role="navigation"]') || document.querySelector("header") || document.body || document.documentElement;
-      anchor.appendChild(btn);
+      parent.appendChild(btn);
       sync();
       return true;
     };
