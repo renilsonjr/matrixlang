@@ -10,6 +10,7 @@ from matrixlang.nodes import (
     Binary,
     BoolLiteral,
     Declare,
+    DictLiteral,
     Expr,
     Call,
     ExprStmt,
@@ -48,6 +49,8 @@ _OPS: dict[TokenType, str] = {
     TokenType.UNPLUG: "unplug",
     TokenType.SPLICE: "splice",
     TokenType.FORK: "fork",
+    TokenType.KEYMAKER: "keymaker",
+    TokenType.ORACLE: "oracle",
 }
 
 
@@ -155,6 +158,13 @@ def _expression(expr: Expr, depth: int, lines: list[str]) -> None:
         lines.append(f"{pad}ListLiteral ({len(expr.elements)})")
         for element in expr.elements:
             _expression(element, depth + 1, lines)
+    elif isinstance(expr, DictLiteral):
+        lines.append(f"{pad}DictLiteral ({len(expr.entries)})")
+        for key, value in expr.entries:
+            lines.append(f"{pad}  key:")
+            _expression(key, depth + 2, lines)
+            lines.append(f"{pad}  value:")
+            _expression(value, depth + 2, lines)
     elif isinstance(expr, Index):
         lines.append(f"{pad}Index")
         _expression(expr.target, depth + 1, lines)

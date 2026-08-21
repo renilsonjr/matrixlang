@@ -18,6 +18,7 @@ operators, no blank lines, trailing comments after two spaces.
 from matrixlang.glyphs import GLYPHS
 from matrixlang.nodes import (
     Call,
+    DictLiteral,
     ExprStmt,
     FunctionDef,
     Index,
@@ -64,6 +65,8 @@ _OPS: dict[TokenType, str] = {
     TokenType.UNPLUG: "unplug",
     TokenType.SPLICE: "splice",
     TokenType.FORK: "fork",
+    TokenType.KEYMAKER: "keymaker",
+    TokenType.ORACLE: "oracle",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
@@ -82,6 +85,10 @@ _LEVEL: dict[TokenType, int] = {
     TokenType.GT: 5,
     TokenType.LTE: 5,
     TokenType.GTE: 5,
+    # `oracle` parses at the comparison level (parser._COMPARISON_OPS), so
+    # it shares that level here -- a different number would parenthesise
+    # `d oracle "a" == true` differently than the parser groups it.
+    TokenType.ORACLE: 5,
     TokenType.PLUS: 6,
     TokenType.MINUS: 6,
     TokenType.STAR: 7,
@@ -251,11 +258,17 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
         # R-PAREN-3: any binary operand is looser than _UNARY_LEVEL and
         # gets parens; atoms and nested unaries do not.
         operand = _expression(expr.operand, _UNARY_LEVEL, face)
-        if expr.op in (TokenType.LENGTH, TokenType.DECODE, TokenType.ENCODE):
+        if expr.op in (
+            TokenType.LENGTH,
+            TokenType.DECODE,
+            TokenType.ENCODE,
+            TokenType.KEYMAKER,
+        ):
             # A word operator needs a separator or `length xs` renders as
             # `lengthxs` and re-lexes as one identifier — a silent change
             # of meaning, which is exactly what §4.3 exists to catch.
-            # `decode` and `encode` are the same shape and share the rule.
+            # `decode`, `encode`, and `keymaker` are the same shape and
+            # share the rule.
             return _map(face, _OPS[expr.op]) + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):
@@ -292,6 +305,17 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             _expression(e, 0, face) for e in expr.elements
         )
         return f"{_map(face, '[')}{inner}{_map(face, ']')}", _ATOM_LEVEL
+    if isinstance(expr, DictLiteral):
+        # Keys and values render from level 0, same reasoning as
+        # ListLiteral.elements and Call.args: the braces delimit each pair,
+        # so neither ever needs parens for the dict's sake. entries is a
+        # list of pairs rather than a dict, so a key written twice renders
+        # as two entries -- collapsing them would lose a token.
+        inner = f"{_map(face, ',')} ".join(
+            f"{_expression(k, 0, face)}{_map(face, ':')} {_expression(v, 0, face)}"
+            for k, v in expr.entries
+        )
+        return f"{_map(face, '{')}{inner}{_map(face, '}')}", _ATOM_LEVEL
     if isinstance(expr, Binary):
         level = _LEVEL[expr.op]
         # Left-associative grammar: the left child may sit at the same
