@@ -106,7 +106,7 @@ anything about the language, which is the whole point of the split.
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 244 | Command-line entry point |
 | `scribe.py` | 632 | Plain language → AST, by pattern. Pure, keyless, and imports no `operator` |
-| `operator/prompt.py` | 148 | The system prompt. The language's rules, as text |
+| `operator/prompt.py` | 149 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 96 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
 | `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |

@@ -953,7 +953,7 @@ the values it produced brighter and slower, looping for as long as the
 window is open. Nothing on screen is random — every glyph came from your
 program.
 
-Output in the cascade is **decodable**, not decoration. `ﾁ｡ｵ･ ｿｺﾆ ﾙｸ･ｹ`
+Output in the cascade is **decodable**, not decoration. `ﾁ｡ｵ･ ｿｺﾆ ﾛｸ･ｹ`
 is `wake up, Neo`, and the table that decodes it is printable.
 
 Three things worth knowing:

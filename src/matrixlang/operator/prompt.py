@@ -71,7 +71,8 @@ Rules that differ from most languages:
   null.
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
   with `xs[i] = v`, and measure one with `length xs` (also works on a
-  string). Indexing is 0-based and out of range is an error.
+  string, and on a dictionary, where it gives the number of entries).
+  Indexing is 0-based and out of range is an error.
 - A string can be indexed too: `s[i]` reads a one-character string. It
   cannot be written — `s[i] = v` is an error, because a string can never
   change once made. Build a different one with `+` instead.
