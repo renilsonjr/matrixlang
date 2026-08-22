@@ -358,3 +358,36 @@ def test_interactive_source_splits_lines_exactly_like_non_interactive():
             break
 
     assert interactive_lines == buffer_lines == ["a\x0bb", "c"]
+
+
+def test_translate_python_returns_a_program():
+    result = glue.translate_python("print(1)\n")
+    assert result == {"ok": True, "source": "trace 1\n"}
+
+
+def test_translate_python_returns_refusals_with_positions():
+    result = glue.translate_python("import os\n")
+    assert result["ok"] is False
+    assert result["refusals"][0]["line"] == 1
+
+
+def test_translate_python_never_raises_on_invalid_python():
+    result = glue.translate_python("def (:\n")
+    assert result["ok"] is False
+
+
+def test_translate_python_never_raises_on_a_lone_surrogate():
+    # A JS string with an unpaired surrogate crosses into Python under
+    # Pyodide as exactly this -- a plain browser <textarea> can hold one,
+    # and ast.parse() used to fail encoding it with an uncaught
+    # UnicodeEncodeError rather than a refusal.
+    result = glue.translate_python("print('\udcff')")
+    assert result["ok"] is False
+
+
+def test_translate_python_never_raises_on_deep_nesting():
+    # 500 levels of `1 + 1 + ...` is well within what a reader could paste,
+    # and used to blow the walker's recursive descent with an uncaught
+    # RecursionError rather than a refusal.
+    result = glue.translate_python("x = " + "1 + " * 500 + "1\n")
+    assert result["ok"] is False

@@ -15,6 +15,7 @@ from matrixlang.input import BufferSource, ListSource
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
+from matrixlang.pytrans import Translated, translate
 from matrixlang.render import render_glyph
 from matrixlang.scribe import ScribeProgram, scribe
 from matrixlang.translit import table_for_readers, transliterate, untransliterate
@@ -122,6 +123,51 @@ def write(request: str) -> dict:
     if isinstance(result, ScribeProgram):
         return {"ok": True, "source": result.source}
     return {"ok": False, "error": result.reason, "hint": result.closest}
+
+
+def translate_python(source: str) -> dict:
+    """Ask the translator for a program. Never raises.
+
+    The wire shape mirrors `write()`: a flag plus either source or the
+    reasons it could not be produced. Refusals come back as a list because
+    the translator collects every one -- a reader fixing a long program
+    should see all of it at once.
+
+    The broad `except Exception` below is deliberate, not laziness. "Never
+    raises" has now been broken five times in this project, four of them by
+    a failure nobody predicted -- pytrans/translate.py itself just needed a
+    widened `ast.parse` catch and a recursion guard for two more nobody
+    foresaw when it was written. Under Pyodide there is no console the
+    reader is looking at for an escaped exception to land in; it is an
+    unhandled browser traceback in their tab. Catching everything here is
+    what makes the promise structurally true -- good for whatever gap
+    remains today and whatever new one Python 3.next introduces -- rather
+    than true only for the failure modes this module's authors happened to
+    think of before shipping it.
+    """
+    try:
+        result = translate(source)
+    except Exception as error:  # deliberately broad -- see the comment above
+        return {
+            "ok": False,
+            "refusals": [
+                {"reason": f"could not translate: {error}", "line": 1, "column": 1, "idiom": ""}
+            ],
+        }
+    if isinstance(result, Translated):
+        return {"ok": True, "source": result.source}
+    return {
+        "ok": False,
+        "refusals": [
+            {
+                "reason": r.reason,
+                "line": r.line,
+                "column": r.column,
+                "idiom": r.idiom or "",
+            }
+            for r in result.items
+        ],
+    }
 
 
 def glyph(source: str) -> dict:

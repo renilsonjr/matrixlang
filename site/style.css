@@ -403,6 +403,12 @@ button:disabled { border-color: var(--edge); color: var(--muted); cursor: defaul
   white-space: pre-wrap;
 }
 
+/* Collapsed by default: the pane already carries Scribe, an editor and an
+   input box, and a reader who does not write Python should not pay for it
+   in vertical space. */
+#python-panel summary { cursor: pointer; }
+#python-source { width: 100%; }
+
 /* The input box. Deliberately short: it holds the lines a reader chooses to
    supply up front, and anything the program still wants is asked for one
    line at a time in #answer-row below. Short because filling it in advance
