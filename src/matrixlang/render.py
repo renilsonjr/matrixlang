@@ -67,6 +67,12 @@ _OPS: dict[TokenType, str] = {
     TokenType.FORK: "fork",
     TokenType.KEYMAKER: "keymaker",
     TokenType.ORACLE: "oracle",
+    TokenType.MASK: "mask",
+    TokenType.MERGE: "merge",
+    TokenType.FLIP: "flip",
+    TokenType.INVERT: "invert",
+    TokenType.UPLINK: "uplink",
+    TokenType.DOWNLINK: "downlink",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
@@ -77,29 +83,34 @@ _LEVEL: dict[TokenType, int] = {
     # twice: this structure is what decides where parentheses go, and an
     # off-by-one here changes what a program means without failing
     # loudly anywhere else.
-    TokenType.FORK: 1,
-    TokenType.SPLICE: 2,
-    TokenType.EQ: 4,
-    TokenType.NEQ: 4,
-    TokenType.LT: 5,
-    TokenType.GT: 5,
-    TokenType.LTE: 5,
-    TokenType.GTE: 5,
+    TokenType.MERGE: 1,
+    TokenType.FLIP: 2,
+    TokenType.FORK: 3,
+    TokenType.SPLICE: 4,
+    TokenType.MASK: 5,
+    TokenType.EQ: 7,
+    TokenType.NEQ: 7,
+    TokenType.LT: 8,
+    TokenType.GT: 8,
+    TokenType.LTE: 8,
+    TokenType.GTE: 8,
     # `oracle` parses at the comparison level (parser._COMPARISON_OPS), so
     # it shares that level here -- a different number would parenthesise
     # `d oracle "a" == true` differently than the parser groups it.
-    TokenType.ORACLE: 5,
-    TokenType.PLUS: 6,
-    TokenType.MINUS: 6,
-    TokenType.STAR: 7,
-    TokenType.SLASH: 7,
+    TokenType.ORACLE: 8,
+    TokenType.UPLINK: 9,
+    TokenType.DOWNLINK: 9,
+    TokenType.PLUS: 10,
+    TokenType.MINUS: 10,
+    TokenType.STAR: 11,
+    TokenType.SLASH: 11,
 }
 # `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
 # unlike `-` and `length` it binds LOOSER than every binary operator
-# except fork and splice.
-_NOT_LEVEL = 3
-_UNARY_LEVEL = 8
-_ATOM_LEVEL = 9
+# in the logical/bitwise prefix, but tighter than equality.
+_NOT_LEVEL = 6
+_UNARY_LEVEL = 12
+_ATOM_LEVEL = 13
 # A call is postfix and binds tighter than every operator, including unary
 # minus: -f(1) is -(f(1)), never (-f)(1). That makes it an atom for
 # parenthesisation purposes, and saying so is better than the two constants
@@ -263,6 +274,7 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             TokenType.DECODE,
             TokenType.ENCODE,
             TokenType.KEYMAKER,
+            TokenType.INVERT,
         ):
             # A word operator needs a separator or `length xs` renders as
             # `lengthxs` and re-lexes as one identifier — a silent change

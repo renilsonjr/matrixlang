@@ -91,6 +91,10 @@ def _adopt_header_comment(
 
 _FORK_OPS = (TokenType.FORK,)
 _SPLICE_OPS = (TokenType.SPLICE,)
+_MERGE_OPS = (TokenType.MERGE,)
+_FLIP_OPS = (TokenType.FLIP,)
+_MASK_OPS = (TokenType.MASK,)
+_SHIFT_OPS = (TokenType.UPLINK, TokenType.DOWNLINK)
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _COMPARISON_OPS = (
     TokenType.LT,
@@ -391,7 +395,7 @@ class _Parser:
     # --- expressions ------------------------------------------------------
 
     def expression(self) -> Expr:
-        return self._fork()
+        return self._merge()
 
     # The ladder: each level parses the next-tighter level, then folds a
     # left-associative chain of its own operators. Named levels keep the
@@ -399,11 +403,20 @@ class _Parser:
     # sits above the ladder's top rung (_equality) rather than in it: it is
     # unary and right-recursive, not a left-associative binary chain.
 
+    def _merge(self) -> Expr:
+        return self._binary_level(_MERGE_OPS, self._flip)
+
+    def _flip(self) -> Expr:
+        return self._binary_level(_FLIP_OPS, self._fork)
+
     def _fork(self) -> Expr:
         return self._binary_level(_FORK_OPS, self._splice)
 
     def _splice(self) -> Expr:
-        return self._binary_level(_SPLICE_OPS, self._not)
+        return self._binary_level(_SPLICE_OPS, self._mask)
+
+    def _mask(self) -> Expr:
+        return self._binary_level(_MASK_OPS, self._not)
 
     def _not(self) -> Expr:
         """`unplug`, binding looser than comparison.
@@ -423,7 +436,10 @@ class _Parser:
         return self._binary_level(_EQUALITY_OPS, self._comparison)
 
     def _comparison(self) -> Expr:
-        return self._binary_level(_COMPARISON_OPS, self._term)
+        return self._binary_level(_COMPARISON_OPS, self._shift)
+
+    def _shift(self) -> Expr:
+        return self._binary_level(_SHIFT_OPS, self._term)
 
     def _term(self) -> Expr:
         return self._binary_level(_TERM_OPS, self._factor)
@@ -457,6 +473,7 @@ class _Parser:
             or self.check(TokenType.DECODE)
             or self.check(TokenType.ENCODE)
             or self.check(TokenType.KEYMAKER)
+            or self.check(TokenType.INVERT)
         ):
             op = self.advance()
             operand = self._unary()

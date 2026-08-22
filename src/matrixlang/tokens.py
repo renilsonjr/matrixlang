@@ -34,6 +34,12 @@ class TokenType(Enum):
     ENCODE = auto()
     KEYMAKER = auto()
     ORACLE = auto()
+    MASK = auto()
+    MERGE = auto()
+    FLIP = auto()
+    INVERT = auto()
+    UPLINK = auto()
+    DOWNLINK = auto()
 
     # Operators
     PLUS = auto()
@@ -84,6 +90,12 @@ KEYWORDS: dict[str, TokenType] = {
     "encode": TokenType.ENCODE,
     "keymaker": TokenType.KEYMAKER,
     "oracle": TokenType.ORACLE,
+    "mask": TokenType.MASK,
+    "merge": TokenType.MERGE,
+    "flip": TokenType.FLIP,
+    "invert": TokenType.INVERT,
+    "uplink": TokenType.UPLINK,
+    "downlink": TokenType.DOWNLINK,
 }
 
 
