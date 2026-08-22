@@ -70,8 +70,13 @@ _ALLOWED: dict[str, set[str]] = {
     # names.py invents counters and holder names for `for`; it only walks
     # the Python ast, so it reaches no matrixlang sibling at all.
     "pytrans.names": set(),
+    # `errors` for the same reason lexer/parser/interpreter/repl already
+    # reach it: recursion_guard()/TooDeepError turn a RecursionError from
+    # arbitrarily deep Python source (a long flat expression chain, no
+    # syntax-level depth cap the way indentation and parens have) into
+    # something translate() can hand back as a Refusal instead of raising.
     "pytrans.translate": {
-        "nodes", "tokens", "render", "pytrans.refuse", "pytrans.names",
+        "errors", "nodes", "tokens", "render", "pytrans.refuse", "pytrans.names",
     },
 }
 

@@ -165,10 +165,12 @@ test("a failed boot leaves no control looking usable", async () => {
   assert.equal(page.el("miss").hidden, false);
   assert.match(page.el("miss").textContent, /could not load/);
 
-  for (const id of [
-    "write", "run", "ask-operator", "editor-face", "cascade-face",
-    "translit-latin", "translit-glyphs", "program-input",
-  ]) {
+  // Read from playground.js's own list rather than a copy kept here — a
+  // copy cannot catch a missing id, since it would just as happily miss it
+  // too. This is literally how it failed once: "python-source" and
+  // "translate" were added to GATED_CONTROL_IDS without a matching update
+  // to a hardcoded list here, and nothing caught it.
+  for (const id of page.playground.GATED_CONTROL_IDS) {
     assert.equal(page.el(id).disabled, true, `${id} is still live after a failed boot`);
   }
 
@@ -195,10 +197,9 @@ test("boot() fails then succeeds re-enables every gated control", async () => {
 
   await page.playground.boot();
 
-  const gated = [
-    "write", "run", "ask-operator", "editor-face", "cascade-face",
-    "translit-latin", "translit-glyphs", "program-input",
-  ];
+  // Same reasoning as the test above: read the real list rather than a
+  // second copy of it, so a new gated id is covered the moment it is added.
+  const gated = page.playground.GATED_CONTROL_IDS;
   for (const id of gated) {
     assert.equal(page.el(id).disabled, true, `${id} is still live after a failed boot`);
   }

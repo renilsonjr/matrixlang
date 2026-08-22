@@ -416,4 +416,10 @@ el("translit-boot").addEventListener("click", boot);
 el("translit-latin").addEventListener("input", transliterateLatin);
 el("translit-glyphs").addEventListener("input", untransliterateGlyphs);
 
-window.__playground = { boot, write: writeProgram, run: runProgram, finishBoot };
+// GATED_CONTROL_IDS is exposed here too, not just used internally, so the
+// boot tests in site/tests/playground.test.mjs can assert against the real
+// list instead of a copy that silently stops matching it the next time an
+// id is added.
+window.__playground = {
+  boot, write: writeProgram, run: runProgram, finishBoot, GATED_CONTROL_IDS,
+};

@@ -10,6 +10,7 @@ construction -- it came from the same classes the parser produces.
 
 import ast
 
+from matrixlang.errors import TooDeepError, recursion_guard
 from matrixlang.nodes import (
     Assign, Binary, BoolLiteral, Call, Declare, DictLiteral, Expr, ExprStmt,
     FunctionDef, If, Index, IndexAssign, JackIn, ListLiteral, Name,
@@ -51,12 +52,51 @@ def translate(source: str) -> Translated | Refusals:
                 (error.offset or 1) - 1,
             )
         ])
+    except ValueError as error:
+        # ast.parse() encodes `source` to UTF-8 before parsing it, and an
+        # unpaired surrogate fails that step as a UnicodeEncodeError -- a
+        # ValueError subclass, not a SyntaxError, so the clause above never
+        # catches it. Not a contrived input: it is exactly what a JS string
+        # with an unpaired surrogate becomes crossing into Python under
+        # Pyodide, and a plain browser <textarea> can hold one. Unlike a
+        # SyntaxError, it carries no .lineno/.offset -- only a character
+        # index into `source` -- so the position is derived rather than
+        # read straight off the exception, the way error.offset is above.
+        return Refusals([Refusal(str(error), *_position(source, getattr(error, "start", 0)))])
 
     walker = _Translator(bound_names(tree))
     statements = walker.body(tree.body)
     if walker.refusals:
         return Refusals(sorted(walker.refusals, key=lambda r: (r.line, r.column)))
-    return Translated(render_ascii(Program(statements)))
+    try:
+        # A second guard, not a redundant one: body()'s per-statement guard
+        # protects the WALK (turning Python's AST into MatrixLang nodes),
+        # but rendering the result is a separate recursive descent over the
+        # same tree (render.py's mutual _emit/_expression), done once for
+        # the whole program rather than per statement -- and empirically
+        # (500 terms of `1 + 1 + ...`, the reproduction this guards) it is
+        # the one that actually exhausts the stack, not the walk. There is
+        # no single statement to blame once every statement has already
+        # walked clean, so unlike body()'s guard this can only report the
+        # program as a whole, at (1, 1) -- the same honest-about-having-no-
+        # position choice TooDeepError itself documents (errors.py).
+        with recursion_guard():
+            source_out = render_ascii(Program(statements))
+    except TooDeepError:
+        return Refusals([Refusal("this is nested too deeply to translate", 1, 1)])
+    return Translated(source_out)
+
+
+def _position(source: str, index: int) -> tuple[int, int]:
+    """1-based line, 0-based column for a character offset into `source`.
+
+    Mirrors how error.offset is read for a SyntaxError above -- that value
+    is already 1-based, hence the `- 1` there and not here.
+    """
+    index = max(0, min(index, len(source)))
+    line = source.count("\n", 0, index) + 1
+    column = index - source.rfind("\n", 0, index) - 1
+    return line, column
 
 
 class _Translator:
@@ -95,14 +135,42 @@ class _Translator:
         """Translate a block, collecting refusals rather than stopping.
 
         Catching per statement is what makes a thirty-line program take one
-        pass to fix instead of five.
+        pass to fix instead of five -- and it is why a recursion guard sits
+        here too, rather than only once around the whole walk in
+        translate(). Deep Python source (a long flat expression chain has no
+        syntax-level depth cap the way indentation and parens do -- see the
+        pytrans.translate entry in test_architecture.py) can exhaust the
+        stack while translating a single statement into nodes; catching it
+        here, per statement, means it unwinds no further than the statement
+        that caused it, so refusals already collected for earlier statements
+        -- and translation of the ones after it -- both survive. In practice
+        the walk tends to survive depths that later defeat render_ascii's
+        own recursive descent over the resulting tree, which is why
+        translate() carries a second, whole-program guard around that call
+        too; this one stays regardless, both as a real second line of
+        defence and because which recursive descent a given input happens
+        to exhaust first is an implementation detail, not something a
+        caller should have to rely on. recursion_guard() is the same
+        conversion glue.run() already applies around its own parse, for the
+        same underlying hazard (see site/glue.py); TooDeepError carries no
+        position of its own by design (errors.py), so one is supplied here
+        from the statement's own node, the same as _Unsupported's already
+        is.
         """
         out: list[Stmt] = []
         for node in statements:
             try:
-                out.extend(self.statement(node))
+                with recursion_guard():
+                    out.extend(self.statement(node))
             except _Unsupported as stop:
                 self.refusals.append(stop.refusal)
+            except TooDeepError:
+                self.refusals.append(
+                    Refusal(
+                        "this is nested too deeply to translate",
+                        node.lineno, node.col_offset,
+                    )
+                )
         return out
 
     def statement(self, node: ast.stmt) -> list[Stmt]:
