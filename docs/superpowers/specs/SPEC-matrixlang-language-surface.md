@@ -143,13 +143,20 @@ unary       := "-" unary | primary
 primary     := NUMBER | STRING | "true" | "false" | IDENT | "(" expression ")"
 ```
 
-Precedence, loosest to tightest: equality → comparison → term → factor → unary → primary.
+Precedence, loosest to tightest: merge → flip → fork → splice → mask →
+equality → comparison → shifts → term → factor → unary → primary.
 This satisfies the parent spec's Stage 2 criterion — `2 + 3 * 4` yields 14, with `*` below
 `+` in the tree. (Stage 9 adds two further rungs and one word-unary not shown in this
 Stage 1 grammar: `fork` is loosest of all, `splice` sits directly tighter than `fork`, and
 `unplug` — despite being unary — binds looser than every binary operator except those two,
 sitting between `splice` and `equality` rather than at the `unary` rung; see `render.py`'s
 `_LEVEL` table for the current, authoritative numbering.)
+
+Bitwise vocabulary is themed: `mask` is integer AND, `merge` is integer OR,
+`flip` is integer XOR, `invert` is integer NOT, `uplink` is left shift, and
+`downlink` is right shift. All operands are integers; shift counts must be
+non-negative. Right shift follows Python's arithmetic right-shift semantics
+for negative integers.
 
 The shape is deliberately close to *Crafting Interpreters* Ch. 4–6 so the reference
 material lines up with the episodes rather than diverging from them.
