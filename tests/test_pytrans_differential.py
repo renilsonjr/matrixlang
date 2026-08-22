@@ -3,13 +3,14 @@
 The only tests here that can catch an output which parses, runs, and
 means something other than the Python did.
 
-Two rows of the subset cannot be judged by comparing stdout, and both
-are structural rather than gaps waiting to be filled: `input()`'s prompt
-newline (see `both` below) and anything whose result is a boolean, which
-Python prints as `True` and MatrixLang as `true` (see
-`matrixlang_prints`). Those rows are covered against a literal
-expectation instead, so the absence of an `agree()` case for them is
-deliberate and visible.
+Three rows of the subset cannot be judged by comparing stdout, and all
+three are structural rather than gaps waiting to be filled: `input()`'s
+prompt newline (see `both` below), anything whose result is a boolean,
+which Python prints as `True` and MatrixLang as `true`, and a container
+that holds a string, which Python quotes with `'` and MatrixLang with
+`"` (see `matrixlang_prints` for all three). Those rows are covered
+against a literal expectation instead, so the absence of an `agree()`
+case for them is deliberate and visible.
 """
 
 import io
@@ -261,3 +262,13 @@ def test_an_fstring_interpolating_a_dictionary_field_agrees():
         'book = {"id": 2, "name": "refactoring"}\n'
         'print(f"Name: {book[\'name\']}, ID: {book[\'id\']}")\n'
     )
+
+
+def test_an_fstring_interpolating_a_list_of_strings_translates_to_oracle():
+    # `encode` widened to take any value, so this hole now translates and
+    # runs instead of dying at Run -- but it does not agree with Python.
+    # `encode` shares `to_display` with `trace`, and a nested string was
+    # already quoted MatrixLang's way (`"`) rather than Python's (`'`)
+    # before this branch; an f-string hole is just one more way to reach
+    # that same pre-existing divergence.
+    matrixlang_prints('print(f"{[\'a\']}")\n', '["a"]\n')
