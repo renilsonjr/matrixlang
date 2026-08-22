@@ -1465,9 +1465,13 @@ Note that `unplug` goes the other way — `unplug n == 1` means
 the comparison; `decode` *produces* a number that arithmetic *consumes*, so
 reaching across the `+` would only ever produce an error.
 
-### `encode` reverses `decode`
+### `encode` is `decode`'s counterpart
 
-`encode` turns a number into text — the mirror of `decode`.
+`encode` is `decode`'s counterpart, not its exact mirror. `decode` is
+narrow — it turns text into a number, and refuses text that is not one,
+because there is no sensible number for `"hi"`. `encode` is not narrow the
+same way: it gives the text form of *any* value — the same text `trace`
+would print.
 
 ```
 construct id = 7
@@ -1482,17 +1486,28 @@ trace "ID: " + encode id
 ID: 7
 ```
 
-It is numbers-only and just as strict: a value that is already text is
-refused rather than passed through, the same way `decode` refuses a value
-that is already a number.
+Give it something other than a number and it still works, because it
+routes through the same display rules `trace` uses. A string prints bare
+at the top level; a value nested inside a list or dictionary prints
+quoted, the same rule `trace` follows:
 
 ```
 trace encode "5"
+trace encode true
+trace encode [1, 2]
 ```
 
 ```
-matrixlang: [line 1, column 7] 'encode' takes a number, got string
+5
+true
+[1, 2]
 ```
+
+`encode` refuses exactly two things, both about the value's shape rather
+than its type: a value that contains itself (a list or dictionary that
+holds itself, directly or indirectly, has no finite text form), and an
+integer past the same digit ceiling described below. Everything else
+comes back as text.
 
 `encode` sits at the same precedence as `decode` — tighter than arithmetic,
 for the same reason: both produce a value that the arithmetic around them

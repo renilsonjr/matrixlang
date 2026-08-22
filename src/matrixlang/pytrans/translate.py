@@ -799,10 +799,13 @@ class _Translator:
     def _fstring(self, node: ast.JoinedStr) -> Expr:
         """An f-string as a `+` chain, with `encode` around each hole.
 
-        `encode` takes a number, so interpolating a string fails loudly at
-        runtime with a line and column. That is allowed where a silent
-        difference would not be: the reader sees the error and fixes it,
-        rather than getting a program that quietly means something else.
+        `encode` now gives the text form of any value, so wrapping every
+        hole in it is no longer a bet that the hole is a number: a string
+        interpolation translates and runs cleanly, printing its own text,
+        the same as it would in Python. `encode` still refuses a value
+        that contains itself and an integer past the digit ceiling, and
+        those refusals surface at runtime with a line and column rather
+        than silently meaning something else.
         """
         parts: list[Expr] = []
         for piece in node.values:
