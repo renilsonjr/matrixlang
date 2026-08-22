@@ -4,6 +4,11 @@ A working register. The playground translates Python to MatrixLang for a stated
 subset; this file records what that subset covers today, what it does not, and
 the order we intend to close the gaps.
 
+**The queue on GitHub:** each item below has an issue — #132 through #136 — so
+the order is visible without reading this file. The issues carry the same
+reasoning; this file carries the ordering and the constraints that bind all of
+them.
+
 **How to add to it:** when a program you actually wanted to run gets refused,
 find the gap below and note the program beside it. A gap that has blocked three
 real programs outranks one that has blocked none, whatever either looks like on
@@ -44,7 +49,7 @@ Ordered by value per unit of design risk, not by how often each appears. Cheap
 additions with no design argument come before expensive ones that have a real
 decision buried inside them.
 
-### 1. String methods — *next*
+### 1. String methods — #132 — *next*
 
 MatrixLang has strings and **no way to change their case, trim them, or split
 them.** `.append()` is the only method the translator handles, and it is really
@@ -55,7 +60,7 @@ Blocked so far: the products search (`.lower()` for case-insensitive matching).
 Pure addition, no design tension. This is the gap most likely to surprise
 someone who assumes a language with strings can work with them.
 
-### 2. `break` and `continue`
+### 2. `break` and `continue` — #133
 
 There is no loop control at all. Every search loop must run to the end even
 after it has found what it wanted. The current refusal tells a reader to restructure
@@ -64,7 +69,7 @@ around the loop's own condition, which is honest but is not what their Python sa
 Two keywords. The main question is what `dejavu` does about an early exit, not
 whether it should have one.
 
-### 3. `in` over a list or string
+### 3. `in` over a list or string — #134
 
 `oracle` asks a *dictionary* for a key. "Is this name in this list?" — one of
 the most ordinary things a beginner writes — has no MatrixLang form at all.
@@ -73,7 +78,7 @@ Today `2 in xs` translates to `xs oracle 2` and fails at runtime.
 Either widen `oracle` or give it a sibling. Small, and it removes a case that
 currently fails *after* translation rather than during it.
 
-### 4. Numbers — decimals and `%`
+### 4. Numbers — decimals and `%` — #135
 
 The biggest unlock and the biggest decision.
 
@@ -88,7 +93,7 @@ project's temperament, and sidestep that entirely — at the cost of being less
 familiar to someone arriving from Python. Worth brainstorming rather than
 defaulting.
 
-### 5. The `None` pattern
+### 5. The `None` pattern — #136
 
 `return None` plus `if result:` — a function that might not find anything, and a
 test of whether it did. **This shape has blocked two real programs**, more than
