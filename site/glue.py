@@ -15,6 +15,7 @@ from matrixlang.input import BufferSource, ListSource
 from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
+from matrixlang.pytrans import Translated, translate
 from matrixlang.render import render_glyph
 from matrixlang.scribe import ScribeProgram, scribe
 from matrixlang.translit import table_for_readers, transliterate, untransliterate
@@ -122,6 +123,31 @@ def write(request: str) -> dict:
     if isinstance(result, ScribeProgram):
         return {"ok": True, "source": result.source}
     return {"ok": False, "error": result.reason, "hint": result.closest}
+
+
+def translate_python(source: str) -> dict:
+    """Ask the translator for a program. Never raises.
+
+    The wire shape mirrors `write()`: a flag plus either source or the
+    reasons it could not be produced. Refusals come back as a list because
+    the translator collects every one -- a reader fixing a long program
+    should see all of it at once.
+    """
+    result = translate(source)
+    if isinstance(result, Translated):
+        return {"ok": True, "source": result.source}
+    return {
+        "ok": False,
+        "refusals": [
+            {
+                "reason": r.reason,
+                "line": r.line,
+                "column": r.column,
+                "idiom": r.idiom or "",
+            }
+            for r in result.items
+        ],
+    }
 
 
 def glyph(source: str) -> dict:

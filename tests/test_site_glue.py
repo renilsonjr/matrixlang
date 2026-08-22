@@ -358,3 +358,19 @@ def test_interactive_source_splits_lines_exactly_like_non_interactive():
             break
 
     assert interactive_lines == buffer_lines == ["a\x0bb", "c"]
+
+
+def test_translate_python_returns_a_program():
+    result = glue.translate_python("print(1)\n")
+    assert result == {"ok": True, "source": "trace 1\n"}
+
+
+def test_translate_python_returns_refusals_with_positions():
+    result = glue.translate_python("import os\n")
+    assert result["ok"] is False
+    assert result["refusals"][0]["line"] == 1
+
+
+def test_translate_python_never_raises_on_invalid_python():
+    result = glue.translate_python("def (:\n")
+    assert result["ok"] is False

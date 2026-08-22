@@ -108,6 +108,51 @@ test("a face that renders clears the diagnostic left by one that did not", () =>
   );
 });
 
+test("translating Python sets the editor's source on success", () => {
+  const page = loadPlayground();
+  page.setGlue({
+    translate_python: (source) => ({ ok: true, source: `SOURCE(${source})` }),
+    glyph: (source) => ({ ok: true, glyph: `GLYPH(${source})` }),
+  });
+
+  page.type("editor", "trace 1");
+  page.el("editor-face").click();
+  page.el("python-source").value = "print(1)";
+  page.el("translate").click();
+
+  assert.equal(page.el("editor").value, "SOURCE(print(1))");
+  assert.equal(page.el("miss").hidden, true);
+  // Setting .value fires no input event, so this path has to withdraw the
+  // face itself -- same contract writeProgram() already keeps.
+  assert.equal(
+    page.el("editor-glyph").hidden,
+    true,
+    "the face survived a program the reader did not type",
+  );
+});
+
+test("every refusal is rendered into the miss slot, not just the first", () => {
+  const page = loadPlayground();
+  page.setGlue({
+    translate_python: () => ({
+      ok: false,
+      refusals: [
+        { reason: "no import statements", line: 1, column: 1, idiom: "" },
+        { reason: "no while/else", line: 4, column: 3, idiom: "for-else" },
+      ],
+    }),
+  });
+
+  page.el("python-source").value = "import os\n";
+  page.el("translate").click();
+
+  assert.equal(page.el("miss").hidden, false);
+  assert.equal(
+    page.el("miss").textContent,
+    "line 1: no import statements\nline 4: no while/else — for-else",
+  );
+});
+
 test("a failed boot leaves no control looking usable", async () => {
   const page = loadPlayground();
   page.setGlobal("loadPyodide", () => Promise.reject(new Error("blocked")));

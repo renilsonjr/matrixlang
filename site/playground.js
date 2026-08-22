@@ -25,6 +25,7 @@ const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
 const GATED_CONTROL_IDS = [
   "write", "run", "ask-operator", "editor-face", "cascade-face",
   "translit-latin", "translit-glyphs", "program-input", "answer", "answer-send",
+  "python-source", "translate",
 ];
 
 // A program can read input inside a loop that never ends. Each answer costs
@@ -142,6 +143,25 @@ function writeProgram() {
     miss.textContent = text;
     miss.hidden = false;
   }
+}
+
+function translatePython() {
+  const result = glue
+    .translate_python(el("python-source").value)
+    .toJs({ dict_converter: Object.fromEntries });
+  const miss = el("miss");
+  if (result.ok) {
+    el("editor").value = result.source;
+    withdrawEditorFace();
+    miss.hidden = true;
+    return;
+  }
+  // Every refusal at once. A reader fixing a long program should not have
+  // to discover its problems one press at a time.
+  miss.textContent = result.refusals
+    .map((r) => `line ${r.line}: ${r.reason}${r.idiom ? ` — ${r.idiom}` : ""}`)
+    .join("\n");
+  miss.hidden = false;
 }
 
 function runProgram() {
@@ -298,6 +318,7 @@ async function askOperator() {
 
 el("boot").addEventListener("click", boot);
 el("write").addEventListener("click", writeProgram);
+el("translate").addEventListener("click", translatePython);
 el("run").addEventListener("click", runProgram);
 el("request").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); writeProgram(); }
