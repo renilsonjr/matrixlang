@@ -105,3 +105,43 @@ def test_a_module_level_function_called_from_a_loop_runs():
         "    print(helper(x))\n"
     )
     assert _translated_output(source) == _run_python(source)
+
+
+def test_a_range_bound_is_read_once_at_loop_entry():
+    # Python builds the range object when the loop STARTS, so a body that
+    # changes the bound's name still runs the original number of times.
+    # Inlined into the `dejavu` condition the name was re-read every
+    # iteration, and this printed 0 1 2 instead of 0 1 2 3 4 -- clean run,
+    # wrong answer.
+    source = (
+        "n = 5\n"
+        "for i in range(n):\n"
+        "    n = n - 1\n"
+        "    print(i)\n"
+    )
+    assert _translated_output(source) == _run_python(source)
+
+
+def test_a_range_bound_that_is_a_call_is_read_once_too():
+    source = (
+        "def size():\n"
+        "    return 3\n"
+        "for i in range(size()):\n"
+        "    print(i)\n"
+    )
+    assert _translated_output(source) == _run_python(source)
+
+
+def test_a_nested_loop_over_a_list_of_lists_runs():
+    # The inner loop's iterable is the OUTER loop's variable, which has no
+    # name in the output at all -- it is substituted. Read straight off the
+    # Python ast, the inner loop emitted `length row` for a `row` that was
+    # never declared, and the most ordinary nested loop there is died with
+    # "'row' is not declared".
+    source = (
+        "xs = [[1, 2], [3]]\n"
+        "for row in xs:\n"
+        "    for v in row:\n"
+        "        print(v)\n"
+    )
+    assert _translated_output(source) == _run_python(source)

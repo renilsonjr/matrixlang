@@ -363,16 +363,56 @@ class _Translator:
             # `for i in range(...)`: the counter IS the value.
             self.substitutions[node.target.id] = Name(counter)
             before.append(Declare(counter, start))
+            if not isinstance(stop, NumberLiteral):
+                # Evaluated once, for the same reason a non-name iterable
+                # is hoisted below: Python builds the range object at loop
+                # ENTRY, so `for i in range(n)` with a body that changes
+                # `n` still runs the original number of times. Inlined into
+                # the `dejavu` condition, `n` was re-read every iteration
+                # -- `n = 5` counting down inside the body printed 0 1 2
+                # instead of 0 1 2 3 4, with nothing to show for it. A
+                # literal bound is left inline: it cannot change, and
+                # `dejavu n < 3` is what the reader expects to see.
+                limit = self._fresh("stop")
+                before.append(Declare(limit, stop))
+                stop = Name(limit)
             condition = Binary(Name(counter), TokenType.LT, stop)
         else:
-            source = node.iter
-            if isinstance(source, ast.Name):
-                holder = source.id
+            # Through expression(), not `.id` off the ast: the iterable of a
+            # NESTED `for` is very often the outer loop's variable, which has
+            # no name in the output at all (it is substituted, rule 2). Read
+            # straight off the ast, `for v in row:` emitted `length row` for
+            # a `row` that was never declared, and the most ordinary nested
+            # loop there is died with "'row' is not declared".
+            value = self.expression(node.iter)
+            if isinstance(value, Name):
+                holder = value.ident
+                if _rebinds(node.body, holder):
+                    # The list path's counterpart to hoisting a `range`
+                    # bound, and it has to be a refusal rather than a hoist.
+                    # Python's `for` holds the LIST OBJECT it was given, so
+                    # rebinding the name inside the body changes nothing;
+                    # indexing the name, as the output does, follows the
+                    # rebinding and walks a different list from the next
+                    # iteration on. Hoisting `xs` into a generated holder
+                    # would fix that shape and break another -- `xs` growing
+                    # by `xs.append(v)` inside its own loop runs forever in
+                    # Python, and the holder would quietly make it finish.
+                    # There is no output that is right for both, so this one
+                    # is named and refused.
+                    raise _Unsupported(
+                        Refusal(
+                            f"the loop reassigns `{holder}`, the list it walks; "
+                            "copy it to another name first",
+                            node.iter.lineno,
+                            node.iter.col_offset,
+                        )
+                    )
             else:
                 # Evaluated once. Substituting a call inline would run it
                 # on every iteration -- a different program.
                 holder = self._fresh("xs")
-                before.append(Declare(holder, self.expression(source)))
+                before.append(Declare(holder, value))
             self.substitutions[node.target.id] = Index(Name(holder), Name(counter))
             before.append(Declare(counter, NumberLiteral(0)))
             condition = Binary(

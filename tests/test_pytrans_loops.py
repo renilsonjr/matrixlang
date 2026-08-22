@@ -150,3 +150,20 @@ def test_a_function_defined_directly_in_a_while_is_refused():
         "    n += 1\n"
     )
     assert "inside a loop" in refused(source)[0].reason
+
+
+def test_a_literal_range_bound_stays_inline():
+    # A number cannot change, so hoisting it would only add a line the
+    # reader has to account for.
+    assert "construct stop" not in ml("for i in range(3):\n    print(i)\n")
+
+
+def test_a_loop_that_reassigns_the_list_it_walks_is_refused():
+    # Python's `for` holds the list OBJECT, so rebinding the name inside
+    # the body changes nothing; the output indexes the name, so it would
+    # follow the rebinding onto a different list. No output is right for
+    # both that and `xs.append(v)` inside its own loop, so it is refused.
+    source = "xs = [1, 2, 3]\nfor x in xs:\n    xs = [1]\n    print(x)\n"
+    refusal = refused(source)[0]
+    assert "reassigns `xs`" in refusal.reason
+    assert refusal.line == 2
