@@ -568,34 +568,22 @@ def test_decode_of_encode_returns_the_number():
         assert _run(f"trace decode encode {n}\n") == [n]
 
 
-def test_encode_rejects_text():
-    from matrixlang.errors import MatrixLangError
-
-    with pytest.raises(MatrixLangError) as caught:
-        _run('trace encode "already text"\n')
-    # values.type_name maps str to "string" (see values.py), the same word
-    # every other type error in this file uses -- not "text", which is
-    # decode's ROLE word for what it wants, never type_name's output for
-    # what it got. The brief's literal said "text"; corrected here to match
-    # the language's actual vocabulary and this file's own convention.
-    assert "'encode' takes a number, got string" in caught.value.message
+def test_encode_accepts_a_string():
+    # Was test_encode_rejects_text. `encode` took numbers only until a
+    # translated f-string interpolating a string died on Run; `trace` had
+    # always printed every type, and `encode` now hands back the same text.
+    assert _run('trace encode "already text"\n') == ["already text"]
 
 
-def test_encode_rejects_a_boolean():
-    # Strict like splice, which refuses a non-boolean rather than coercing.
-    from matrixlang.errors import MatrixLangError
-
-    with pytest.raises(MatrixLangError) as caught:
-        _run("trace encode true\n")
-    assert "'encode' takes a number, got boolean" in caught.value.message
+def test_encode_accepts_a_boolean():
+    # Was test_encode_rejects_a_boolean. The language's own spelling, not
+    # Python's: values._display checks is_bool before is_int.
+    assert _run("trace encode true\n") == ["true"]
 
 
-def test_encode_rejects_a_list():
-    from matrixlang.errors import MatrixLangError
-
-    with pytest.raises(MatrixLangError) as caught:
-        _run("trace encode [1, 2]\n")
-    assert "'encode' takes a number, got list" in caught.value.message
+def test_encode_accepts_a_list():
+    # Was test_encode_rejects_a_list.
+    assert _run("trace encode [1, 2]\n") == ["[1, 2]"]
 
 
 def test_adding_a_number_to_text_is_still_an_error():

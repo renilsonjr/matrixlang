@@ -799,10 +799,24 @@ class _Translator:
     def _fstring(self, node: ast.JoinedStr) -> Expr:
         """An f-string as a `+` chain, with `encode` around each hole.
 
-        `encode` takes a number, so interpolating a string fails loudly at
-        runtime with a line and column. That is allowed where a silent
-        difference would not be: the reader sees the error and fixes it,
-        rather than getting a program that quietly means something else.
+        `encode` gives the text form of any value, so wrapping every hole
+        in it is not a bet that the hole is a number: a string
+        interpolation translates and runs cleanly instead of dying at Run
+        the way it used to when the hole was not a number. `encode` still
+        refuses a value that contains itself and an integer past the
+        digit ceiling, and those refusals surface at runtime with a line
+        and column rather than silently meaning something else.
+
+        That does not make every hole's printed text agree with Python's.
+        `encode` and `trace` share `to_display`, and `to_display` already
+        had its own spelling for a handful of shapes -- a list or
+        dictionary quotes the strings it holds, a boolean prints
+        lowercase, an agent prints as `<agent name>` -- so `print(xs)`
+        for such a value diverged before this branch touched anything.
+        What this change adds is more roads to that same divergence: an
+        f-string hole used to fail loudly on those shapes instead of
+        printing MatrixLang's spelling, and now it prints it, same as
+        `trace` always did.
         """
         parts: list[Expr] = []
         for piece in node.values:

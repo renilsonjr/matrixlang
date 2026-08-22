@@ -391,3 +391,13 @@ def test_translate_python_never_raises_on_deep_nesting():
     # RecursionError rather than a refusal.
     result = glue.translate_python("x = " + "1 + " * 500 + "1\n")
     assert result["ok"] is False
+
+
+def test_encoding_a_cyclic_value_returns_an_error_event_rather_than_raising():
+    # `encode` accepts any value now, which makes a self-containing one
+    # reachable inside it for the first time. run() promises never to
+    # raise; that promise has been broken five times here, so a new
+    # reachable exception type gets its own guard at this layer too.
+    events = glue.run('construct xs = [1]\nxs[0] = xs\ntrace encode xs\n')
+    assert events[-1]["kind"] == "error"
+    assert "contains a cycle" in events[-1]["message"]

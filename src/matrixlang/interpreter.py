@@ -482,20 +482,28 @@ class Interpreter:
                         expr.column,
                     ) from error
             if expr.op is TokenType.ENCODE:
-                # Numbers only, and is_int is deliberately narrow: in Python
-                # a bool IS an int, so `is_int` (which checks type exactly)
-                # is what keeps `encode true` an error rather than "1".
-                if not is_int(operand):
-                    raise RuntimeErrorML(
-                        f"'encode' takes a number, got {type_name(operand)}",
-                        expr.line,
-                        expr.column,
-                    )
-                # to_display, not str(): `trace` renders numbers through it
-                # already, and two renderings of one integer would be two
-                # answers to the same question. They would drift.
+                # Any value, deliberately. This was numbers-only, guarded by
+                # is_int, until a reader's f-string interpolating a string
+                # translated cleanly and died on Run naming an operator they
+                # never typed. `trace` prints every type through to_display;
+                # there was no reason `encode` could not hand back the same
+                # text. The old guard's own comment feared `encode true`
+                # giving "1" -- to_display gives "true", because _display
+                # checks is_bool first, so it was guarding against something
+                # values.py already prevented.
                 try:
                     return to_display(operand)
+                except CyclicValue:
+                    # Newly reachable: the type guard above used to make a
+                    # self-containing value impossible here. Same wording as
+                    # `trace`'s -- "a value", not "a list", because a
+                    # dictionary can hold itself too and the message reaches
+                    # the browser verbatim in the SSE error payload.
+                    raise RuntimeErrorML(
+                        "cannot display a value that contains a cycle",
+                        expr.line,
+                        expr.column,
+                    ) from None
                 except TooManyDigits as size:
                     # The mirror of decode's ValueError guard above, and
                     # for the same CPython cap -- but the guard itself
