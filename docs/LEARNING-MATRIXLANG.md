@@ -671,11 +671,13 @@ no turma yet
 
 ## 9. Python, translated
 
-Section 8 introduced dictionaries with a Python program: two parallel lists
-drift apart, so keep facts together instead. That program was not
-hypothetical — it is close to what a beginner actually writes, and
-`matrixlang.pytrans.translate` turns real Python source like it into real
-MatrixLang source, for a stated subset of the language.
+Section 8 motivated dictionaries with a scenario, not a program: two
+parallel lists — `ids` and `grades` — quietly drifting apart, so keep
+facts together instead. That scenario is not hypothetical — it is close
+to what a beginner actually writes, in Python, already reaching for a
+dictionary. `matrixlang.pytrans.translate` takes real Python source like
+that and turns it into real MatrixLang source, for a stated subset of the
+language.
 
 ```python
 from matrixlang.pytrans import translate
@@ -743,7 +745,7 @@ a tool that runs before any value exists to check them against.
 ### Why truthiness is refused
 
 Python lets any value stand in for a condition — an empty list is
-false-ish, a non-empty one is true-ish. MatrixLang has no such rule (§3):
+false-ish, a non-empty one is true-ish. MatrixLang has no such rule (§4):
 `redpill` needs an actual boolean, or it is a type error. Since the
 translator does not evaluate anything (previous section), it cannot know
 at translation time whether `xs` will hold a list, a number, or something
