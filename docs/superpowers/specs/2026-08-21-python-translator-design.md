@@ -153,7 +153,7 @@ as `writeProgram()` already does. The browser gains no language logic, so
 | `print(x)` | `trace x` |
 | `len(x)` | `length x` |
 | `str(x)` / `int(x)` | `encode x` / `decode x` |
-| `k in d` (dictionary) | `d oracle k` |
+| `k in d` | `d oracle k` |
 | `xs.append(v)` | `xs = xs + [v]` |
 | list and dict literals, indexing | the same |
 | `True` / `False` | `true` / `false` |
@@ -161,6 +161,19 @@ as `writeProgram()` already does. The browser gains no language logic, so
 
 `elif` nests a `redpill` inside the enclosing `bluepill`; verified against the
 real interpreter.
+
+**`in` always becomes `oracle`, whatever it is asked about.** MatrixLang's
+`oracle` reads a dictionary and nothing else, so `2 in xs` over a list is not a
+program this language has. But the translator cannot tell the two apart:
+`k in d` and `2 in xs` are the same syntax, and only the runtime value says
+which is which — deciding would mean inferring a type, which is the one thing
+the governing rule forbids. So the row is unconditional, and `in` over a list or
+a string produces `xs oracle 2`, which fails at runtime with a line, a column,
+and the words `'oracle' takes a dictionary, got list`. That is the rule's second
+half working as intended: loud, positioned, and actionable beats a refusal that
+would have to guess to be right. `not in` is a separate matter and genuinely is
+refused — MatrixLang has no negated form, and the refusal names
+`unplug (d oracle key)`.
 
 ### Three rewrites, each with a stated rule
 
@@ -252,8 +265,7 @@ Deterministic, and cannot collide with the reader's own names.
 expressions, `None`, float literals, tuples, sets, slicing, chained comparison
 (`a < b < c`), multiple assignment (`a = b = 0`), tuple unpacking, `print` with
 zero or several arguments, f-string conversions and format specs (`{x!r}`,
-`{x:>3}`), `in` over a list or string, `is`, **both divisions**, and
-**truthiness in any condition**.
+`{x:>3}`), `is`, **both divisions**, and **truthiness in any condition**.
 
 **Division, refused both ways.** MatrixLang's `/` truncates toward zero, which
 is neither of Python's. Python's `/` produces a fraction MatrixLang has no value
@@ -275,7 +287,7 @@ missing feature:
   mistake. Python permits it, so it is refused here.
 
 Where MatrixLang has an idiom, the refusal names it. `[f(x) for x in xs]` says
-to write a `dejavu` loop; `in` over a list says to walk it with a counter.
+to write a `dejavu` loop; `not in` says to write `unplug (d oracle key)`.
 
 ## Testing
 

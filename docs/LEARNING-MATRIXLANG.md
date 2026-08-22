@@ -789,6 +789,79 @@ flatline
 
 Run it: `has items`.
 
+### Two things that translate, then fail loudly
+
+The translator refuses where a difference would be silent. Where
+MatrixLang will *say* what went wrong, with a line and a column you can
+act on, it translates and lets the language answer. Two cases in this
+subset land on that side of the line, and both are worth knowing before
+they surprise you.
+
+**`in` always becomes `oracle`.** MatrixLang's `oracle` asks a
+*dictionary* for a key (§8), and nothing else:
+
+```python
+print(translate('d = {"a": 1}\nprint("a" in d)\n').source)
+```
+
+```
+construct d = {"a": 1}
+trace d oracle "a"
+```
+
+Run it: `true`. Python's `in` also works on lists and strings, and the
+translator cannot tell which you meant — `k in d` and `2 in xs` are the
+same syntax, and only the value at run time says which is which. Guessing
+would be type inference, the one thing the translator will not do (above),
+so it translates every `in` the same way and lets MatrixLang answer:
+
+```python
+print(translate("xs = [1, 2]\nprint(2 in xs)\n").source)
+```
+
+```
+construct xs = [1, 2]
+trace xs oracle 2
+```
+
+Run *that* and you get an error, not a wrong answer:
+
+```
+matrixlang: [line 2, column 10] 'oracle' takes a dictionary, got list
+```
+
+To ask whether a list holds a value, walk it with a `dejavu` loop and a
+name you set when you find it. (`not in` has no MatrixLang form at all,
+so it is refused outright, and the refusal names `unplug (d oracle key)`.)
+
+**`for k in d:` walks a dictionary by index, not by key.** Rule 1 below
+turns a `for` into a counter and `length`, which is exactly right for a
+list and wrong for a dictionary — MatrixLang has no "loop over the keys":
+
+```python
+print(translate('d = {"a": 1, "b": 2}\nfor k in d:\n    print(k)\n').source)
+```
+
+```
+construct d = {"a": 1, "b": 2}
+construct n = 0
+dejavu n < length d
+  trace d[n]
+  n = n + 1
+flatline
+```
+
+Run it:
+
+```
+matrixlang: [line 4, column 11] no key 0 in this dictionary
+```
+
+Loud, so it is allowed — but it points at the generated line rather than
+at what you wrote, which is the least helpful error in this section. If
+you need the keys, keep them in a list beside the dictionary and loop
+over that.
+
 ### The three rewrites, and the hoisted `construct`
 
 A Python `for` loop has no MatrixLang equivalent — this language only has

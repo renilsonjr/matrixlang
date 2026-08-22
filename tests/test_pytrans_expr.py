@@ -147,3 +147,38 @@ def test_an_operator_refusal_carries_the_expression_s_position():
     refusal = refused("x = 1\ny = 2\nprint(x % y)\n")[0]
     assert refusal.line == 3
     assert refusal.column == 6
+
+
+def test_in_translates_unconditionally_and_a_list_fails_loudly():
+    # `k in d` and `2 in xs` are the same syntax, and only the runtime
+    # value says which is which -- deciding would be type inference, which
+    # the governing rule forbids. So `in` always becomes `oracle`, and over
+    # a list MatrixLang says so itself, with a line and a column. Loud and
+    # positioned is what the rule permits; a refusal here would have to
+    # guess to be right.
+    import io
+
+    from matrixlang.errors import RuntimeErrorML
+    from matrixlang.interpreter import Interpreter
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    assert ml("xs = [1, 2]\nprint(2 in xs)\n") == (
+        "construct xs = [1, 2]\ntrace xs oracle 2\n"
+    )
+    try:
+        Interpreter(out=io.StringIO()).run(
+            parse(lex("construct xs = [1, 2]\ntrace xs oracle 2\n"))
+        )
+    except RuntimeErrorML as error:
+        assert "takes a dictionary" in str(error)
+        assert error.line == 2
+    else:
+        raise AssertionError("`oracle` over a list should have failed loudly")
+
+
+def test_not_in_is_still_refused():
+    # Unlike `in`, this one genuinely has no MatrixLang form.
+    refusal = refused("print(a not in b)\n")[0]
+    assert "`not in`" in refusal.reason
+    assert "unplug" in refusal.idiom

@@ -1087,7 +1087,12 @@ _DESCRIBE = {
     "FloorDiv": "`//`",
     "Is": "`is`",
     "IsNot": "`is not`",
-    "In": "`in`",
+    # No "In" entry, deliberately. _compare handles ast.In before it ever
+    # reaches the _COMPARE lookup that would refuse it: `in` always becomes
+    # `oracle`, because nothing at translation time distinguishes a
+    # dictionary from a list, and over a list `oracle` fails loudly with a
+    # position. "NotIn" stays -- that one genuinely does refuse, since
+    # MatrixLang has no negated form of `oracle`.
     "NotIn": "`not in`",
     # Not in the brief's list: the ast.Compare node itself is the culprit
     # when a comparison chains more than one operator (`a < b < c`), and
@@ -1155,6 +1160,5 @@ _IDIOM = {
     "Slice": "MatrixLang has no slicing; copy with a `dejavu` loop",
     "Is": "MatrixLang has no identity check; compare values with `==`",
     "IsNot": "MatrixLang has no identity check; compare values with `!=`",
-    "In": "MatrixLang's `in` only reads a dictionary; write `d oracle key`",
     "NotIn": "MatrixLang has no `not in`; write `unplug (d oracle key)`",
 }
