@@ -128,6 +128,13 @@ class _Translator:
         # instead. Scoped to the loop's own body: popped before the loop
         # returns, so a name outside it is never rewritten.
         self.substitutions: dict[str, Expr] = {}
+        # Every zero-initialised `Declare` the hoist itself invented, keyed
+        # by identity (the dict's values are only there to keep the nodes
+        # alive, so an id() can never be reused under us). Hoists nest --
+        # an `if` inside a `for` hoists first, then the loop hoists what
+        # the `if` left behind -- and a placeholder met a second time must
+        # be moved rather than rewritten. See _hoist_declares.
+        self.placeholders: dict[int, Declare] = {}
 
     def _fresh(self, stem: str = "n") -> str:
         name = free_name(self.taken, stem)
@@ -190,13 +197,31 @@ class _Translator:
         if isinstance(node, ast.AugAssign):
             return self._aug_assign(node)
         if isinstance(node, ast.If):
-            return [
-                If(
-                    self.condition(node.test),
-                    self.body(node.body),
-                    self.body(node.orelse) if node.orelse else None,
+            # The branch variant of the same hazard the loops hoist around.
+            # `construct` is a runtime statement that only runs on the
+            # branch taken, but bindings are recorded in one flat set per
+            # scope, so the SECOND branch to bind a name was treated as
+            # already declared and emitted a bare assignment -- and plain
+            # `if x > 0: s = 1` / `else: s = 0` died with "'s' is not
+            # declared" whichever way it went. Hoisting is correct here for
+            # the same reason it is correct for a loop: interpreter.py's If
+            # opens no scope, so a `construct` above the `redpill` declares
+            # the same name the branches assign. It also fixes a name bound
+            # in a branch and reassigned after the `if`, which had the same
+            # cause. Where the Python would have raised NameError -- `if c:
+            # s = 1` with `c` false, then reading `s` -- the reader gets the
+            # placeholder `0` instead of an error; that is the same trade
+            # the loop hoist has always made, on Python that is already
+            # broken.
+            condition = self.condition(node.test)
+            then_body, hoisted = _hoist_declares(self.body(node.body), self.placeholders)
+            else_body = None
+            if node.orelse:
+                else_body, from_else = _hoist_declares(
+                    self.body(node.orelse), self.placeholders
                 )
-            ]
+                hoisted.extend(from_else)
+            return [*hoisted, If(condition, then_body, else_body)]
         if isinstance(node, ast.While):
             if node.orelse:
                 raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
@@ -212,7 +237,7 @@ class _Translator:
             # only reaches a `while` sitting *inside* another loop's
             # body -- a top-level `while` is never visited by anyone
             # else's walk.
-            body, hoisted = _hoist_declares(self.body(node.body))
+            body, hoisted = _hoist_declares(self.body(node.body), self.placeholders)
             return [*hoisted, While(condition, body)]
         if isinstance(node, ast.For):
             return self._for(node)
@@ -349,6 +374,27 @@ class _Translator:
             raise _Unsupported(
                 self._no(node.target, "loop over one name at a time")
             )
+        if node.target.id in self.scopes[-1]:
+            # Python's `for` BINDS its variable in the enclosing scope, and
+            # leaves it there afterwards holding the last element. The
+            # output has no such name -- rule 2 substitutes every use
+            # inside the body and declares nothing -- so a read after the
+            # loop gets whatever the name held BEFORE it. When the name is
+            # new that read fails loudly ("'x' is not declared"), which the
+            # governing rule allows; when the reader already had an `x`, it
+            # quietly returns the old value instead. `x = 5` then
+            # `for x in [1, 2, 3]` then `print(x)` gave 5 where Python
+            # gives 3, so the collision is refused rather than the read.
+            raise _Unsupported(
+                Refusal(
+                    f"the loop variable `{node.target.id}` is already a name in "
+                    "this program",
+                    node.target.lineno,
+                    node.target.col_offset,
+                    "a `for` variable has no name of its own in MatrixLang — "
+                    "give the loop a different one",
+                )
+            )
         if _rebinds(node.body, node.target.id):
             # Built via Refusal directly, not self._no(): self._no's reason
             # is always "<ast class name> cannot be translated" -- here
@@ -440,7 +486,7 @@ class _Translator:
         # its `While` flattened together), so it is hoisted again, one
         # level further out, same as anything else found here. See
         # _hoist_declares for what the walk does and does not reach.
-        body, hoisted = _hoist_declares(body)
+        body, hoisted = _hoist_declares(body, self.placeholders)
         before.extend(hoisted)
 
         del self.substitutions[node.target.id]
@@ -762,10 +808,12 @@ def _as_assignment(statement: Stmt) -> Stmt:
     return statement
 
 
-def _hoist_declares(body: list[Stmt]) -> tuple[list[Stmt], list[Declare]]:
+def _hoist_declares(
+    body: list[Stmt], placeholders: dict[int, Declare]
+) -> tuple[list[Stmt], list[Declare]]:
     """Rewrite every `Declare` anywhere in `body` to a plain `Assign` in
     place, and return placeholder declarations (each initialised to `0`)
-    to hoist above the enclosing loop.
+    to hoist above the enclosing loop or `if`.
 
     Recurses into `If.then_body`/`If.else_body` and `While.body`: a name
     first bound inside a nested `if`, or inside a Python `while` nested in
@@ -782,6 +830,17 @@ def _hoist_declares(body: list[Stmt]) -> tuple[list[Stmt], list[Declare]]:
     quirk this hoist exists to dodge, and hoisting it out would be wrong,
     not just unnecessary.
 
+    `placeholders` records, by identity, every declaration this function
+    has itself invented, because hoists nest: an `if` inside a `for` hoists
+    first, and then the loop hoists what the `if` left behind. A
+    placeholder met a second time is MOVED rather than rewritten -- it is
+    lifted out whole and nothing is left in its place. Rewriting it the
+    ordinary way would leave `s = 0` at the top of the loop body, silently
+    resetting on every pass a name the reader expects to survive from the
+    iteration that set it. A `Declare` the READER's own program produced
+    (`x = 0` written inside the loop) is not a placeholder and still
+    becomes an assignment in place, because that reset is theirs.
+
     Order is the statements' own order: a pre-order, left-to-right walk
     (an `If`'s `then_body` fully before its `else_body`), so the hoisted
     declarations appear above the loop in the same order the reader's
@@ -793,7 +852,12 @@ def _hoist_declares(body: list[Stmt]) -> tuple[list[Stmt], list[Declare]]:
         out: list[Stmt] = []
         for statement in statements:
             if isinstance(statement, Declare):
-                hoisted.append(Declare(statement.name, NumberLiteral(0)))
+                if id(statement) in placeholders:
+                    hoisted.append(statement)
+                    continue
+                placeholder = Declare(statement.name, NumberLiteral(0))
+                placeholders[id(placeholder)] = placeholder
+                hoisted.append(placeholder)
                 out.append(_as_assignment(statement))
             elif isinstance(statement, If):
                 statement.then_body = walk(statement.then_body)

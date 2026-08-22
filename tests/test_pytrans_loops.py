@@ -167,3 +167,15 @@ def test_a_loop_that_reassigns_the_list_it_walks_is_refused():
     refusal = refused(source)[0]
     assert "reassigns `xs`" in refusal.reason
     assert refusal.line == 2
+
+
+def test_a_loop_variable_that_is_already_a_name_is_refused():
+    # Python's `for` leaves its variable bound after the loop; the output
+    # has no such name, so a read after the loop returns whatever the name
+    # held BEFORE it. New name: loud "not declared". Reused name: silently
+    # the old value, so the collision is refused.
+    source = "x = 5\nxs = [1, 2, 3]\nfor x in xs:\n    print(x)\nprint(x)\n"
+    refusal = refused(source)[0]
+    assert "`x` is already a name" in refusal.reason
+    assert refusal.line == 3
+    assert "different one" in refusal.idiom

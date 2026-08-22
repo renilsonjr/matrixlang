@@ -160,3 +160,72 @@ def test_appending_to_the_loop_variable_runs():
         "print(rs)\n"
     )
     assert _translated_output(source) == _run_python(source)
+
+
+def test_a_name_first_bound_in_one_branch_of_an_if_runs():
+    # The fourth site of the declaration quirk, and the branch variant of
+    # it: bindings were recorded in one flat set per scope, so the second
+    # branch to bind `s` was treated as already declared and emitted a bare
+    # assignment -- and `construct` only runs on the branch taken, so this
+    # died with "'s' is not declared" whichever way it went.
+    source = (
+        "x = -1\n"
+        "if x > 0:\n"
+        "    s = 1\n"
+        "else:\n"
+        "    s = 0\n"
+        "print(s)\n"
+    )
+    assert _translated_output(source) == _run_python(source)
+
+
+def test_a_name_first_bound_in_an_elif_chain_runs():
+    source = (
+        "g = 2\n"
+        "if g == 1:\n"
+        "    s = 'a'\n"
+        "elif g == 2:\n"
+        "    s = 'b'\n"
+        "else:\n"
+        "    s = 'c'\n"
+        "print(s)\n"
+    )
+    assert _translated_output(source) == _run_python(source)
+
+
+def test_a_name_first_bound_in_a_branch_then_reassigned_after_it_runs():
+    # Same cause, different shape: the branch's `construct` may not run,
+    # and the assignment after the `if` always does.
+    source = "c = 0\nif c > 0:\n    s = 1\ns = 2\nprint(s)\n"
+    assert _translated_output(source) == _run_python(source)
+
+
+def test_a_branch_binding_inside_a_def_runs():
+    # An agent body is its own MatrixLang scope, so the same hoist has to
+    # happen there and not be confused with the module's names.
+    source = (
+        "def f(c):\n"
+        "    if c > 0:\n"
+        "        s = 1\n"
+        "    else:\n"
+        "        s = 2\n"
+        "    return s\n"
+        "print(f(1))\n"
+        "print(f(-1))\n"
+    )
+    assert _translated_output(source) == _run_python(source)
+
+
+def test_a_branch_bound_name_is_not_reset_each_pass_of_an_enclosing_loop():
+    # Two hoists nest here: the `if` hoists `s` to just above itself, and
+    # then the loop hoists that placeholder out again. The placeholder has
+    # to MOVE rather than be rewritten in place -- left behind as `s = 0`
+    # at the top of the loop body it would reset, on every pass, a name the
+    # Python expects to survive from the iteration that set it.
+    source = (
+        "for i in range(4):\n"
+        "    if i == 0:\n"
+        "        s = 1\n"
+        "    print(s)\n"
+    )
+    assert _translated_output(source) == _run_python(source)

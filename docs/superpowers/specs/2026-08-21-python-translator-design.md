@@ -180,20 +180,38 @@ dejavu n < length result
 flatline
 ```
 
-This sidesteps the language quirk below, and invents exactly one name. A body
-that **reassigns the loop variable** is refused, because substitution would be
-wrong there. `for i in range(n)` uses the same counter shape with the counter
-itself as the value.
+This sidesteps the language quirk below, and invents exactly one name.
+`for i in range(n)` uses the same counter shape with the counter itself as the
+value, and the bound `n` is read once into a name of its own before the loop —
+Python builds the range object at loop entry, so a body that changes `n` still
+runs the original number of times. A literal bound stays inline.
+
+Three refusals guard what substitution cannot express:
+
+- **A body that reassigns the loop variable.** There is no name to reassign.
+- **A body that reassigns the iterable's own name.** Python's `for` holds the
+  list object and never sees the rebinding; indexing the name would follow it
+  onto a different list. Hoisting into a holder would fix that and break
+  `xs.append(v)` inside `for x in xs`, which never ends in Python and would
+  quietly finish — no output is right for both.
+- **A loop variable that is already a name in the same scope.** Python leaves
+  the variable bound after the loop; the output has no such name, so a read
+  after the loop returns whatever the name held *before* it. With a new name
+  that read fails loudly; with a reused one it silently returns the old value.
 
 **`input("prompt")` becomes two statements.** `trace "prompt"` then `jackin`.
 This is only valid when `input(...)` is the entire right-hand side of an
 assignment; anywhere else — nested in a larger expression — it is refused,
 because one expression cannot become two statements mid-expression.
 
-**A name first bound inside a loop has its `construct` hoisted.** MatrixLang
-needs `construct` to declare and bare assignment thereafter, and **`construct`
-inside a loop body fails on the second iteration** with `'x' is already
-declared`. So the declaration is hoisted above the loop and initialised to `0`:
+**A name first bound inside a loop or an `if` has its `construct` hoisted.**
+MatrixLang needs `construct` to declare and bare assignment thereafter, and
+**`construct` inside a loop body fails on the second iteration** with `'x' is
+already declared`, while **`construct` inside an `if` branch only runs when that
+branch is taken** — so the other branch's assignment, and every read after the
+`if`, fail with `'x' is not declared`. Both are the same problem: a declaration
+sitting somewhere that does not run exactly once. So the declaration is hoisted
+above the loop or the `if` and initialised to `0`:
 
 ```
 construct total = 0       ← hoisted, not written by the reader
@@ -207,6 +225,18 @@ flatline
 `0` is safe as a placeholder: MatrixLang assignment may change a value's type,
 verified against the real interpreter. This is the one place output appears
 that the reader did not write, so it is documented in the tutorial.
+
+Hoists nest — an `if` inside a `for` hoists first, then the loop hoists what the
+`if` left behind — and a placeholder met a second time is **moved**, not
+rewritten in place. Left behind as `s = 0` at the top of the loop body it would
+reset, on every pass, a name the Python expects to survive from the iteration
+that set it.
+
+The hoist has one accepted cost, and it is the same one for both constructs:
+where the Python would have raised `NameError` — `if c: s = 1` with `c` false,
+then reading `s` — the reader gets the placeholder `0` instead of an error. That
+divergence exists only on Python that is already broken, and there is no
+MatrixLang value that means "not bound yet" to use instead.
 
 ### Counter naming
 

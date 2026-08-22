@@ -801,14 +801,24 @@ hand, and three rules keep it equivalent rather than merely similar:
    that instead of re-evaluating the expression on every pass. Substituted
    inline, `for s in find_students(a, b):` would call `find_students`
    again on every iteration — a different program from the one written.
+   The bound of a `range(...)` is read once the same way, because Python
+   builds the range when the loop *starts*: `for i in range(n)` with a
+   body that counts `n` down still runs the original number of times.
 2. **The loop variable is substituted, not declared.** Every use of the
    Python loop variable becomes an index into the hoisted list — `xs[n]` —
-   rather than a `construct` inside the body.
-3. **A name first bound inside the loop has its `construct` hoisted above
-   it, initialised to `0`.** `construct` a second time on the same name
-   fails with `'x' is already declared` (§2), and a loop body runs more
-   than once — so a name the Python only assigns inside the loop is
-   declared once, before the loop starts, and merely assigned from then on.
+   rather than a `construct` inside the body. That is also why a loop
+   variable that is *already* a name in your program is refused: Python
+   leaves the variable bound after the loop, and there is no such name
+   here to leave anything in.
+3. **A name first bound inside the loop — or inside one branch of an
+   `if` — has its `construct` hoisted above it, initialised to `0`.**
+   `construct` a second time on the same name fails with `'x' is already
+   declared` (§2), and a loop body runs more than once. An `if` branch has
+   the mirror-image problem: its `construct` runs only when that branch is
+   taken, so the *other* branch's assignment — and every read after the
+   `if` — would fail with `'x' is not declared`. Both are a declaration
+   sitting somewhere that does not run exactly once, and both are fixed
+   the same way: declared once, above, and merely assigned from then on.
 
 ```python
 print(translate(
