@@ -243,3 +243,21 @@ def test_in_over_a_dictionary_translates_to_oracle():
     matrixlang_prints(
         'd = {"a": 1}\nprint("a" in d)\nprint("z" in d)\n', "true\nfalse\n"
     )
+
+
+def test_an_fstring_interpolating_a_string_agrees():
+    # The case that prompted widening `encode`. The translator emits
+    # `encode` for every interpolation; while that took numbers only, this
+    # program translated cleanly and then died on Run.
+    agree(
+        'name = "clean code"\n'
+        'book_id = 1\n'
+        'print(f"Match found! Name: {name}, ID: {book_id}")\n'
+    )
+
+
+def test_an_fstring_interpolating_a_dictionary_field_agrees():
+    agree(
+        'book = {"id": 2, "name": "refactoring"}\n'
+        'print(f"Name: {book[\'name\']}, ID: {book[\'id\']}")\n'
+    )
