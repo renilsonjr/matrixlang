@@ -22,7 +22,7 @@ trace "wake up, Neo"
 
 `trace` prints. That is the only way a program produces output; there is
 no `print` and no `return` to a console. Reading input has its own two
-keywords — see §18.
+keywords — see §19.
 
 Save it as `hello.rain` and run it:
 
@@ -35,7 +35,7 @@ wake up, Neo
 ```
 
 `--no-window` prints to the terminal. Without it, a window opens and the
-program falls through it as glyphs — see §13.
+program falls through it as glyphs — see §14.
 
 ---
 
@@ -598,7 +598,7 @@ matrixlang: [line 2, column 13] no key "turma" in this dictionary
 
 There is no null anywhere in this language (§3) — there is nothing it
 could hand back for a key that was never written. Check first with
-`oracle`, below, the same discipline the bounded-search idiom (§9)
+`oracle`, below, the same discipline the bounded-search idiom (§10)
 already teaches for a list index that might be past the end.
 
 ### Writing — insert or update — `d["key"] = v`
@@ -650,7 +650,7 @@ true
 false
 ```
 
-`oracle` is infix, like `splice` and `fork` (§9) — it sits between the
+`oracle` is infix, like `splice` and `fork` (§10) — it sits between the
 dictionary and the key being asked about, and answers with a boolean.
 Guard a lookup with it before indexing a key you are not sure is there:
 
@@ -669,7 +669,174 @@ no turma yet
 
 ---
 
-## 9. Logical operators — `splice`, `fork`, `unplug`
+## 9. Python, translated
+
+Section 8 introduced dictionaries with a Python program: two parallel lists
+drift apart, so keep facts together instead. That program was not
+hypothetical — it is close to what a beginner actually writes, and
+`matrixlang.pytrans.translate` turns real Python source like it into real
+MatrixLang source, for a stated subset of the language.
+
+```python
+from matrixlang.pytrans import translate
+
+result = translate("x = 2\nprint(x * 3 + 1)\n")
+print(result.source)
+```
+
+```
+construct x = 2
+trace x * 3 + 1
+```
+
+Run that and you get `7`, same as running the Python. In the browser
+playground, the same tool sits behind **Or paste Python** → **Translate
+it**, next to the editor — paste, translate, then run it like any other
+program.
+
+`translate` never raises. Python that does not parse, or Python that
+parses but uses something MatrixLang has no answer for, comes back as
+`Refusals` instead of an exception — a list of reasons, each with a line
+and column, and, where one exists, the MatrixLang idiom to write instead.
+A program with five problems shows you all five in one pass, not one per
+attempt.
+
+**The subset:** arithmetic and comparisons, `print`, assignment (`=` and
+`+=`), `if`/`elif`/`else`, `while`, `for` over a list or `range(...)`,
+`def`/`return`, lists, dictionaries, `input()`, and f-strings. **Refused,
+always:** `class`, `try`/`except`, `import`, comprehensions, `lambda`,
+slicing, and anything else MatrixLang genuinely cannot express — not a
+temporary gap, but the same "no floats, no sets, no null" boundary the
+rest of this guide draws around MatrixLang itself.
+
+### The governing rule: syntax, not types
+
+The translator never evaluates anything. It looks at the *shape* of a line
+— an `if`, a `+`, a call — and produces the matching MatrixLang shape,
+without ever asking what kind of value will be there when the line
+actually runs. That is the only way it can work, since it runs once,
+before the program does, and Python's own types are not visible to it.
+
+```python
+print(translate('a = 2\nb = 3\nprint(a + b)\n').source)
+print(translate('a = "wake"\nb = " up"\nprint(a + b)\n').source)
+```
+
+```
+construct a = 2
+construct b = 3
+trace a + b
+
+construct a = "wake"
+construct b = " up"
+trace a + b
+```
+
+Both become `a + b`, unchanged, whether `a` and `b` turn out to be numbers
+or strings — because MatrixLang's own `+` already does both jobs (§3), the
+translator does not need to pick one. Run the second and you get
+`wake up`. This is also why a Python program the translator refuses is a
+program it is *unwilling* to guess about, not one it read wrong: type
+inference would be a second copy of the interpreter's own rules, living in
+a tool that runs before any value exists to check them against.
+
+### Why truthiness is refused
+
+Python lets any value stand in for a condition — an empty list is
+false-ish, a non-empty one is true-ish. MatrixLang has no such rule (§3):
+`redpill` needs an actual boolean, or it is a type error. Since the
+translator does not evaluate anything (previous section), it cannot know
+at translation time whether `xs` will hold a list, a number, or something
+else — so it cannot silently decide which comparison Python meant, and
+refuses instead of guessing:
+
+```python
+result = translate("xs = [1, 2, 3]\nif xs:\n    print('has items')\n")
+print(result.items[0].reason)
+print(result.items[0].idiom)
+```
+
+```
+`xs` relies on truthiness, which MatrixLang does not have — a condition must already be a boolean
+a list or string →  len(xs) > 0
+a number        →  xs != 0
+```
+
+Apply the idiom and it translates clean:
+
+```python
+print(translate("xs = [1, 2, 3]\nif len(xs) > 0:\n    print('has items')\n").source)
+```
+
+```
+construct xs = [1, 2, 3]
+redpill length xs > 0
+  trace "has items"
+flatline
+```
+
+Run it: `has items`.
+
+### The three rewrites, and the hoisted `construct`
+
+A Python `for` loop has no MatrixLang equivalent — this language only has
+`dejavu` (§5). Translating one means writing an equivalent `dejavu` by
+hand, and three rules keep it equivalent rather than merely similar:
+
+1. **The iterable is evaluated once.** If it is already a plain name, the
+   loop indexes that name directly. Anything else — a literal, a call — is
+   hoisted into a generated name *before* the loop, so the loop indexes
+   that instead of re-evaluating the expression on every pass. Substituted
+   inline, `for s in find_students(a, b):` would call `find_students`
+   again on every iteration — a different program from the one written.
+2. **The loop variable is substituted, not declared.** Every use of the
+   Python loop variable becomes an index into the hoisted list — `xs[n]` —
+   rather than a `construct` inside the body.
+3. **A name first bound inside the loop has its `construct` hoisted above
+   it, initialised to `0`.** `construct` a second time on the same name
+   fails with `'x' is already declared` (§2), and a loop body runs more
+   than once — so a name the Python only assigns inside the loop is
+   declared once, before the loop starts, and merely assigned from then on.
+
+```python
+print(translate(
+    "total = 0\n"
+    "for n in [10, 20, 30]:\n"
+    "    doubled = n * 2\n"
+    "    total = total + doubled\n"
+    "print(total)\n"
+).source)
+```
+
+```
+construct total = 0
+construct xs = [10, 20, 30]
+construct n1 = 0
+construct doubled = 0
+dejavu n1 < length xs
+  doubled = xs[n1] * 2
+  total = total + doubled
+  n1 = n1 + 1
+flatline
+trace total
+```
+
+Run it: `120`.
+
+Most of this is the shape any `for`-to-`dejavu` rewrite has: a hoisted
+`xs` for the list, a counter `n1` counting up to `length xs`, `dejavu` and
+`flatline` around the body. Once you know that shape, none of it
+surprises you. **`construct doubled = 0`** is different — it sits above
+the loop, and nothing in the Python program declared `doubled` before the
+loop started; the reader's own program creates it fresh on the first
+pass, inside the body. It is rule 3's insertion, and it is the one line
+here that no amount of familiarity with the rewrite would have told you
+to expect — the reason it exists is `construct`'s own "already declared"
+rule (§2), not anything about `for` loops.
+
+---
+
+## 10. Logical operators — `splice`, `fork`, `unplug`
 
 ```
 trace true splice false     # false
@@ -798,7 +965,7 @@ missing, which is exactly what happened here.
 
 ---
 
-## 10. Scope, and agents that remember
+## 11. Scope, and agents that remember
 
 A name declared inside an agent is local to it:
 
@@ -868,7 +1035,7 @@ trace inc             # <agent inc>
 
 ---
 
-## 11. Comments
+## 12. Comments
 
 ```
 # this is a comment
@@ -880,7 +1047,7 @@ and back and your comments are still there, in place.
 
 ---
 
-## 12. The two faces
+## 13. The two faces
 
 Every program can be written and read two ways. This:
 
@@ -942,7 +1109,7 @@ is what makes the glyph face usable rather than decorative.
 
 ---
 
-## 13. Watching a program run
+## 14. Watching a program run
 
 ```bash
 .venv/bin/matrixlang run program.rain
@@ -967,7 +1134,7 @@ Three things worth knowing:
 
 ---
 
-## 14. When something goes wrong
+## 15. When something goes wrong
 
 Every error carries a line and a column:
 
@@ -1000,7 +1167,7 @@ The ones you will meet first:
 
 ---
 
-## 15. Seeing the shape of a program
+## 16. Seeing the shape of a program
 
 ```bash
 .venv/bin/matrixlang parse program.rain
@@ -1037,7 +1204,7 @@ the glyph face; `:ascii` turns that off.
 
 ---
 
-## 16. A whole program
+## 17. A whole program
 
 ```
 # Count down, then greet — using an agent and a closure.
@@ -1069,7 +1236,7 @@ wake up, Neo
 
 ---
 
-## 17. Having it written for you — Scribe
+## 18. Having it written for you — Scribe
 
 Everything above teaches you to write MatrixLang. **Scribe** goes the other
 way: you describe what you want in English and get MatrixLang back. It
@@ -1107,7 +1274,7 @@ Some of what it knows, and what each one produces:
 | `get element 1 of xs` | a three-element list, then `trace xs[1]` |
 | `get character 0 of name` | `construct name = "neo"`, then `trace name[0]` |
 | `define a function that doubles` | `agent double(n)` … `jackout n * 2` |
-| `define an adder factory` | the nested closure from §10 |
+| `define an adder factory` | the nested closure from §11 |
 
 `print`, `show` and `display` all mean `trace`, so "print 42" works as well
 as "trace 42".
@@ -1135,14 +1302,14 @@ cannot be a variable name — `store 5 as trace` is a miss, because
 `construct trace = 5` would not parse.
 
 Everything Scribe hands you has already been parsed and executed once, so
-it runs. What it does **not** cover yet: `splice` and `fork` (§9), writing
+it runs. What it does **not** cover yet: `splice` and `fork` (§10), writing
 to a list element (§7), calling a function you just defined, and the whole
-of input — `jackin`, `decode` and `encode` (§18). Write those by hand —
+of input — `jackin`, `decode` and `encode` (§19). Write those by hand —
 which, having read this far, you can.
 
 ---
 
-## 18. Input — `jackin`, `decode`, and `encode`
+## 19. Input — `jackin`, `decode`, and `encode`
 
 `jackin` reads one line and gives you the text of it.
 
@@ -1308,7 +1475,7 @@ A program that uses `jackin` prints to the terminal rather than opening the
 cascade window, even without `--no-window`. The window has no input box, so
 a windowed run would sit there waiting for a line you had no way to see it
 wanting. Only the display changes; the program itself runs the same either
-way. Every other program still gets the window described in §13.
+way. Every other program still gets the window described in §14.
 
 In the browser you can answer either way. Fill the input box beside the editor
 before you press Run and `jackin` reads it one line at a time, or leave it
@@ -1335,7 +1502,7 @@ Being clear about this saves more time than any feature list:
 - no removing a key from a dictionary (§8) — only reading, inserting, and
   updating one
 - no `for`, `break`, `continue`, or `else if`
-- no way to *prompt* for input and wait — `jackin` (§18) reads lines that
+- no way to *prompt* for input and wait — `jackin` (§19) reads lines that
   were already supplied, from the terminal or from the box beside the
   editor, and a program cannot stop mid-run to ask a question
 - no modules, imports, or standard library
