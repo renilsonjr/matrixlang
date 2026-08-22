@@ -1488,26 +1488,28 @@ ID: 7
 
 Give it something other than a number and it still works, because it
 routes through the same display rules `trace` uses. A string prints bare
-at the top level; a value nested inside a list or dictionary prints
+at the top level; a string nested inside a list or dictionary prints
 quoted, the same rule `trace` follows:
 
 ```
 trace encode "5"
 trace encode true
-trace encode [1, 2]
+trace encode ["a", "b"]
 ```
 
 ```
 5
 true
-[1, 2]
+["a", "b"]
 ```
 
-`encode` refuses exactly two things, both about the value's shape rather
-than its type: a value that contains itself (a list or dictionary that
-holds itself, directly or indirectly, has no finite text form), and an
-integer past the same digit ceiling described below. Everything else
-comes back as text.
+`encode` refuses two things outright, both about the value's shape
+rather than its type: a value that contains itself (a list or dictionary
+that holds itself, directly or indirectly, has no finite text form), and
+an integer past the same digit ceiling described below. A value nested
+too many levels deep also comes back refused, the same host recursion
+limit `trace` runs into rather than a rule `encode` itself enforces.
+Everything else comes back as text.
 
 `encode` sits at the same precedence as `decode` — tighter than arithmetic,
 for the same reason: both produce a value that the arithmetic around them
