@@ -111,3 +111,39 @@ def test_a_bare_expression_statement_is_refused():
     # call: `1 + 1` alone computes and discards, which the parser treats as a
     # mistake. Python allows it, so it is refused here.
     assert refused("1 + 1\n")[0].idiom is not None
+
+
+def test_true_division_is_refused():
+    # MatrixLang's `/` truncates toward zero, so `print(7 / 2)` used to
+    # translate clean and print `3` where Python prints `3.5` -- a program
+    # that runs and quietly means something else, which is the one outcome
+    # the translator exists to prevent. Even exact division diverges:
+    # Python's `4 / 2` is `2.0`, MatrixLang's is `2`.
+    refusal = refused("print(7 / 2)\n")[0]
+    assert "`/`" in refusal.reason
+    assert refusal.line == 1
+    assert "truncates" in refusal.idiom
+
+
+def test_floor_division_is_refused():
+    # Agrees with MatrixLang's `/` for non-negative operands and disagrees
+    # for negative ones, and which of the two applies depends on values
+    # that do not exist at translation time.
+    refusal = refused("print(a // b)\n")[0]
+    assert "`//`" in refusal.reason
+    assert "negatives" in refusal.idiom
+
+
+def test_dividing_in_place_is_refused_naming_the_operator():
+    refusal = refused("x = 8\nx /= 2\n")[0]
+    assert "`/`" in refusal.reason
+    assert refusal.line == 2
+
+
+def test_an_operator_refusal_carries_the_expression_s_position():
+    # Python's operator nodes hold no position of their own, so without
+    # borrowing one from the expression around them every `%` in a file
+    # reported at line 1, column 0.
+    refusal = refused("x = 1\ny = 2\nprint(x % y)\n")[0]
+    assert refusal.line == 3
+    assert refusal.column == 6

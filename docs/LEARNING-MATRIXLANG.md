@@ -703,13 +703,23 @@ and column, and, where one exists, the MatrixLang idiom to write instead.
 A program with five problems shows you all five in one pass, not one per
 attempt.
 
-**The subset:** arithmetic and comparisons, `print`, assignment (`=` and
-`+=`), `if`/`elif`/`else`, `while`, `for` over a list or `range(...)`,
+**The subset:** `+`, `-`, `*` and comparisons, `print`, assignment (`=`
+and `+=`), `if`/`elif`/`else`, `while`, `for` over a list or `range(...)`,
 `def`/`return`, lists, dictionaries, `input()`, and f-strings. **Refused,
 always:** `class`, `try`/`except`, `import`, comprehensions, `lambda`,
-slicing, and anything else MatrixLang genuinely cannot express — not a
-temporary gap, but the same "no floats, no sets, no null" boundary the
-rest of this guide draws around MatrixLang itself.
+slicing, **both of Python's divisions**, and anything else MatrixLang
+genuinely cannot express — not a temporary gap, but the same "no floats,
+no sets, no null" boundary the rest of this guide draws around
+MatrixLang itself.
+
+Division is worth a sentence, because MatrixLang has `/` and Python has
+two of them. Python's `/` gives a fraction (`7 / 2` is `3.5`) and there is
+no MatrixLang value for that; Python's `//` floors, and MatrixLang's `/`
+truncates toward zero, so the two agree on `7 // 2` and disagree on
+`-7 // 2` (`-4` in Python, `-3` here). Which one applies depends on the
+sign of a value that does not exist yet when the translator runs — the
+same thing that makes truthiness un-guessable (below) — so both are
+refused, and you write the `/` you meant in MatrixLang yourself.
 
 ### The governing rule: syntax, not types
 

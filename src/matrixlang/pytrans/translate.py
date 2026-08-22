@@ -22,9 +22,18 @@ from matrixlang.tokens import TokenType
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
 from matrixlang.pytrans.names import bound_names, free_name
 
+# Deliberately no division. MatrixLang's `/` truncates toward zero
+# (interpreter.py's _arithmetic), which is neither of Python's two
+# divisions: `/` produces a fraction MatrixLang has no value for, and `//`
+# floors, which differs from truncation on negative operands (-7 // 2 is
+# -4 in Python, -7 / 2 is -3 here). Which of the two a given `a // b`
+# agrees with depends on the SIGN of values that do not exist yet at
+# translation time -- the same "the translator cannot know the runtime
+# value, so it must not guess" argument that refuses truthiness. Both are
+# refused; see _DESCRIBE/_IDIOM for what the reader is told.
 _BINOP = {
     ast.Add: TokenType.PLUS, ast.Sub: TokenType.MINUS,
-    ast.Mult: TokenType.STAR, ast.Div: TokenType.SLASH,
+    ast.Mult: TokenType.STAR,
 }
 
 _COMPARE = {
@@ -304,8 +313,12 @@ class _Translator:
 
     def _aug_assign(self, node: ast.AugAssign) -> list[Stmt]:
         op = _BINOP.get(type(node.op))
-        if op is None or not isinstance(node.target, ast.Name):
-            raise _Unsupported(self._no(node))
+        if op is None:
+            raise _Unsupported(self._no(node.op, at=node))
+        if not isinstance(node.target, ast.Name):
+            raise _Unsupported(
+                self._no(node.target, "change one name at a time: `x = x + 1`")
+            )
         if node.target.id not in self.scopes[-1]:
             raise _Unsupported(
                 self._no(
@@ -477,14 +490,14 @@ class _Translator:
         if isinstance(node, ast.BinOp):
             op = _BINOP.get(type(node.op))
             if op is None:
-                raise _Unsupported(self._no(node.op))
+                raise _Unsupported(self._no(node.op, at=node))
             return Binary(self.expression(node.left), op, self.expression(node.right))
         if isinstance(node, ast.UnaryOp):
             if isinstance(node.op, ast.USub):
                 return Unary(TokenType.MINUS, self.expression(node.operand))
             if isinstance(node.op, ast.Not):
                 return Unary(TokenType.UNPLUG, self.expression(node.operand))
-            raise _Unsupported(self._no(node.op))
+            raise _Unsupported(self._no(node.op, at=node))
         if isinstance(node, ast.BoolOp):
             op = TokenType.SPLICE if isinstance(node.op, ast.And) else TokenType.FORK
             result = self.expression(node.values[0])
@@ -555,7 +568,7 @@ class _Translator:
             )
         mapped = _COMPARE.get(type(op))
         if mapped is None:
-            raise _Unsupported(self._no(op))
+            raise _Unsupported(self._no(op, at=node))
         return Binary(self.expression(node.left), mapped, self.expression(right))
 
     def _dict(self, node: ast.Dict) -> Expr:
@@ -646,12 +659,24 @@ class _Translator:
                 return child
         return node
 
-    def _no(self, node: ast.AST, idiom: str | None = None) -> Refusal:
+    def _no(
+        self, node: ast.AST, idiom: str | None = None, at: ast.AST | None = None
+    ) -> Refusal:
+        """Refuse `node`, positioned at `at` when `node` has no position.
+
+        Python's operator nodes (`ast.Div`, `ast.Mod`, `ast.Is`, ...) carry
+        no lineno/col_offset at all -- they are singletons hanging off the
+        expression that uses them -- so naming one as the culprit without
+        `at` would report every `%` in a file at line 1, column 0. The
+        operator is still what gets NAMED; only the position comes from
+        the expression around it.
+        """
         name = type(node).__name__
+        where = node if at is None else at
         return Refusal(
             f"{_DESCRIBE.get(name, name)} cannot be translated",
-            getattr(node, "lineno", 1),
-            getattr(node, "col_offset", 0),
+            getattr(where, "lineno", 1),
+            getattr(where, "col_offset", 0),
             idiom if idiom is not None else _IDIOM.get(name),
         )
 
@@ -809,6 +834,8 @@ _DESCRIBE = {
     "Tuple": "a tuple",
     "Set": "a set",
     "Slice": "a slice",
+    "Div": "`/`",
+    "FloorDiv": "`//`",
     "Is": "`is`",
     "IsNot": "`is not`",
     "In": "`in`",
@@ -821,6 +848,16 @@ _DESCRIBE = {
 }
 
 _IDIOM = {
+    "Div": (
+        "MatrixLang has no fractions, and its own `/` truncates toward zero — "
+        "`7 / 2` there is `3`, not `3.5`. Write the division in MatrixLang "
+        "directly if truncation is what you want"
+    ),
+    "FloorDiv": (
+        "MatrixLang's `/` truncates toward zero and `//` floors, so they part "
+        "company on negatives (`-7 // 2` is -4, `-7 / 2` here is -3). Write the "
+        "division in MatrixLang directly once you know the signs"
+    ),
     "ListComp": "build the list with a `dejavu` loop and `xs = xs + [v]`",
     "SetComp": "MatrixLang has no sets; use a list",
     "DictComp": "build the dictionary with a `dejavu` loop and `d[k] = v`",

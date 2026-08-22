@@ -145,7 +145,7 @@ as `writeProgram()` already does. The browser gains no language logic, so
 | `x = v` (later) | `x = v` |
 | `x += v` | `x = x + v` |
 | `xs[i] = v` | `xs[i] = v` |
-| `+ - * /`, `== != < > <= >=` | the same operators |
+| `+ - *`, `== != < > <= >=` | the same operators |
 | `and` / `or` / `not` | `splice` / `fork` / `unplug` |
 | `if` / `elif` / `else` | `redpill` / nested `redpill` in `bluepill` / `bluepill` |
 | `while c:` | `dejavu c` |
@@ -218,11 +218,21 @@ Deterministic, and cannot collide with the reader's own names.
 ### Refused, each naming a fix where one exists
 
 `class`, `import`, `try`/`except`/`raise`, `lambda`, `yield`, `with`, `global`,
-`assert`, `del`, comprehensions and generator expressions, `None`, float
-literals, tuples, sets, slicing, chained comparison (`a < b < c`), multiple
-assignment (`a = b = 0`), tuple unpacking, `print` with zero or several
-arguments, f-string conversions and format specs (`{x!r}`, `{x:>3}`), `in` over
-a list or string, `is`, and **truthiness in any condition**.
+`assert`, `del`, `break`, `continue`, `pass`, comprehensions and generator
+expressions, `None`, float literals, tuples, sets, slicing, chained comparison
+(`a < b < c`), multiple assignment (`a = b = 0`), tuple unpacking, `print` with
+zero or several arguments, f-string conversions and format specs (`{x!r}`,
+`{x:>3}`), `in` over a list or string, `is`, **both divisions**, and
+**truthiness in any condition**.
+
+**Division, refused both ways.** MatrixLang's `/` truncates toward zero, which
+is neither of Python's. Python's `/` produces a fraction MatrixLang has no value
+for — `7 / 2` is `3.5` there and would be `3` here, and even `4 / 2` differs
+(`2.0` against `2`). Python's `//` floors, which agrees with truncation for
+non-negative operands and disagrees for negative ones (`-7 // 2` is `-4`;
+`-7 / 2` here is `-3`). Which of the two a given `a // b` matches depends on the
+signs of values that do not exist at translation time, so translating it would
+be the same guess truthiness is refused for. Both refuse and name why.
 
 Two refusals that follow from MatrixLang's own grammar rather than from a
 missing feature:
