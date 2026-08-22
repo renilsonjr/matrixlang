@@ -145,3 +145,18 @@ def test_a_nested_loop_over_a_list_of_lists_runs():
         "        print(v)\n"
     )
     assert _translated_output(source) == _run_python(source)
+
+
+def test_appending_to_the_loop_variable_runs():
+    # `.append` read its receiver straight off the Python ast, so inside a
+    # loop it emitted `r = r + [9]` for a loop variable that has no name in
+    # the output. With an outer `r` in scope that assigned the OUTER name
+    # and left the list of lists untouched: a clean run and a different
+    # answer. Substituted, it becomes `rs[n] = rs[n] + [9]`.
+    source = (
+        "rs = [[1], [2]]\n"
+        "for r in rs:\n"
+        "    r.append(9)\n"
+        "print(rs)\n"
+    )
+    assert _translated_output(source) == _run_python(source)

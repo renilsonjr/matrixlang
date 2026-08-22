@@ -245,18 +245,27 @@ class _Translator:
                 )
             if not isinstance(call.func.value, ast.Name):
                 raise _Unsupported(self._no(node))
+            # Through expression(), not `.id` off the ast: inside a `for`
+            # body the receiver is very often the loop variable, which has
+            # no name in the output at all -- it is substituted (rule 2).
+            # Read straight off the ast, `for r in rs: r.append(9)` emitted
+            # `r = r + [9]`, which assigns to whatever OUTER `r` happens to
+            # exist and leaves `rs` untouched: it ran clean and gave a
+            # different answer from the Python. Substituted, the same line
+            # becomes `rs[n] = rs[n] + [9]`, which is what Python's
+            # in-place append means for the element being visited.
+            receiver = self.expression(call.func.value)
             # Concatenation, not mutation: `+` copies, which is what makes
             # this an assignment rather than a call.
-            target = call.func.value.id
-            return [
-                Assign(
-                    target,
-                    Binary(
-                        Name(target), TokenType.PLUS,
-                        ListLiteral([self.expression(call.args[0])]),
-                    ),
-                )
-            ]
+            appended = Binary(
+                receiver, TokenType.PLUS,
+                ListLiteral([self.expression(call.args[0])]),
+            )
+            if isinstance(receiver, Name):
+                return [Assign(receiver.ident, appended)]
+            if isinstance(receiver, Index):
+                return [IndexAssign(receiver.target, receiver.index, appended)]
+            raise _Unsupported(self._no(node))
         if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
             if call.func.id == "print":
                 if len(call.args) != 1 or call.keywords:
