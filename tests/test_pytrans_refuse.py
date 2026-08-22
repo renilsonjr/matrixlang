@@ -95,3 +95,78 @@ def test_an_unsupported_statement_before_a_deep_one_is_still_collected():
     assert len(result.items) == 1
     assert "import" in result.items[0].reason
     assert result.items[0].line == 1
+
+
+# Every refused construct a reader can plausibly reach, and the words the
+# refusal has to use for it. Before this the reason fell back to the raw
+# Python ast class name -- "Delete cannot be translated", "Global", "Mod",
+# "FloorDiv" -- which describes CPython's parser, not their program.
+_REFUSALS = [
+    ("del x\n", "`del`"),
+    ("global x\n", "`global`"),
+    ("with open('f') as f:\n    pass\n", "`with`"),
+    ("assert x == 1\n", "`assert`"),
+    ("while 1 < 2:\n    break\n", "`break`"),
+    ("while 1 < 2:\n    continue\n", "`continue`"),
+    ("pass\n", "`pass`"),
+    ("print(1 % 2)\n", "`%`"),
+    ("print(2 ** 3)\n", "`**`"),
+    ("print(7 // 2)\n", "`//`"),
+    ("print(7 / 2)\n", "`/`"),
+    ("print(1 << 2)\n", "`<<`"),
+    ("print(~1)\n", "`~`"),
+    ("print(1j)\n", "complex"),
+    ("print(b'x')\n", "bytes"),
+    ("print(x if y > 0 else z)\n", "conditional expression"),
+    ("print(f(*xs))\n", "unpacking"),
+    ("print(o.attr)\n", "attribute"),
+    ("x: int = 1\n", "annotation"),
+    ("async def f():\n    pass\n", "`async def`"),
+    ("def f():\n    yield 1\n", "`yield`"),
+    ("match x:\n    case 1:\n        pass\n", "`match`"),
+    ("print(1, 2)\n", "one value"),
+    ("1 + 1\n", "has to be a call"),
+    ("xs = []\ny = xs.append(1)\n", "`.append()`"),
+    ("for i in range(0, 10, 2):\n    print(i)\n", "`range` with a step"),
+    ("name = input('a', 'b')\n", "one prompt"),
+    ("print(input('x') + 1)\n", "larger expression"),
+    ("print(len(1, 2))\n", "`len` takes exactly one"),
+    ("print(f(a=1))\n", "keyword argument"),
+    ("d = {**e}\n", "dictionary literal"),
+    ("print(f'{x!r}')\n", "format spec"),
+    ("xs = [1]\nxs[1:2] = [1]\n", "slice"),
+    ("a = b = 0\n", "several names at once"),
+    ("xs = [1]\nxs[0] += 1\n", "not an element"),
+    ("x += 1\n", "`x` has no value yet"),
+]
+
+
+def test_every_refusal_names_the_construct_in_the_reader_s_words():
+    for source, wanted in _REFUSALS:
+        result = translate(source)
+        assert isinstance(result, Refusals), (source, result)
+        assert wanted in result.items[0].reason, (source, result.items[0].reason)
+
+
+def test_no_refusal_leaks_a_python_ast_class_name():
+    # The structural half of the same guarantee: a reason may never contain
+    # a bare CamelCase word that is one of Python's ast node classes, which
+    # is exactly what the old `_DESCRIBE.get(name, name)` fallback emitted.
+    import ast
+    import re
+
+    ast_names = {
+        name for name in dir(ast)
+        if name[:1].isupper() and isinstance(getattr(ast, name), type)
+    }
+    for source, _ in _REFUSALS:
+        for refusal in translate(source).items:
+            words = set(re.findall(r"\b[A-Z][A-Za-z]+\b", refusal.reason))
+            assert not (words & ast_names), (source, refusal.reason)
+
+
+def test_break_and_continue_carry_an_idiom():
+    # The two a Python reader hits hardest in a loop-heavy subset, and the
+    # two that shipped with no idiom at all.
+    assert "condition" in translate("while 1 < 2:\n    break\n").items[0].idiom
+    assert "redpill" in translate("while 1 < 2:\n    continue\n").items[0].idiom

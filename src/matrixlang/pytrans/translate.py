@@ -249,7 +249,19 @@ class _Translator:
             return self._function(node)
         if isinstance(node, ast.Return):
             return [Return(self.expression(node.value) if node.value else None)]
-        raise _Unsupported(self._no(self._culprit(node)))
+        # An unsupported STATEMENT reports itself, never something nested
+        # inside it. `class`, `try`, `raise` and `import` refuse whatever
+        # they contain, so letting a `class` body's comprehension steal the
+        # refusal would send the reader off to rewrite working code and
+        # then hand them a different refusal for the same still-unsupported
+        # statement. (This used to route through a _culprit() helper that
+        # searched the statement's own value expression -- dead code by the
+        # time it was found, because Assign, Expr and Return are all
+        # intercepted above and nothing else reaching here has a `.value`.
+        # `xs = [f(x) for x in ys]` still names the comprehension, from
+        # _assign's own walk into the expression; the one place the search
+        # was genuinely doing work is spelled out in _expression_statement.)
+        raise _Unsupported(self._no(node))
 
     def _expression_statement(self, node: ast.Expr) -> list[Stmt]:
         call = node.value
@@ -269,7 +281,13 @@ class _Translator:
                     )
                 )
             if not isinstance(call.func.value, ast.Name):
-                raise _Unsupported(self._no(node))
+                raise _Unsupported(
+                    self._because(
+                        node,
+                        "`.append()` needs a plain name to append to",
+                        "put the list in its own name first, then append to it",
+                    )
+                )
             # Through expression(), not `.id` off the ast: inside a `for`
             # body the receiver is very often the loop variable, which has
             # no name in the output at all -- it is substituted (rule 2).
@@ -290,22 +308,34 @@ class _Translator:
                 return [Assign(receiver.ident, appended)]
             if isinstance(receiver, Index):
                 return [IndexAssign(receiver.target, receiver.index, appended)]
-            raise _Unsupported(self._no(node))
+            raise _Unsupported(
+                self._because(node, "there is nothing here to append to")
+            )
         if isinstance(call, ast.Call) and isinstance(call.func, ast.Name):
             if call.func.id == "print":
                 if len(call.args) != 1 or call.keywords:
                     raise _Unsupported(
-                        self._no(
+                        self._because(
                             node,
-                            'print one value at a time: `print(a)` then `print(b)`, '
-                            'or join them with `+`',
+                            "`trace` prints exactly one value",
+                            "print one value at a time: `print(a)` then `print(b)`, "
+                            "or join them with `+`",
                         )
                     )
                 return [Trace(self.expression(call.args[0]))]
             return [ExprStmt(self.expression(call))]
+        # The one surviving job of the deleted _culprit(): an expression
+        # statement built out of something the catalogue can name --
+        # `yield 1`, `(y := 1)`, `o.attr` -- reports THAT rather than the
+        # generic "not a call", because naming it is what tells the reader
+        # which part to change. Anything else (`1 + 1`) genuinely has no
+        # culprit smaller than the statement.
+        if type(node.value).__name__ in _DESCRIBE:
+            raise _Unsupported(self._no(node.value, at=node))
         raise _Unsupported(
-            self._no(
+            self._because(
                 node,
+                "a statement on its own line has to be a call",
                 "MatrixLang runs a statement only when it is a call — "
                 "assign the value to a name if you meant to keep it",
             )
@@ -314,7 +344,11 @@ class _Translator:
     def _assign(self, node: ast.Assign) -> list[Stmt]:
         if len(node.targets) != 1:
             raise _Unsupported(
-                self._no(node, "assign one name at a time: `a = 0` then `b = 0`")
+                self._because(
+                    node,
+                    "assigning several names at once cannot be translated",
+                    "assign one name at a time: `a = 0` then `b = 0`",
+                )
             )
         target = node.targets[0]
         prelude: list[Stmt] = []
@@ -322,7 +356,13 @@ class _Translator:
         if _is_input_call(source):
             if source.args:
                 if len(source.args) != 1:
-                    raise _Unsupported(self._no(source))
+                    raise _Unsupported(
+                        self._because(
+                            source,
+                            "`input` takes at most one prompt",
+                            "join the parts with `+`: `input(a + b)`",
+                        )
+                    )
                 prelude.append(Trace(self.expression(source.args[0])))
             value: Expr = JackIn()
         else:
@@ -333,7 +373,7 @@ class _Translator:
             return prelude + [Assign(target.id, value)]
         if isinstance(target, ast.Subscript):
             if isinstance(target.slice, ast.Slice):
-                raise _Unsupported(self._no(target))
+                raise _Unsupported(self._no(target.slice, at=target))
             return prelude + [
                 IndexAssign(
                     self.expression(target.value),
@@ -351,12 +391,17 @@ class _Translator:
             raise _Unsupported(self._no(node.op, at=node))
         if not isinstance(node.target, ast.Name):
             raise _Unsupported(
-                self._no(node.target, "change one name at a time: `x = x + 1`")
+                self._because(
+                    node,
+                    "`+=` only changes a name, not an element",
+                    "write it out: `xs[0] = xs[0] + 1`",
+                )
             )
         if node.target.id not in self.scopes[-1]:
             raise _Unsupported(
-                self._no(
+                self._because(
                     node,
+                    f"`{node.target.id}` has no value yet",
                     f"give `{node.target.id}` a value before changing it",
                 )
             )
@@ -508,7 +553,11 @@ class _Translator:
         if len(node.args) == 2:
             return self.expression(node.args[0]), self.expression(node.args[1])
         raise _Unsupported(
-            self._no(node, "count with a `dejavu` loop and your own step")
+            self._because(
+                node,
+                "`range` with a step cannot be translated",
+                "count with a `dejavu` loop and your own step",
+            )
         )
 
     def condition(self, node: ast.expr) -> Expr:
@@ -647,7 +696,23 @@ class _Translator:
             return NumberLiteral(value)
         if isinstance(value, str):
             return StringLiteral(value)
-        raise _Unsupported(self._no(node))
+        if isinstance(value, complex):
+            raise _Unsupported(
+                self._because(
+                    node,
+                    "a complex number cannot be translated",
+                    "MatrixLang has only whole numbers",
+                )
+            )
+        if isinstance(value, bytes):
+            raise _Unsupported(
+                self._because(
+                    node,
+                    "a bytes literal cannot be translated",
+                    "MatrixLang has only text strings",
+                )
+            )
+        raise _Unsupported(self._because(node, "this literal cannot be translated"))
 
     def _compare(self, node: ast.Compare) -> Expr:
         if len(node.ops) != 1:
@@ -670,32 +735,65 @@ class _Translator:
         entries = []
         for key, value in zip(node.keys, node.values):
             if key is None:
-                raise _Unsupported(self._no(node))
+                raise _Unsupported(
+                    self._because(
+                        node,
+                        "`**` in a dictionary literal cannot be translated",
+                        "add the entries one at a time with `d[k] = v`",
+                    )
+                )
             entries.append((self.expression(key), self.expression(value)))
         return DictLiteral(entries)
 
     def _call(self, node: ast.Call) -> Expr:
         if node.keywords:
             raise _Unsupported(
-                self._no(node, "MatrixLang agents take positional arguments only")
+                self._because(
+                    node,
+                    "a keyword argument cannot be translated",
+                    "MatrixLang agents take positional arguments only",
+                )
             )
         if isinstance(node.func, ast.Name) and node.func.id == "input":
             # Reaching here means `input(...)` was not the whole right-hand
             # side of an assignment -- the only place it can become the two
             # statements (`trace`, then bind to `jackin`) it needs to be.
             raise _Unsupported(
-                self._no(
+                self._because(
                     node,
+                    "`input(...)` cannot be translated inside a larger expression",
                     "read the line into its own name first: "
                     "`answer = input(...)`, then use `answer`",
                 )
             )
         if isinstance(node.func, ast.Name) and node.func.id in _NAMED_CALL:
             if len(node.args) != 1:
-                raise _Unsupported(self._no(node))
+                raise _Unsupported(
+                    self._because(
+                        node,
+                        f"`{node.func.id}` takes exactly one value",
+                        f"MatrixLang's `{_NAMED_CALL[node.func.id].name.lower()}` "
+                        "is a one-operand operator",
+                    )
+                )
             return Unary(_NAMED_CALL[node.func.id], self.expression(node.args[0]))
+        if isinstance(node.func, ast.Attribute):
+            raise _Unsupported(
+                self._because(
+                    node,
+                    f"`.{node.func.attr}()` cannot be translated as a value",
+                    "`.append()` becomes an assignment, so it only works as a "
+                    "statement on its own line",
+                )
+            )
         if not isinstance(node.func, ast.Name):
-            raise _Unsupported(self._no(node))
+            raise _Unsupported(
+                self._because(
+                    node,
+                    "calling something that is not a name cannot be translated",
+                    "MatrixLang calls an agent by its name",
+                )
+            )
         return Call(Name(node.func.id), [self.expression(a) for a in node.args])
 
     def _fstring(self, node: ast.JoinedStr) -> Expr:
@@ -714,14 +812,18 @@ class _Translator:
             elif isinstance(piece, ast.FormattedValue):
                 if piece.conversion != -1 or piece.format_spec is not None:
                     raise _Unsupported(
-                        self._no(
+                        self._because(
                             piece,
+                            "an f-string conversion or format spec cannot be "
+                            "translated",
                             "MatrixLang has no formatting; build the text with `+`",
                         )
                     )
                 parts.append(Unary(TokenType.ENCODE, self.expression(piece.value)))
             else:
-                raise _Unsupported(self._no(node))
+                raise _Unsupported(
+                    self._because(node, "this f-string cannot be translated")
+                )
         if not parts:
             return StringLiteral("")
         result = parts[0]
@@ -729,30 +831,25 @@ class _Translator:
             result = Binary(result, TokenType.PLUS, part)
         return result
 
-    def _culprit(self, node: ast.stmt) -> ast.AST:
-        """The construct actually responsible for the refusal.
+    def _because(
+        self, node: ast.AST, reason: str, idiom: str | None = None
+    ) -> Refusal:
+        """A refusal whose reason is written out, positioned at `node`.
 
-        Scoped to the statement's own value expression -- `Assign`, `Expr`,
-        `Return` -- never to the whole subtree. A statement kind that is
-        itself unsupported (`class`, `try`, `raise`, `import`) must report
-        itself, because it refuses no matter what's nested inside it;
-        walking the full subtree would let a `class` body's comprehension
-        steal the refusal from the `class`, and a reader who "fixes" the
-        comprehension would rerun and get a different refusal for the same
-        still-unsupported statement. `xs = [f(x) for x in ys]` still names
-        the comprehension, because there the comprehension genuinely *is*
-        what the statement is built from (and once translation exists, this
-        is also where that expression would be found).
+        `_no` names a CONSTRUCT, keyed by its Python ast class -- which is
+        the right answer whenever the class is the whole story (`import`,
+        a tuple, `%`). It is the wrong answer whenever several different
+        refusals share one class: every `print` arity problem, every
+        `input` misuse and every wrong-arity `len` is an `ast.Call`, and
+        "Call cannot be translated" tells the reader nothing they can act
+        on. Those say what is actually wrong, here.
         """
-        value = None
-        if isinstance(node, (ast.Assign, ast.Expr, ast.Return)):
-            value = node.value
-        if value is None:
-            return node
-        for child in ast.walk(value):
-            if type(child).__name__ in _IDIOM:
-                return child
-        return node
+        return Refusal(
+            reason,
+            getattr(node, "lineno", 1),
+            getattr(node, "col_offset", 0),
+            idiom,
+        )
 
     def _no(
         self, node: ast.AST, idiom: str | None = None, at: ast.AST | None = None
@@ -769,7 +866,7 @@ class _Translator:
         name = type(node).__name__
         where = node if at is None else at
         return Refusal(
-            f"{_DESCRIBE.get(name, name)} cannot be translated",
+            f"{_DESCRIBE.get(name, _UNNAMED)} cannot be translated",
             getattr(where, "lineno", 1),
             getattr(where, "col_offset", 0),
             idiom if idiom is not None else _IDIOM.get(name),
@@ -932,14 +1029,53 @@ def _refuse_function_in_loop(body: list[ast.stmt]) -> None:
 
 
 # What a reader calls each construct, keyed by its ast class name. Without
-# this a refusal says "ImportFrom", which is Python's word, not theirs.
+# this a refusal says "ImportFrom", which is Python's word, not theirs --
+# and the fallback below is deliberately anonymous for the same reason:
+# leaking "Delete" or "AnnAssign" tells the reader about CPython's parser,
+# not about their program. Anything a reader can plausibly write has an
+# entry; the fallback exists only so a Python version that grows a new
+# node type cannot start printing its internals at them.
+_UNNAMED = "this construct"
+
 _DESCRIBE = {
     "Import": "`import`",
     "ImportFrom": "`import`",
     "ClassDef": "`class`",
     "Try": "`try`",
+    "TryStar": "`try`",
     "Raise": "`raise`",
     "Lambda": "`lambda`",
+    "FunctionDef": "`def`",
+    "AsyncFunctionDef": "`async def`",
+    "AsyncFor": "`async for`",
+    "AsyncWith": "`async with`",
+    "Await": "`await`",
+    "Yield": "`yield`",
+    "YieldFrom": "`yield from`",
+    "Delete": "`del`",
+    "Global": "`global`",
+    "Nonlocal": "`nonlocal`",
+    "With": "`with`",
+    "Assert": "`assert`",
+    "Break": "`break`",
+    "Continue": "`continue`",
+    "Pass": "`pass`",
+    "Match": "`match`",
+    "AnnAssign": "a type annotation",
+    "NamedExpr": "`:=`",
+    "IfExp": "a conditional expression",
+    "Starred": "`*` unpacking",
+    "Attribute": "attribute access",
+    "Mod": "`%`",
+    "Pow": "`**`",
+    "MatMult": "`@`",
+    "LShift": "`<<`",
+    "RShift": "`>>`",
+    "BitAnd": "`&`",
+    "BitOr": "`|`",
+    "BitXor": "`^`",
+    "Invert": "`~`",
+    "UAdd": "unary `+`",
     "ListComp": "a list comprehension",
     "SetComp": "a set comprehension",
     "DictComp": "a dict comprehension",
@@ -971,6 +1107,45 @@ _IDIOM = {
         "company on negatives (`-7 // 2` is -4, `-7 / 2` here is -3). Write the "
         "division in MatrixLang directly once you know the signs"
     ),
+    # `break` and `continue` are what a Python reader hits hardest in a
+    # loop-heavy subset, so both name the shape that replaces them rather
+    # than only saying no.
+    "Break": (
+        "a `dejavu` leaves only by its own condition — keep a name the "
+        "condition tests, and set it when you want to stop"
+    ),
+    "Continue": (
+        "wrap the rest of the loop body in a `redpill` for the case you "
+        "wanted to skip"
+    ),
+    "Pass": "MatrixLang needs no filler statement; leave the body empty",
+    "Delete": "MatrixLang has no `del`; a name lives as long as its scope",
+    "Global": "an agent cannot rebind a name outside it; `jackout` the new value",
+    "Nonlocal": "an agent cannot rebind a name outside it; `jackout` the new value",
+    "With": "MatrixLang has no context managers",
+    "Assert": "test it with `redpill` and `trace` what went wrong",
+    "Match": "use `redpill` / `bluepill`",
+    "AnnAssign": "drop the annotation: `x = 1`",
+    "NamedExpr": "assign on its own line first, then use the name",
+    "IfExp": "write it as `if` / `else` over two statements",
+    "Starred": "pass the arguments one at a time",
+    "Attribute": (
+        "MatrixLang has no objects; `xs.append(v)` on its own line is the "
+        "one thing it can translate"
+    ),
+    "Yield": "build the whole list and `jackout` it",
+    "YieldFrom": "build the whole list and `jackout` it",
+    "Await": "MatrixLang runs one statement after another and never waits",
+    "Mod": "MatrixLang has no remainder operator",
+    "Pow": "multiply in a `dejavu` loop",
+    "MatMult": "MatrixLang has no matrix multiply, despite the name",
+    "LShift": "MatrixLang has no bitwise operators",
+    "RShift": "MatrixLang has no bitwise operators",
+    "BitAnd": "MatrixLang has no bitwise operators; `splice` is `and` on booleans",
+    "BitOr": "MatrixLang has no bitwise operators; `fork` is `or` on booleans",
+    "BitXor": "MatrixLang has no bitwise operators",
+    "Invert": "MatrixLang has no bitwise operators; `unplug` is `not` on booleans",
+    "UAdd": "a leading `+` does nothing; write the value on its own",
     "ListComp": "build the list with a `dejavu` loop and `xs = xs + [v]`",
     "SetComp": "MatrixLang has no sets; use a list",
     "DictComp": "build the dictionary with a `dejavu` loop and `d[k] = v`",
