@@ -51,6 +51,14 @@ GLYPHS: dict[str, str] = {
     # the Keymaker's own sounds were long gone by this point in the table.
     "keymaker": "ﾔ",
     "oracle": "ｵ",
+    # String methods. `trim` takes ﾘ, the "ri" of its own katakana
+    # spelling ﾄﾘﾑ -- ﾄ and ﾑ were long gone, so the middle sound is what
+    # was left. `fold` and `cleave` take ﾊ and ﾛ arbitrarily: every sound
+    # in ﾌｫｰﾙﾄﾞ and ｸﾘｰﾌﾞ was already spent, which is what a 56-slot block
+    # looks like by its 52nd entry.
+    "fold": "ﾊ",
+    "trim": "ﾘ",
+    "cleave": "ﾛ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",

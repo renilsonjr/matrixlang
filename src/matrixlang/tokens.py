@@ -34,6 +34,9 @@ class TokenType(Enum):
     ENCODE = auto()
     KEYMAKER = auto()
     ORACLE = auto()
+    FOLD = auto()
+    TRIM = auto()
+    CLEAVE = auto()
 
     # Operators
     PLUS = auto()
@@ -84,6 +87,9 @@ KEYWORDS: dict[str, TokenType] = {
     "encode": TokenType.ENCODE,
     "keymaker": TokenType.KEYMAKER,
     "oracle": TokenType.ORACLE,
+    "fold": TokenType.FOLD,
+    "trim": TokenType.TRIM,
+    "cleave": TokenType.CLEAVE,
 }
 
 
