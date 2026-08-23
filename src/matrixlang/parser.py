@@ -99,6 +99,12 @@ _COMPARISON_OPS = (
     TokenType.GTE,
     TokenType.ORACLE,
 )
+# `cleave` gets a rung of its own between comparison and term. Above
+# comparison so `s cleave "," == xs` compares the LIST, and below term so
+# `a + b cleave ","` concatenates before it splits. Both are the natural
+# reading, and this is the only placement that gives both without
+# parentheses.
+_CLEAVE_OPS = (TokenType.CLEAVE,)
 _TERM_OPS = (TokenType.PLUS, TokenType.MINUS)
 _FACTOR_OPS = (TokenType.STAR, TokenType.SLASH)
 
@@ -423,7 +429,10 @@ class _Parser:
         return self._binary_level(_EQUALITY_OPS, self._comparison)
 
     def _comparison(self) -> Expr:
-        return self._binary_level(_COMPARISON_OPS, self._term)
+        return self._binary_level(_COMPARISON_OPS, self._cleave)
+
+    def _cleave(self) -> Expr:
+        return self._binary_level(_CLEAVE_OPS, self._term)
 
     def _term(self) -> Expr:
         return self._binary_level(_TERM_OPS, self._factor)
@@ -451,12 +460,18 @@ class _Parser:
         # `keymaker` joins them for the same reason: it PRODUCES a list of
         # keys that later operations consume, so `length keymaker d` and
         # `keymaker alunos[0]` both group tightly.
+        # `fold` and `trim` join on the same argument: each produces a
+        # string, so `fold a + b` is `(fold a) + b` and `trim a == b` is
+        # `(trim a) == b`. The loose reading of either would hand the
+        # operator a value it cannot take, for every possible operand.
         if (
             self.check(TokenType.MINUS)
             or self.check(TokenType.LENGTH)
             or self.check(TokenType.DECODE)
             or self.check(TokenType.ENCODE)
             or self.check(TokenType.KEYMAKER)
+            or self.check(TokenType.FOLD)
+            or self.check(TokenType.TRIM)
         ):
             op = self.advance()
             operand = self._unary()
