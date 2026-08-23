@@ -34,6 +34,21 @@ would go silently wrong if that rung's level were off by one.
 test_roundtrip has a test asserting this coverage actually occurs — a
 generator that stops producing the hard shapes would quietly gut the
 property.
+
+And, for loop control — `wake` and `glitch` (STMT-2), the two node
+types with no operand at all: the whole statement is the keyword, which
+makes them the shape most likely to lose the render's indentation
+silently, since there is no child expression whose own render would
+carry the pad along. Both sit in `gen_statement`'s BASE kind list
+(alongside `declare`/`assign`/... , not gated on `depth > 0`), which is
+what gets them generated as children of `While`/`If`/agent bodies
+rather than only at a program's top level — a `wake` at the top level
+round-trips trivially and proves nothing about render nesting; one
+inside a `dejavu` body is the shape that matters. A node type outside
+this file is invisible to parse(render(t)) == t exactly as
+`decode`/`encode` once were, silently — that is what makes this file
+the third one (after render.py and treeview.py) a new statement kind
+must touch.
 """
 
 import random
@@ -45,6 +60,7 @@ from matrixlang.nodes import (
     Declare,
     DictLiteral,
     Expr,
+    Glitch,
     If,
     Index,
     IndexAssign,
@@ -60,6 +76,7 @@ from matrixlang.nodes import (
     Return,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import TokenType
@@ -102,12 +119,23 @@ def gen_comments(rng: random.Random) -> list[str]:
 
 
 def gen_statement(rng: random.Random, depth: int) -> Stmt:
-    kinds = ["declare", "assign", "trace", "return", "exprstmt", "indexassign"]
+    kinds = [
+        "declare", "assign", "trace", "return", "exprstmt", "indexassign",
+        # Loop control. In the BASE list, not gated on depth: these are
+        # leaves, and putting them here is what gets them nested inside
+        # While, If and agent bodies -- which is the shape that exercises
+        # the render's indentation for an operand-less statement.
+        "wake", "glitch",
+    ]
     if depth > 0:
         kinds += ["if", "while", "agent"]
     kind = rng.choice(kinds)
     stmt: Stmt
-    if kind == "indexassign":
+    if kind == "wake":
+        stmt = Wake()
+    elif kind == "glitch":
+        stmt = Glitch()
+    elif kind == "indexassign":
         stmt = IndexAssign(
             gen_assignable_chain(rng) if rng.random() < 0.3 else Name(rng.choice(_IDENTS)),
             gen_expression(rng, 2),

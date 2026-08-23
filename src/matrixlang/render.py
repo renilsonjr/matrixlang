@@ -21,11 +21,13 @@ from matrixlang.nodes import (
     DictLiteral,
     ExprStmt,
     FunctionDef,
+    Glitch,
     Index,
     IndexAssign,
     JackIn,
     ListLiteral,
     Return,
+    Wake,
     Assign,
     Binary,
     BoolLiteral,
@@ -221,6 +223,10 @@ def _statement(stmt: Stmt, depth: int, face: Face, lines: list[str]) -> None:
         lines.append(pad + head + _trail(stmt, face))
     elif isinstance(stmt, ExprStmt):
         lines.append(pad + _expression(stmt.value, 0, face) + _trail(stmt, face))
+    elif isinstance(stmt, Wake):
+        lines.append(pad + _map(face, "wake") + _trail(stmt, face))
+    elif isinstance(stmt, Glitch):
+        lines.append(pad + _map(face, "glitch") + _trail(stmt, face))
     else:
         raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 

@@ -14,7 +14,16 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.nodes import Binary, Call, DictLiteral, If, Index, ListLiteral, Unary
+from matrixlang.nodes import (
+    Binary,
+    Call,
+    DictLiteral,
+    If,
+    Index,
+    ListLiteral,
+    Unary,
+    While,
+)
 from matrixlang.parser import parse
 from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
@@ -574,3 +583,40 @@ def test_the_generator_produces_the_string_method_shapes_too():
     assert counts["trim"], "no `trim` in 300 seeds"
     assert counts["over_term"], "no `(a + b) cleave c` shape in 300 seeds"
     assert counts["under_cmp"], "no `(a cleave b) == c` shape in 300 seeds"
+
+
+def test_the_generator_produces_the_loop_control_shapes_too():
+    # Two new STATEMENT node types, and the property only covers shapes
+    # treegen produces. A `wake` at a program's top level would round
+    # trip trivially; the shape that matters is one INSIDE a loop body,
+    # because that is where the render's indentation for an
+    # operand-less statement is exercised. So both are counted, and
+    # counted separately for the nested case.
+    from matrixlang.nodes import Glitch, IndexAssign, Wake
+
+    counts = {"wake": 0, "glitch": 0, "in_loop": 0}
+
+    def walk_stmt(stmt, in_loop):
+        if isinstance(stmt, Wake):
+            counts["wake"] += 1
+            if in_loop:
+                counts["in_loop"] += 1
+            return
+        if isinstance(stmt, Glitch):
+            counts["glitch"] += 1
+            if in_loop:
+                counts["in_loop"] += 1
+            return
+        if isinstance(stmt, IndexAssign):
+            return
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child, in_loop or isinstance(stmt, While))
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement, False)
+
+    assert counts["wake"], "no `wake` in 300 seeds — the property proves nothing about it"
+    assert counts["glitch"], "no `glitch` in 300 seeds"
+    assert counts["in_loop"], "no loop-control statement INSIDE a loop body in 300 seeds"
