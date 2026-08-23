@@ -190,6 +190,24 @@ class ExprStmt(Stmt):
 
 
 @dataclass
+class Wake(Stmt):
+    """`wake`. Leaves the innermost loop, like Python's `break`.
+
+    No fields: the whole statement is the keyword. Both this and Glitch
+    are Stmt rather than Expr on purpose -- `construct x = wake` has no
+    meaning, and making them expressions would give it one."""
+
+
+@dataclass
+class Glitch(Stmt):
+    """`glitch`. Skips to the innermost loop's next iteration.
+
+    Named for the film's own line: a déjà vu IS a glitch in the Matrix.
+    The loop keyword is `dejavu`, so this is the word for making the same
+    loop happen again."""
+
+
+@dataclass
 class Program(Node):
     statements: list[Stmt]
     trailing_comments: list[str] = field(default_factory=list, kw_only=True)

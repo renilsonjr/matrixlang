@@ -107,7 +107,11 @@ Rules that differ from most languages:
   `a fork b` runs only if `a` is false, so a side that is never
   evaluated is never type-checked (`false splice 1` is `false`, but
   `true splice 1` is an error). `unplug` binds looser than comparison,
-  so `unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1`."""
+  so `unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1`.
+- `wake` leaves the innermost `dejavu` immediately; `glitch` skips to that
+  loop's next iteration. Both are bare keywords on their own line, like a
+  bare `jackout`, and both are an error outside a loop. A `jackout` inside
+  a loop still returns from the agent — it is not stopped by the loop."""
 
 
 def _keywords() -> str:

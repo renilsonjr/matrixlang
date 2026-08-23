@@ -37,6 +37,8 @@ class TokenType(Enum):
     FOLD = auto()
     TRIM = auto()
     CLEAVE = auto()
+    WAKE = auto()
+    GLITCH = auto()
 
     # Operators
     PLUS = auto()
@@ -90,6 +92,8 @@ KEYWORDS: dict[str, TokenType] = {
     "fold": TokenType.FOLD,
     "trim": TokenType.TRIM,
     "cleave": TokenType.CLEAVE,
+    "wake": TokenType.WAKE,
+    "glitch": TokenType.GLITCH,
 }
 
 

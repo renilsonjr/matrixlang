@@ -62,6 +62,12 @@ GLYPHS: dict[str, str] = {
     "fold": "ﾊ",
     "trim": "ﾘ",
     "cleave": "ﾛ",
+    # Loop control. Both arbitrary -- ｳｪｲｸ and ｸﾞﾘｯﾁ have no sound left
+    # unspent. The two slots deliberately NOT taken are ｰ (U+FF70) and
+    # ﾝ (U+FF9D): neither is a syllable, both read as punctuation, and
+    # the next item in the register needs exactly two punctuation slots.
+    "wake": "ﾉ",
+    "glitch": "ﾕ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
