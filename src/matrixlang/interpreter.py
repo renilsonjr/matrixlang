@@ -27,6 +27,7 @@ from matrixlang.nodes import (
     Expr,
     ExprStmt,
     FunctionDef,
+    Glitch,
     If,
     Index,
     IndexAssign,
@@ -40,6 +41,7 @@ from matrixlang.nodes import (
     StringLiteral,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import TokenType
@@ -163,6 +165,35 @@ class _Jackout(Exception):
         self.value = value
 
 
+class _LoopSignal(Exception):
+    """A `wake` or a `glitch`, unwinding to the innermost loop.
+
+    Deliberately not a MatrixLangError, for the same reason _Jackout is
+    not: these are control flow, not diagnostics, and a stray
+    `except MatrixLangError` must never swallow one.
+
+    Carries the position so the "outside a loop" error -- raised where
+    the signal escapes rather than where it was written -- can still
+    point at the keyword the reader typed.
+    """
+
+    __slots__ = ("word", "line", "column")
+
+    def __init__(self, word: str, line: int, column: int) -> None:
+        super().__init__()
+        self.word = word
+        self.line = line
+        self.column = column
+
+
+class _Wake(_LoopSignal):
+    pass
+
+
+class _Glitch(_LoopSignal):
+    pass
+
+
 class Interpreter:
     def __init__(
         self,
@@ -212,6 +243,12 @@ class Interpreter:
                     "'jackout' outside an agent",
                     statement.line,
                     statement.column,
+                ) from None
+            except _LoopSignal as signal:
+                raise RuntimeErrorML(
+                    f"'{signal.word}' outside a loop",
+                    signal.line,
+                    signal.column,
                 ) from None
             except RecursionError:
                 raise RuntimeErrorML(
@@ -354,8 +391,17 @@ class Interpreter:
                     self._execute(child)
         elif isinstance(stmt, While):
             while self._condition(stmt.condition):
-                for child in stmt.body:
-                    self._execute(child)
+                try:
+                    for child in stmt.body:
+                        self._execute(child)
+                except _Glitch:
+                    continue
+                except _Wake:
+                    break
+        elif isinstance(stmt, Wake):
+            raise _Wake("wake", stmt.line, stmt.column)
+        elif isinstance(stmt, Glitch):
+            raise _Glitch("glitch", stmt.line, stmt.column)
         else:
             raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
@@ -706,6 +752,18 @@ class Interpreter:
                 self._execute(statement)
         except _Jackout as jackout:
             return jackout.value
+        except _LoopSignal as signal:
+            # THE agent boundary. Without this, `wake` inside an agent
+            # called from inside a loop escapes the call and breaks the
+            # CALLER's loop -- a program that runs and quietly does
+            # something the reader never wrote. The agent's own body is
+            # not inside a loop, so this is an error, exactly as Python's
+            # `break` in a function body is a SyntaxError.
+            raise RuntimeErrorML(
+                f"'{signal.word}' outside a loop",
+                signal.line,
+                signal.column,
+            ) from None
         finally:
             self._env = previous
         # Fell off the end without jacking out.
