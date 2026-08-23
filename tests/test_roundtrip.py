@@ -330,15 +330,18 @@ def test_the_generator_produces_the_stage_9_shapes_too():
         for child in getattr(stmt, "else_body", None) or []:
             walk_stmt(child)
 
-    # 1000, not 600: `unplug (a splice b)` and `(unplug a) == b` were
-    # already down to a handful of hits in 600 seeds before string
-    # methods, and adding `fold`/`trim` beside `unplug` in treegen's
-    # unary choice list (6 options -> 8) dilutes every existing
-    # operator's share and reshuffles which seeds land where in the RNG
-    # stream. That pushed `(unplug a) == b`'s first occurrence in this
-    # run past seed 600 (to 694) with no change to the shape's real
-    # generation probability -- widening the seed pool here restores the
-    # check rather than papering over it. The primary round-trip property
+    # 1000, not 600: adding `fold`/`trim` beside `unplug` in treegen's
+    # unary choice list (6 options -> 8) genuinely made `unplug` rarer,
+    # not just reshuffled -- its share of the unary draw fell from 1/6 to
+    # 1/8, and the measured per-1000-seed hit counts fell with it:
+    #   unplug                 155 -> 124
+    #   unplug over a binary     33 ->  22
+    #   (unplug a) == b          10 ->   5, first occurrence seed 84 -> 694
+    # (`unplug_over_splice` was unaffected in the other direction -- it
+    # stayed comfortably above zero). That pushed `(unplug a) == b`'s
+    # first occurrence past the old 600-seed range; widening the seed
+    # pool here restores the check rather than papering over a shape that
+    # is legitimately less common now. The primary round-trip property
     # (test_round_trip) and Step 5's corpus counts stay pinned at the
     # canonical 300 seeds; this is a coverage meta-test sampling the same
     # generator, not that property.
@@ -346,15 +349,15 @@ def test_the_generator_produces_the_stage_9_shapes_too():
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert splice, "no splice in 600 seeds"
-    assert fork, "no fork in 600 seeds"
-    assert unplug, "no unplug in 600 seeds"
-    assert unplug_over_binary, "no `unplug (a == b)` shape in 600 seeds"
-    assert fork_over_splice, "no `a fork (b splice c)` shape in 600 seeds"
-    assert logical_over_comparison, "no logical-over-comparison shape in 600 seeds"
-    assert splice_over_fork, "no `a splice (b fork c)` shape in 600 seeds"
-    assert unplug_under_eq, "no `(unplug a) == b` shape in 600 seeds"
-    assert unplug_over_splice, "no `unplug (a splice b)` shape in 600 seeds"
+    assert splice, "no splice in 1000 seeds"
+    assert fork, "no fork in 1000 seeds"
+    assert unplug, "no unplug in 1000 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 1000 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 1000 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 1000 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 1000 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 1000 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 1000 seeds"
 
 
 def test_the_generator_produces_every_unary_operator():

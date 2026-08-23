@@ -63,8 +63,37 @@ def test_a_comparison_under_a_cleave_gets_parens():
     assert ascii_face(source) == source
 
 
+def test_a_lt_under_a_cleave_gets_parens():
+    # `==`/`!=` sit at level 4, but `<`/`>`/`<=`/`>=` sit at level 5 -- one
+    # rung above. If CLEAVE were misnumbered at 5 (merged with
+    # comparison) or lower, these parens would be dropped and the source
+    # would come back as `trace a < b cleave ","`, a different tree. This
+    # is the case the `==` comparison test above cannot catch, because it
+    # only discriminates CLEAVE <= 4.
+    source = 'trace (a < b) cleave ","\n'
+    assert ascii_face(source) == source
+
+
+def test_a_cleave_under_a_plus_gets_parens():
+    # If CLEAVE were misnumbered at 7 (merged with term, the level PLUS
+    # and MINUS sit at), these parens would be dropped and the source
+    # would come back as `trace a cleave b + c`, parsing as
+    # `a cleave (b + c)` instead of `(a cleave b) + c`.
+    source = "trace (a cleave b) + c\n"
+    assert ascii_face(source) == source
+
+
 def test_fold_over_a_plus_gets_parens():
     source = "trace fold (a + b)\n"
+    assert ascii_face(source) == source
+
+
+def test_fold_over_a_star_gets_parens():
+    # If _UNARY_LEVEL were left at 8 (its pre-cleave value) instead of
+    # moving to 9, a `*`/`/` operand (level 8) would appear to bind as
+    # tight as the unary rung and lose its parens, misrendering as
+    # `trace fold a * b` -- a different tree than `fold (a * b)`.
+    source = "trace fold (a * b)\n"
     assert ascii_face(source) == source
 
 
