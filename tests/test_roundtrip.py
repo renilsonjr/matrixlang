@@ -330,18 +330,19 @@ def test_the_generator_produces_the_stage_9_shapes_too():
         for child in getattr(stmt, "else_body", None) or []:
             walk_stmt(child)
 
-    # 600, not the usual 300: `unplug (a splice b)` was already down to a
-    # single hit in 300 seeds before Task 6, and adding `keymaker` beside
-    # `unplug` in treegen's unary choice list (5 options -> 6) dilutes
-    # every existing operator's share and reshuffles which seeds land
-    # where in the RNG stream. That pushed this compound's first
-    # occurrence in this run past seed 300 (to 549) with no change to the
-    # shape's real generation probability -- widening the seed pool here
-    # restores the check rather than papering over it. The primary
-    # round-trip property (test_round_trip) and Step 5's corpus counts
-    # stay pinned at the canonical 300 seeds; this is a coverage meta-test
-    # sampling the same generator, not that property.
-    for seed in range(600):
+    # 1000, not 600: `unplug (a splice b)` and `(unplug a) == b` were
+    # already down to a handful of hits in 600 seeds before string
+    # methods, and adding `fold`/`trim` beside `unplug` in treegen's
+    # unary choice list (6 options -> 8) dilutes every existing
+    # operator's share and reshuffles which seeds land where in the RNG
+    # stream. That pushed `(unplug a) == b`'s first occurrence in this
+    # run past seed 600 (to 694) with no change to the shape's real
+    # generation probability -- widening the seed pool here restores the
+    # check rather than papering over it. The primary round-trip property
+    # (test_round_trip) and Step 5's corpus counts stay pinned at the
+    # canonical 300 seeds; this is a coverage meta-test sampling the same
+    # generator, not that property.
+    for seed in range(1000):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
@@ -373,6 +374,8 @@ def test_the_generator_produces_every_unary_operator():
         TokenType.DECODE,
         TokenType.ENCODE,
         TokenType.KEYMAKER,
+        TokenType.FOLD,
+        TokenType.TRIM,
     }
     found = set()
 
@@ -482,3 +485,84 @@ def test_the_generator_produces_the_dictionary_shapes_too():
     assert populated_dict, "no populated dictionary in 300 seeds"
     assert dict_in_dict, "no dictionary inside a dictionary in 300 seeds"
     assert oracle, "no `oracle` binary in 300 seeds"
+
+
+def test_the_generator_produces_the_string_method_shapes_too():
+    # The trap, stated in the string-methods spec: the 300-seed property
+    # only covers shapes treegen produces, and this has silently failed
+    # twice -- `decode` and `encode` sat outside the property for their
+    # entire existence while it stayed green, and the same hole reopened
+    # one level down when dictionaries landed. So the corpus is COUNTED.
+    # A zero here means test_round_trip is green while proving nothing
+    # about these three operators.
+    #
+    # `cleave` matters most: it has a precedence rung of its own, which
+    # renumbered render._LEVEL end to end. A wrong level there changes
+    # what a program means and fails loudly nowhere else.
+    from matrixlang.nodes import IndexAssign
+    from matrixlang.tokens import TokenType
+
+    counts = {"cleave": 0, "fold": 0, "trim": 0, "over_term": 0, "under_cmp": 0}
+
+    def walk_expr(expr):
+        if isinstance(expr, Unary):
+            if expr.op is TokenType.FOLD:
+                counts["fold"] += 1
+            if expr.op is TokenType.TRIM:
+                counts["trim"] += 1
+            walk_expr(expr.operand)
+        elif isinstance(expr, Binary):
+            level = _LEVEL.get(expr.op)
+            cleave_level = _LEVEL[TokenType.CLEAVE]
+            if expr.op is TokenType.CLEAVE:
+                counts["cleave"] += 1
+                for side in (expr.left, expr.right):
+                    if (
+                        isinstance(side, Binary)
+                        and _LEVEL.get(side.op, 0) > cleave_level
+                    ):
+                        counts["over_term"] += 1
+            elif level is not None and level < cleave_level:
+                for side in (expr.left, expr.right):
+                    if isinstance(side, Binary) and side.op is TokenType.CLEAVE:
+                        counts["under_cmp"] += 1
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
+
+    def walk_stmt(stmt):
+        if isinstance(stmt, IndexAssign):
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    print("string-method corpus:", counts)
+    assert counts["cleave"], "no `cleave` in 300 seeds — the property proves nothing about it"
+    assert counts["fold"], "no `fold` in 300 seeds"
+    assert counts["trim"], "no `trim` in 300 seeds"
+    assert counts["over_term"], "no `(a + b) cleave c` shape in 300 seeds"
+    assert counts["under_cmp"], "no `(a cleave b) == c` shape in 300 seeds"

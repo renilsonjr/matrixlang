@@ -67,6 +67,9 @@ _OPS: dict[TokenType, str] = {
     TokenType.FORK: "fork",
     TokenType.KEYMAKER: "keymaker",
     TokenType.ORACLE: "oracle",
+    TokenType.FOLD: "fold",
+    TokenType.TRIM: "trim",
+    TokenType.CLEAVE: "cleave",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
@@ -89,17 +92,21 @@ _LEVEL: dict[TokenType, int] = {
     # it shares that level here -- a different number would parenthesise
     # `d oracle "a" == true` differently than the parser groups it.
     TokenType.ORACLE: 5,
-    TokenType.PLUS: 6,
-    TokenType.MINUS: 6,
-    TokenType.STAR: 7,
-    TokenType.SLASH: 7,
+    # `cleave` has a rung of its own (parser._CLEAVE_OPS) between
+    # comparison and term. It is why every level below this line moved up
+    # by one when string methods landed.
+    TokenType.CLEAVE: 6,
+    TokenType.PLUS: 7,
+    TokenType.MINUS: 7,
+    TokenType.STAR: 8,
+    TokenType.SLASH: 8,
 }
 # `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
 # unlike `-` and `length` it binds LOOSER than every binary operator
 # except fork and splice.
 _NOT_LEVEL = 3
-_UNARY_LEVEL = 8
-_ATOM_LEVEL = 9
+_UNARY_LEVEL = 9
+_ATOM_LEVEL = 10
 # A call is postfix and binds tighter than every operator, including unary
 # minus: -f(1) is -(f(1)), never (-f)(1). That makes it an atom for
 # parenthesisation purposes, and saying so is better than the two constants
@@ -263,12 +270,14 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             TokenType.DECODE,
             TokenType.ENCODE,
             TokenType.KEYMAKER,
+            TokenType.FOLD,
+            TokenType.TRIM,
         ):
             # A word operator needs a separator or `length xs` renders as
             # `lengthxs` and re-lexes as one identifier — a silent change
             # of meaning, which is exactly what §4.3 exists to catch.
-            # `decode`, `encode`, and `keymaker` are the same shape and
-            # share the rule.
+            # `decode`, `encode`, `keymaker`, `fold` and `trim` are the
+            # same shape and share the rule.
             return _map(face, _OPS[expr.op]) + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):

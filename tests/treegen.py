@@ -76,6 +76,7 @@ _BINARY_OPS = [
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH,
     TokenType.ORACLE,
+    TokenType.CLEAVE,
 ]
 
 
@@ -178,7 +179,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             gen_expression(rng, depth - 1),
         )
     if roll < 0.50:
-        # Every unary operator — all six. Keeping this list complete is
+        # Every unary operator — all eight. Keeping this list complete is
         # what puts each keyword through the mixed-face round trip, which
         # nothing else covers: the hand-written render tests read one face
         # at a time. unplug over a binary is the shape that would render
@@ -195,6 +196,8 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
                     TokenType.DECODE,
                     TokenType.ENCODE,
                     TokenType.KEYMAKER,
+                    TokenType.FOLD,
+                    TokenType.TRIM,
                 ]
             ),
             gen_expression(rng, depth - 1),
