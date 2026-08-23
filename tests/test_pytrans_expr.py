@@ -182,3 +182,29 @@ def test_not_in_is_still_refused():
     refusal = refused("print(a not in b)\n")[0]
     assert "`not in`" in refusal.reason
     assert "unplug" in refusal.idiom
+
+
+def test_lower_becomes_fold():
+    assert "fold s" in ml("s = 'A'\nprint(s.lower())\n")
+
+
+def test_strip_becomes_trim():
+    assert "trim s" in ml("s = ' a '\nprint(s.strip())\n")
+
+
+def test_split_becomes_cleave():
+    assert 's cleave ","' in ml("s = 'a,b'\nprint(s.split(','))\n")
+
+
+def test_a_string_method_on_an_expression_translates():
+    # The receiver is an arbitrary expression, not only a name.
+    assert "fold xs[0]" in ml("xs = ['A']\nprint(xs[0].lower())\n")
+
+
+def test_a_case_insensitive_comparison_translates_whole():
+    source = "a = 'A'\nb = 'a'\nprint(a.lower() == b.lower())\n"
+    assert "fold a == fold b" in ml(source)
+
+
+def test_a_chained_strip_and_split_translates():
+    assert 'trim s cleave ","' in ml("s = ' a,b '\nprint(s.strip().split(','))\n")

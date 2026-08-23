@@ -48,6 +48,15 @@ _NAMED_CALL = {
     "int": TokenType.DECODE,
 }
 
+# Python string methods that have a MatrixLang operator. Kept separate
+# from _NAMED_CALL because these arrive as `receiver.method()` rather than
+# `name(argument)` -- MatrixLang has no attribute access at all, which is
+# why the translator has to special-case each one it can reach.
+_STRING_UNARY = {
+    "lower": TokenType.FOLD,
+    "strip": TokenType.TRIM,
+}
+
 
 def translate(source: str) -> Translated | Refusals:
     """Translate Python to MatrixLang. Never raises."""
@@ -778,6 +787,54 @@ class _Translator:
                 )
             return Unary(_NAMED_CALL[node.func.id], self.expression(node.args[0]))
         if isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method in _STRING_UNARY:
+                if node.args or node.keywords:
+                    raise _Unsupported(
+                        self._because(
+                            node,
+                            f"`.{method}()` can only be translated with no "
+                            "arguments",
+                            f"MatrixLang's `{_STRING_UNARY[method].name.lower()}` "
+                            "is a one-operand operator",
+                        )
+                    )
+                return Unary(
+                    _STRING_UNARY[method], self.expression(node.func.value)
+                )
+            if method == "split":
+                if len(node.args) != 1 or node.keywords:
+                    # Bare `.split()` is NOT `.split(" ")`. Python splits
+                    # on RUNS of whitespace and discards empty strings, so
+                    # translating it to `cleave " "` would give a program
+                    # that runs and quietly means something else -- which
+                    # is exactly what the governing rule forbids.
+                    raise _Unsupported(
+                        self._because(
+                            node,
+                            "`.split()` can only be translated with exactly "
+                            "one separator",
+                            'bare `.split()` splits on runs of whitespace and '
+                            'drops empty pieces, which `cleave` does not do — '
+                            'name the separator: `.split(" ")`',
+                        )
+                    )
+                return Binary(
+                    self.expression(node.func.value),
+                    TokenType.CLEAVE,
+                    self.expression(node.args[0]),
+                )
+            if method == "upper":
+                raise _Unsupported(
+                    self._because(
+                        node,
+                        "`.upper()` cannot be translated — MatrixLang has "
+                        "no upper-casing operator",
+                        "to compare ignoring case, use `.lower()` on both "
+                        "sides; to display in capitals there is no "
+                        "MatrixLang form yet",
+                    )
+                )
             raise _Unsupported(
                 self._because(
                     node,

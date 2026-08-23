@@ -170,3 +170,50 @@ def test_break_and_continue_carry_an_idiom():
     # two that shipped with no idiom at all.
     assert "condition" in translate("while 1 < 2:\n    break\n").items[0].idiom
     assert "redpill" in translate("while 1 < 2:\n    continue\n").items[0].idiom
+
+
+def test_upper_is_refused_with_an_idiom():
+    result = translate("s = 'a'\nprint(s.upper())\n")
+    assert isinstance(result, Refusals)
+    (refusal,) = result.items
+    assert "`.upper()`" in refusal.reason
+    assert refusal.idiom is not None
+    assert "lower" in refusal.idiom
+
+
+def test_a_bare_split_is_refused_rather_than_guessed():
+    # Python's bare .split() splits on RUNS of whitespace and discards
+    # empty strings. `cleave " "` is different behaviour, not a missing
+    # argument, so translating one to the other would be silently wrong --
+    # which is exactly what the governing rule forbids.
+    result = translate("s = 'a b'\nprint(s.split())\n")
+    assert isinstance(result, Refusals)
+    (refusal,) = result.items
+    assert "split" in refusal.reason
+    assert refusal.idiom is not None
+
+
+def test_split_with_two_arguments_is_refused():
+    result = translate("s = 'a,b,c'\nprint(s.split(',', 1))\n")
+    assert isinstance(result, Refusals)
+    assert "split" in result.items[0].reason
+
+
+def test_strip_with_an_argument_is_refused():
+    # `trim` takes no argument; .strip("x") strips a character SET, which
+    # is a different operation.
+    result = translate("s = 'xax'\nprint(s.strip('x'))\n")
+    assert isinstance(result, Refusals)
+    assert "strip" in result.items[0].reason
+
+
+def test_an_untranslatable_method_still_refuses_as_before():
+    # Not in this change. The blanket message must still be reachable.
+    result = translate("s = 'a'\nprint(s.replace('a', 'b'))\n")
+    assert isinstance(result, Refusals)
+    assert "`.replace()`" in result.items[0].reason
+
+
+def test_a_refusal_still_carries_its_python_position():
+    result = translate("s = 'a'\nprint(s.upper())\n")
+    assert result.items[0].line == 2
