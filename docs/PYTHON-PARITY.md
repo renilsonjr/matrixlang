@@ -150,6 +150,16 @@ Two constraints bind every one of them:
 - **The glyph budget is finite** — 4 slots left, hand-tracked in
   `tests/test_glyphs.py` on purpose so that spending one is a decision somebody
   wrote down.
+
+  **The remaining queue spends all four, and the allocation is already
+  decided.** Item 2 takes two for `wake` and `glitch`; item 3 widens `oracle`
+  rather than adding a sibling, so it takes none; item 4 takes the last two for
+  `.` and `%`. Item 5 is translator-side and takes none. There is no margin, and
+  that is the point: the table stays inside its 56-slot block, and the ceiling
+  keeps the vocabulary small enough to hold in your head, which is the whole
+  reason this language is worth reading. If item 4 turns out to need a third
+  slot, that is a decision to take deliberately — not a shortfall to route
+  around by enlarging the block.
 - **D-03**: both textual faces must round-trip, `parse(lex(render_X(t))) == t`,
   and any new node type must enter `tests/treegen.py` in the same change that
   adds it. A diff that adds a node without touching treegen is incomplete —
