@@ -443,6 +443,35 @@ class Interpreter:
                 # caller does with the returned list must never reach
                 # back into the dictionary.
                 return list(operand.keys())
+            if expr.op is TokenType.FOLD:
+                if not is_str(operand):
+                    raise RuntimeErrorML(
+                        f"'fold' takes a string, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # str.lower(), NOT str.casefold(), despite the name.
+                # "STRAßE".lower() is "straße"; .casefold() is "strasse".
+                # The Python translator maps `.lower()` onto this
+                # operator, so switching to casefold would make a
+                # translated program and its original disagree on that
+                # input, silently -- which is the one thing the
+                # translator's governing rule exists to prevent.
+                return operand.lower()
+            if expr.op is TokenType.TRIM:
+                if not is_str(operand):
+                    raise RuntimeErrorML(
+                        f"'trim' takes a string, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # Bare str.strip() -- all Unicode whitespace.
+                # Deliberately NOT _DECODE_SPACE, which is ASCII-only
+                # because `decode` is validating a number grammar against
+                # text that came from outside. `trim` is trimming text for
+                # a reader, and the translator maps Python's `.strip()`
+                # onto it, so it has to agree with `.strip()` on U+00A0.
+                return operand.strip()
             if expr.op is TokenType.DECODE:
                 if not is_str(operand):
                     raise RuntimeErrorML(
@@ -751,6 +780,31 @@ class Interpreter:
                     node.column,
                 ) from None
             return right in left
+        if node.op is TokenType.CLEAVE:
+            if not is_str(left):
+                raise RuntimeErrorML(
+                    f"'cleave' takes a string, got {type_name(left)}",
+                    node.line,
+                    node.column,
+                )
+            if not is_str(right):
+                raise RuntimeErrorML(
+                    f"'cleave' needs a string separator, got "
+                    f"{type_name(right)}",
+                    node.line,
+                    node.column,
+                )
+            if not right:
+                # CPython raises ValueError("empty separator") here.
+                # Nothing may escape this interpreter but MatrixLangError
+                # -- site/glue.py's run() promises never to raise, and
+                # that promise has been broken five times already.
+                raise RuntimeErrorML(
+                    "'cleave' needs a separator with something in it",
+                    node.line,
+                    node.column,
+                )
+            return left.split(right)
         if node.op is TokenType.PLUS and is_str(left) and is_str(right):
             return left + right
         if node.op is TokenType.PLUS and is_str(left) != is_str(right):
