@@ -25,6 +25,12 @@ binary expression still exercises precedence), `keymaker` alongside the
 other unary operators, and `oracle` alongside the other binary
 operators: a node type added to the language but not here would sit
 outside this property exactly as `decode`/`encode` once did, silently.
+And, for string methods (#132) — `fold` and `trim` alongside the other
+unary operators, and `cleave` alongside the other binary operators.
+`cleave` sits on a precedence rung of its own between comparison and
+term (parser._CLEAVE_OPS), which renumbered render._LEVEL end to end;
+`(a cleave b) == c` and `a + b cleave c` are exactly the shapes that
+would go silently wrong if that rung's level were off by one.
 test_roundtrip has a test asserting this coverage actually occurs — a
 generator that stops producing the hard shapes would quietly gut the
 property.
@@ -76,6 +82,7 @@ _BINARY_OPS = [
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH,
     TokenType.ORACLE,
+    TokenType.CLEAVE,
 ]
 
 
@@ -178,7 +185,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             gen_expression(rng, depth - 1),
         )
     if roll < 0.50:
-        # Every unary operator — all six. Keeping this list complete is
+        # Every unary operator — all eight. Keeping this list complete is
         # what puts each keyword through the mixed-face round trip, which
         # nothing else covers: the hand-written render tests read one face
         # at a time. unplug over a binary is the shape that would render
@@ -195,6 +202,8 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
                     TokenType.DECODE,
                     TokenType.ENCODE,
                     TokenType.KEYMAKER,
+                    TokenType.FOLD,
+                    TokenType.TRIM,
                 ]
             ),
             gen_expression(rng, depth - 1),

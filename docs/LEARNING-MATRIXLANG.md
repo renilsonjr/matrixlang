@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has nineteen keywords, five types, and two ways of writing
+MatrixLang has twenty-two keywords, five types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -637,6 +637,62 @@ counts entries. `keymaker` is new — a prefix keyword like `length`, not
 a function call — and returns a dictionary's keys as a list, in that
 same insertion order.
 
+### `fold`, `trim` and `cleave`
+
+Three things you will want to do to a string.
+
+```
+construct name = "  Mouse  "
+trace trim name
+trace fold "MOUSE"
+trace "a,b,c" cleave ","
+```
+
+```
+Mouse
+mouse
+["a", "b", "c"]
+```
+
+`fold` lower-cases and `trim` takes the whitespace off both ends. Both are
+prefix keywords like `length`, so they bind tightly: `fold a + b` is
+`(fold a) + b`.
+
+`cleave` is infix, like `oracle`. It splits a string on a separator and
+gives back a list. It binds looser than `+` and tighter than `==`, which
+is what makes both of these read the way they look:
+
+```
+trace a + b cleave ","       # concatenate, THEN split
+trace s cleave "," == parts  # split, THEN compare the lists
+```
+
+Reaching for `length` on the result needs parentheses, the same way
+`length keymaker d` does — a prefix keyword binds tightest of all:
+
+```
+trace length (s cleave ",")
+```
+
+Three rules worth knowing:
+
+- All three take strings. `fold 1` is an error, not a `1`.
+- An empty separator is an error. `"abc" cleave ""` does not give you the
+  letters; there is no operation in MatrixLang that does.
+- Empty pieces are kept: `"a,,b" cleave ","` is `["a", "", "b"]`, and
+  `"" cleave ","` is a list holding one empty string, not an empty list.
+
+There is no upper-casing operator. To compare two strings ignoring case,
+`fold` both sides:
+
+```
+construct typed = "MOUSE"
+construct stored = "Mouse"
+redpill fold typed == fold stored
+  trace "match"
+flatline
+```
+
 ### `oracle` — is a key there?
 
 ```
@@ -1179,8 +1235,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Nineteen keywords, eleven operators, parentheses, a comma, two brackets,
-a pair of braces, a colon, ten digits, and the comment marker — 49 slots
+Twenty-two keywords, eleven operators, parentheses, a comma, two brackets,
+a pair of braces, a colon, ten digits, and the comment marker — 52 slots
 in all.
 
 | | | | | | | |
@@ -1190,7 +1246,7 @@ in all.
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
 | `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | `oracle` `ｵ` |
-| `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | | | |
+| `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | `fold` `ﾊ` | `trim` `ﾘ` | `cleave` `ﾛ` |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

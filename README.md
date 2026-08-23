@@ -54,7 +54,11 @@ xs[n] != target` never reads past the end of `xs` — **dictionaries** —
 `{"a": 1}` literals keyed by strings or integers, `d["a"]` to read and
 `d["a"] = v` to write or insert, `length` for the entry count, `keymaker`
 for the keys in insertion order, and the infix `oracle` to ask whether a
-key is there before reading it, since reading a missing one is an error —
+key is there before reading it, since reading a missing one is an error
+— **string methods** — `fold` lower-cases, `trim` removes whitespace from
+both ends, and the infix `cleave` splits on a separator, so `"a,b" cleave
+","` is `["a", "b"]`, which makes a case-insensitive comparison `fold a ==
+fold b` —
 and **Operator**, an assistive companion that writes MatrixLang from
 plain language, in the terminal or in a browser, and **Scribe**, a
 keyless, deterministic companion that does the same without a key, an
@@ -129,7 +133,7 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — nineteen keywords, five types, and both faces —
+teaches the whole language — twenty-two keywords, five types, and both faces —
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade

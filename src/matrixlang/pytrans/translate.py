@@ -48,6 +48,28 @@ _NAMED_CALL = {
     "int": TokenType.DECODE,
 }
 
+# Python string methods that have a MatrixLang operator. Kept separate
+# from _NAMED_CALL because these arrive as `receiver.method()` rather than
+# `name(argument)` -- MatrixLang has no attribute access at all, which is
+# why the translator has to special-case each one it can reach.
+_STRING_UNARY = {
+    "lower": TokenType.FOLD,
+    "strip": TokenType.TRIM,
+}
+
+# Shared between the value-position refusal (_call) and the
+# statement-position one (_expression_statement): `.upper()` is not
+# translatable either way, and the reason it isn't does not depend on
+# which position it sits in, so there is exactly one place to word it.
+_UPPER_REASON = (
+    "`.upper()` cannot be translated — MatrixLang has no upper-casing "
+    "operator"
+)
+_UPPER_IDIOM = (
+    "to compare ignoring case, use `.lower()` on both sides; to display "
+    "in capitals there is no MatrixLang form yet"
+)
+
 
 def translate(source: str) -> Translated | Refusals:
     """Translate Python to MatrixLang. Never raises."""
@@ -266,6 +288,30 @@ class _Translator:
     def _expression_statement(self, node: ast.Expr) -> list[Stmt]:
         call = node.value
         if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute):
+            attr = call.func.attr
+            if attr == "upper":
+                # Same refusal as the value position: `.upper()` is not
+                # translatable there either, and for the same reason --
+                # position doesn't change what's wrong with it.
+                raise _Unsupported(self._because(node, _UPPER_REASON, _UPPER_IDIOM))
+            if attr in _STRING_UNARY or attr == "split":
+                # This branch made `.lower()`, `.strip()` and `.split()`
+                # translatable as VALUES, so the blanket "MatrixLang has
+                # no `.{attr}()` method" below is now false for them --
+                # they have one, it just doesn't mutate. The mistake this
+                # catches is real: `name.strip()` on its own line reads,
+                # to someone coming from a mutating-method language, as
+                # "strip name in place". It doesn't in Python either.
+                noun = "list" if attr == "split" else "string"
+                raise _Unsupported(
+                    self._because(
+                        node,
+                        f"`.{attr}()` gives back a NEW {noun} and changes "
+                        "nothing",
+                        "MatrixLang is the same — put the result "
+                        f"somewhere: `s = s.{attr}(...)`",
+                    )
+                )
             if call.func.attr != "append" or len(call.args) != 1:
                 # Built via Refusal directly, not self._no(): the reason
                 # needs to name the method (`.sort()`), and self._no's
@@ -778,6 +824,80 @@ class _Translator:
                 )
             return Unary(_NAMED_CALL[node.func.id], self.expression(node.args[0]))
         if isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            if method in _STRING_UNARY:
+                if node.args:
+                    # `.strip()` with no arguments is `trim` exactly.
+                    # `.strip(chars)` is not an arity mismatch that a
+                    # future `trim` could grow past -- it strips a
+                    # character SET, where `trim` only ever strips
+                    # whitespace. `.lower()` never takes an argument in
+                    # real Python; reaching this branch for it means
+                    # something already nonsensical, so it keeps the
+                    # generic one-operand wording.
+                    if method == "strip":
+                        idiom = (
+                            "`trim` strips whitespace, not a character "
+                            "set -- `.strip(chars)` has no MatrixLang form"
+                        )
+                    else:
+                        idiom = (
+                            f"MatrixLang's "
+                            f"`{_STRING_UNARY[method].name.lower()}` is a "
+                            "one-operand operator"
+                        )
+                    raise _Unsupported(
+                        self._because(
+                            node,
+                            f"`.{method}()` can only be translated with no "
+                            "arguments",
+                            idiom,
+                        )
+                    )
+                return Unary(
+                    _STRING_UNARY[method], self.expression(node.func.value)
+                )
+            if method == "split":
+                if not node.args:
+                    # Bare `.split()` is NOT `.split(" ")`. Python splits
+                    # on RUNS of whitespace and discards empty strings, so
+                    # translating it to `cleave " "` would give a program
+                    # that runs and quietly means something else -- which
+                    # is exactly what the governing rule forbids.
+                    raise _Unsupported(
+                        self._because(
+                            node,
+                            "`.split()` can only be translated with exactly "
+                            "one separator",
+                            'bare `.split()` splits on runs of whitespace and '
+                            'drops empty pieces, which `cleave` does not do — '
+                            'name the separator: `.split(" ")`',
+                        )
+                    )
+                if len(node.args) > 1:
+                    # A distinct refusal from the zero-argument case above:
+                    # the reason there is a MISSING separator, the reason
+                    # here is a maxsplit that `cleave` has no way to honour
+                    # -- telling a reader who already named the separator
+                    # to "name the separator" would send them chasing a
+                    # mistake they didn't make.
+                    raise _Unsupported(
+                        self._because(
+                            node,
+                            "`.split()` with a limit cannot be translated "
+                            "— `cleave` always splits at every separator",
+                            "split the whole string and use the pieces "
+                            'you want: `parts = s.split(",")`, then '
+                            "`parts[0]`",
+                        )
+                    )
+                return Binary(
+                    self.expression(node.func.value),
+                    TokenType.CLEAVE,
+                    self.expression(node.args[0]),
+                )
+            if method == "upper":
+                raise _Unsupported(self._because(node, _UPPER_REASON, _UPPER_IDIOM))
             raise _Unsupported(
                 self._because(
                     node,

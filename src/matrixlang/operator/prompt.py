@@ -76,6 +76,13 @@ Rules that differ from most languages:
 - A string can be indexed too: `s[i]` reads a one-character string. It
   cannot be written — `s[i] = v` is an error, because a string can never
   change once made. Build a different one with `+` instead.
+- Three string operations. `fold s` lower-cases, `trim s` removes
+  whitespace from both ends, and the infix `s cleave sep` splits on a
+  separator and gives a list — `"a,b" cleave ","` is `["a", "b"]`. All
+  three take strings and nothing else. There is no upper-casing
+  operator: to compare two strings ignoring case, `fold` both sides. A
+  separator with nothing in it is an error, not a character-by-character
+  split.
 - A dictionary literal is `{"a": 1}`; keys must be strings or numbers.
   Reading a key that is not there is an error, so check first with
   `oracle`, which is infix and gives a boolean: `d oracle "a"`.

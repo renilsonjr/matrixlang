@@ -272,3 +272,33 @@ def test_an_fstring_interpolating_a_list_of_strings_translates_to_oracle():
     # before this branch; an f-string hole is just one more way to reach
     # that same pre-existing divergence.
     matrixlang_prints('print(f"{[\'a\']}")\n', '["a"]\n')
+
+
+def test_the_products_search_agrees():
+    # The program that put string methods first in the register. Prices
+    # are strings because MatrixLang has no decimals yet (register item 4,
+    # #135); everything else is the reader's own program, `.lower()`
+    # included.
+    source = (
+        "products = [\n"
+        '    {"code": "A1", "name": "Mouse", "price": "49"},\n'
+        '    {"code": "B2", "name": "Teclado", "price": "120"},\n'
+        "]\n"
+        "\n"
+        'term = input("Search: ")\n'
+        "found = 0\n"
+        "for product in products:\n"
+        '    if term.lower() == product["code"].lower() or '
+        'term.lower() == product["name"].lower():\n'
+        '        print(product["name"] + " costs " + product["price"])\n'
+        "        found = found + 1\n"
+        "if found == 0:\n"
+        '    print("Nothing found.")\n'
+    )
+    agree(source, ["mouse"])
+    agree(source, ["B2"])
+    agree(source, ["nothing at all"])
+
+
+def test_trim_and_cleave_agree():
+    agree('s = "  a,b,c  "\nfor part in s.strip().split(","):\n    print(part)\n')
