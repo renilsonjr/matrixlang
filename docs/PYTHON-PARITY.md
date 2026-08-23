@@ -27,11 +27,11 @@ order. If the two ever disagree, the catalogue is right.
 
 **Operators** — `+ - * /`, `== != < > <= >=`
 
-**Keywords (19)** — `construct` `trace` `redpill` `bluepill` `dejavu`
+**Keywords (22)** — `construct` `trace` `redpill` `bluepill` `dejavu`
 `flatline` `true` `false` `agent` `jackout` `length` `splice` `fork` `unplug`
-`jackin` `decode` `encode` `keymaker` `oracle`
+`jackin` `decode` `encode` `keymaker` `oracle` `fold` `trim` `cleave`
 
-**Glyph budget** — 49 slots used, 7 free.
+**Glyph budget** — 52 slots used, 4 free.
 
 ### One oddity worth knowing
 
@@ -49,18 +49,18 @@ Ordered by value per unit of design risk, not by how often each appears. Cheap
 additions with no design argument come before expensive ones that have a real
 decision buried inside them.
 
-### 1. String methods — #132 — *next*
+### 1. String methods — #132 — **done**
 
-MatrixLang has strings and **no way to change their case, trim them, or split
-them.** `.append()` is the only method the translator handles, and it is really
-list concatenation wearing method clothes.
+`fold` lower-cases, `trim` strips, and the infix `cleave` splits on a
+separator. The products search that motivated this item now translates and
+runs, and its output is checked against Python's in
+`tests/test_pytrans_differential.py`.
 
-Blocked so far: the products search (`.lower()` for case-insensitive matching).
+Still refused, each with an idiom: `.upper()` (no operator, and nothing has
+been blocked by it yet) and bare `.split()` (splitting on runs of
+whitespace is a different operation, not a default separator).
 
-Pure addition, no design tension. This is the gap most likely to surprise
-someone who assumes a language with strings can work with them.
-
-### 2. `break` and `continue` — #133
+### 2. `break` and `continue` — #133 — *next*
 
 There is no loop control at all. Every search loop must run to the end even
 after it has found what it wanted. The current refusal tells a reader to restructure
@@ -143,7 +143,7 @@ the pull request.
 
 Two constraints bind every one of them:
 
-- **The glyph budget is finite** — 7 slots left, hand-tracked in
+- **The glyph budget is finite** — 4 slots left, hand-tracked in
   `tests/test_glyphs.py` on purpose so that spending one is a decision somebody
   wrote down.
 - **D-03**: both textual faces must round-trip, `parse(lex(render_X(t))) == t`,

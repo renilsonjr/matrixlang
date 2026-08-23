@@ -90,7 +90,7 @@ anything about the language, which is the whole point of the split.
 | `nodes.py` | 195 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
 | `values.py` | 317 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 96 | The 49-slot bijective glyph table. 7 slots left of the block |
+| `glyphs.py` | 104 | The 52-slot bijective glyph table. 4 slots left of the block |
 | `lexer.py` | 271 | Source text → token list. Handles both faces |
 | `parser.py` | 546 | Tokens → AST. Recursive descent |
 | `interpreter.py` | 866 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
@@ -261,7 +261,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 49 slots is
+and a **per-seed randomly mixed** face where each of the 52 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -302,7 +302,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 49-entry table the renderer writes through, just
+The lexer reads the same 52-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.

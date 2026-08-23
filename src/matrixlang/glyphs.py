@@ -1,4 +1,4 @@
-"""The 49-slot glyph table — D-03's fixed bijective mapping.
+"""The 52-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
