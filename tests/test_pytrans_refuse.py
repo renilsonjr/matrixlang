@@ -193,10 +193,33 @@ def test_a_bare_split_is_refused_rather_than_guessed():
     assert refusal.idiom is not None
 
 
+def test_a_bare_split_keeps_the_whitespace_runs_idiom():
+    # Fails if the zero-argument and multi-argument branches were ever
+    # merged back into one message: the limit-specific idiom below names
+    # neither "whitespace" nor "runs".
+    result = translate("s = 'a b'\nprint(s.split())\n")
+    assert isinstance(result, Refusals)
+    (refusal,) = result.items
+    assert refusal.idiom is not None
+    assert "whitespace" in refusal.idiom
+    assert "runs" in refusal.idiom
+
+
 def test_split_with_two_arguments_is_refused():
+    # `.split(",", 1)` names its separator -- a reader who wrote this
+    # already did the thing the zero-argument message tells them to do.
+    # The real reason is the maxsplit, which `cleave` has no way to
+    # honour; this must fail if that branch collapsed back into the
+    # zero-argument one, which never mentions a limit or `cleave` at all.
     result = translate("s = 'a,b,c'\nprint(s.split(',', 1))\n")
     assert isinstance(result, Refusals)
-    assert "split" in result.items[0].reason
+    refusal = result.items[0]
+    assert "split" in refusal.reason
+    assert "limit" in refusal.reason
+    assert "cleave" in refusal.reason
+    assert refusal.idiom is not None
+    assert "whitespace" not in refusal.idiom
+    assert "parts[0]" in refusal.idiom
 
 
 def test_strip_with_an_argument_is_refused():
@@ -205,6 +228,55 @@ def test_strip_with_an_argument_is_refused():
     result = translate("s = 'xax'\nprint(s.strip('x'))\n")
     assert isinstance(result, Refusals)
     assert "strip" in result.items[0].reason
+
+
+def test_lower_as_a_bare_statement_is_refused_with_the_new_reason():
+    # `name.lower()` on its own line is a classic beginner slip -- thinking
+    # the method mutates. This branch made `.lower()` translatable, so the
+    # OLD blanket "MatrixLang has no `.lower()` method" is now false; it
+    # must say the real thing instead: the call produces a new value that
+    # this line throws away.
+    result = translate("s = 'A'\ns.lower()\n")
+    assert isinstance(result, Refusals)
+    refusal = result.items[0]
+    assert "no `.lower()` method" not in refusal.reason
+    assert "NEW string" in refusal.reason
+    assert refusal.idiom is not None
+    assert "s = s.lower(...)" in refusal.idiom
+
+
+def test_strip_as_a_bare_statement_is_refused_with_the_new_reason():
+    result = translate("s = ' a '\ns.strip()\n")
+    assert isinstance(result, Refusals)
+    refusal = result.items[0]
+    assert "no `.strip()` method" not in refusal.reason
+    assert "NEW string" in refusal.reason
+    assert refusal.idiom is not None
+    assert "s = s.strip(...)" in refusal.idiom
+
+
+def test_upper_as_a_bare_statement_gets_the_upper_casing_refusal():
+    # Not the list-method blanket message ("the only list method it can
+    # translate is `.append()`") -- `.upper()` gets the same refusal here
+    # as it does in value position, because there is still no MatrixLang
+    # upper-casing operator regardless of where the call sits.
+    result = translate("s = 'a'\ns.upper()\n")
+    assert isinstance(result, Refusals)
+    refusal = result.items[0]
+    assert "no upper-casing operator" in refusal.reason
+    assert refusal.idiom is not None
+    assert "lower" in refusal.idiom
+    assert "append" not in refusal.idiom
+
+
+def test_sort_as_a_bare_statement_still_gets_the_old_blanket_message():
+    # The control: a method this branch did NOT touch must still hit the
+    # unchanged blanket refusal.
+    result = translate("xs = [2, 1]\nxs.sort()\n")
+    assert isinstance(result, Refusals)
+    refusal = result.items[0]
+    assert refusal.reason == "MatrixLang has no `.sort()` method"
+    assert refusal.idiom == "the only list method it can translate is `.append()`"
 
 
 def test_an_untranslatable_method_still_refuses_as_before():

@@ -25,6 +25,12 @@ binary expression still exercises precedence), `keymaker` alongside the
 other unary operators, and `oracle` alongside the other binary
 operators: a node type added to the language but not here would sit
 outside this property exactly as `decode`/`encode` once did, silently.
+And, for string methods (#132) — `fold` and `trim` alongside the other
+unary operators, and `cleave` alongside the other binary operators.
+`cleave` sits on a precedence rung of its own between comparison and
+term (parser._CLEAVE_OPS), which renumbered render._LEVEL end to end;
+`(a cleave b) == c` and `a + b cleave c` are exactly the shapes that
+would go silently wrong if that rung's level were off by one.
 test_roundtrip has a test asserting this coverage actually occurs — a
 generator that stops producing the hard shapes would quietly gut the
 property.

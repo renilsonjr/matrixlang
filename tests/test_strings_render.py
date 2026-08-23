@@ -97,6 +97,37 @@ def test_fold_over_a_star_gets_parens():
     assert ascii_face(source) == source
 
 
+def test_a_unary_callee_keeps_its_parens():
+    # treegen never builds a unary callee -- nothing in the grammar's
+    # generator produces `Call(Unary(...), ...)` -- so this shape gets no
+    # property-test pressure at all. It still has to render right: a call
+    # binds tighter than a word unary, so an unparenthesised `fold f()`
+    # would re-parse as `fold (f())` rather than `(fold f)()`, silently
+    # trading which value gets folded for which value gets called.
+    # _ATOM_LEVEL = _CALL_LEVEL = 9 (instead of 10) makes this fail while
+    # every one of the other 1873 tests stays green.
+    from matrixlang.nodes import Call, Name, Program, Trace, Unary
+    from matrixlang.tokens import TokenType
+
+    tree = Program([Trace(Call(Unary(TokenType.FOLD, Name("f")), []))])
+    assert render_ascii(tree) == "trace (fold f)()\n"
+
+
+def test_a_unary_index_target_keeps_its_parens():
+    # The index analogue of the call case above -- treegen never builds a
+    # unary index target either, and Index shares _CALL_LEVEL with Call
+    # for exactly this reason (see render.py). Without the parens,
+    # `fold f[0]` would re-parse as `fold (f[0])` rather than
+    # `(fold f)[0]`.
+    from matrixlang.nodes import Index, Name, NumberLiteral, Program, Trace, Unary
+    from matrixlang.tokens import TokenType
+
+    tree = Program(
+        [Trace(Index(Unary(TokenType.FOLD, Name("f")), NumberLiteral(0)))]
+    )
+    assert render_ascii(tree) == "trace (fold f)[0]\n"
+
+
 def test_the_tree_view_names_all_three():
     from matrixlang.treeview import format_tree
 

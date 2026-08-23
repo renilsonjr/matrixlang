@@ -525,7 +525,13 @@ def test_the_generator_produces_the_string_method_shapes_too():
                         and _LEVEL.get(side.op, 0) > cleave_level
                     ):
                         counts["over_term"] += 1
-            elif level is not None and level < cleave_level:
+            elif level is not None and 4 <= level < cleave_level:
+                # Only equality and comparison (_LEVEL 4 and 5) count here.
+                # `fork`/`splice` sit below cleave too (_LEVEL 1 and 2),
+                # but a `(a cleave b) fork c` shape only proves
+                # `CLEAVE > FORK`, not the delicate boundary this rung
+                # exists for -- the assertion below is worded for
+                # comparison, so the count must be too.
                 for side in (expr.left, expr.right):
                     if isinstance(side, Binary) and side.op is TokenType.CLEAVE:
                         counts["under_cmp"] += 1
@@ -563,7 +569,6 @@ def test_the_generator_produces_the_string_method_shapes_too():
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    print("string-method corpus:", counts)
     assert counts["cleave"], "no `cleave` in 300 seeds — the property proves nothing about it"
     assert counts["fold"], "no `fold` in 300 seeds"
     assert counts["trim"], "no `trim` in 300 seeds"

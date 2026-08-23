@@ -53,9 +53,12 @@ GLYPHS: dict[str, str] = {
     "oracle": "ｵ",
     # String methods. `trim` takes ﾘ, the "ri" of its own katakana
     # spelling ﾄﾘﾑ -- ﾄ and ﾑ were long gone, so the middle sound is what
-    # was left. `fold` and `cleave` take ﾊ and ﾛ arbitrarily: every sound
-    # in ﾌｫｰﾙﾄﾞ and ｸﾘｰﾌﾞ was already spent, which is what a 56-slot block
-    # looks like by its 52nd entry.
+    # was left. `fold` and `cleave` take ﾊ and ﾛ arbitrarily: almost every
+    # sound in ﾌｫｰﾙﾄﾞ and ｸﾘｰﾌﾞ was already spent by this point in the
+    # table. The one that wasn't -- ｰ, the prolonged-sound mark shared by
+    # both spellings -- was passed over on purpose: it reads as
+    # punctuation stretching the syllable before it, not as a word of its
+    # own, which is what every other mnemonic assignment here rests on.
     "fold": "ﾊ",
     "trim": "ﾘ",
     "cleave": "ﾛ",

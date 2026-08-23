@@ -86,16 +86,16 @@ anything about the language, which is the whole point of the split.
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 103 | Token vocabulary. Pure data |
+| `tokens.py` | 109 | Token vocabulary. Pure data |
 | `nodes.py` | 195 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
 | `values.py` | 317 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
 | `glyphs.py` | 104 | The 52-slot bijective glyph table. 4 slots left of the block |
 | `lexer.py` | 271 | Source text → token list. Handles both faces |
-| `parser.py` | 546 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 866 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 338 | AST → source text, in either face |
-| `treeview.py` | 173 | AST → indented text, for teaching |
+| `parser.py` | 561 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 928 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 347 | AST → source text, in either face |
+| `treeview.py` | 176 | AST → indented text, for teaching |
 | `repl.py` | 138 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
 | `input.py` | 124 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |

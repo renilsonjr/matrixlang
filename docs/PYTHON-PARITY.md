@@ -23,7 +23,9 @@ order. If the two ever disagree, the catalogue is right.
 
 ## What MatrixLang has today
 
-**Types (6)** — integer, string, boolean, list, dictionary, agent
+**Types (5)** — integer, string, boolean, list, dictionary — plus agents
+(functions) with closures, which the rest of this repo counts separately
+from the value types
 
 **Operators** — `+ - * /`, `== != < > <= >=`
 
@@ -52,9 +54,11 @@ decision buried inside them.
 ### 1. String methods — #132 — **done**
 
 `fold` lower-cases, `trim` strips, and the infix `cleave` splits on a
-separator. The products search that motivated this item now translates and
-runs, and its output is checked against Python's in
-`tests/test_pytrans_differential.py`.
+separator. The case-insensitive matching that motivated this item is
+solved — `.lower()` now translates. A version of the products search with
+string prices translates, runs, and is checked against Python's in
+`tests/test_pytrans_differential.py`; the literal program, with decimal
+prices, still refuses on its second line — that half is still item 4.
 
 Still refused, each with an idiom: `.upper()` (no operator, and nothing has
 been blocked by it yet) and bare `.split()` (splitting on runs of
