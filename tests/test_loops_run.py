@@ -126,6 +126,26 @@ def test_an_error_outside_a_loop_carries_its_position():
     assert error.line == 2
 
 
+def test_the_position_is_the_keywords_not_an_enclosing_statements():
+    # Catches `run`'s except _LoopSignal reporting statement.line/column
+    # (the outer, top-level `redpill`, line 2) instead of signal.line/
+    # signal.column (the `wake` itself, line 4). A bare top-level `wake`
+    # can't distinguish the two, since its own position and the
+    # enclosing statement's position coincide -- this fixture nests the
+    # keyword two `redpill`s deep so they don't.
+    source = (
+        "trace 0\n"
+        "redpill true\n"
+        "  redpill true\n"
+        "    wake\n"
+        "  flatline\n"
+        "flatline\n"
+    )
+    error = fails(source)
+    assert error.line == 4
+    assert error.column == 5
+
+
 def test_wake_inside_an_agent_does_not_reach_the_callers_loop():
     # THE case. An agent called from inside a loop must not be able to
     # break that loop -- the agent's body is not inside a loop, so the
@@ -142,6 +162,11 @@ def test_wake_inside_an_agent_does_not_reach_the_callers_loop():
     )
     error = fails(source)
     assert error.message == "'wake' outside a loop"
+    # Catches `_call`'s except _LoopSignal reporting expr.line/expr.column
+    # (the call site, line 6) instead of signal.line/signal.column (the
+    # `wake` itself, line 2). The brief is explicit that the position
+    # must come from the signal, not the call site.
+    assert error.line == 2
 
 
 def test_glitch_inside_an_agent_does_not_reach_the_callers_loop():
