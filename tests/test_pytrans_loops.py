@@ -179,3 +179,54 @@ def test_a_loop_variable_that_is_already_a_name_is_refused():
     assert "`x` is already a name" in refusal.reason
     assert refusal.line == 3
     assert "different one" in refusal.idiom
+
+
+def test_break_becomes_wake():
+    source = "for x in xs:\n    if x == 1:\n        break\n"
+    assert "wake" in ml(source)
+
+
+def test_continue_becomes_glitch():
+    source = "for x in xs:\n    if x == 1:\n        continue\n"
+    assert "glitch" in ml(source)
+
+
+def test_a_glitch_in_a_for_gets_the_increment_before_it():
+    # The whole point. A `glitch` jumps to the condition, so without the
+    # increment the counter never advances and a correct Python loop
+    # translates into one that spins until the step limit.
+    source = "for x in xs:\n    if x == 1:\n        continue\n    print(x)\n"
+    out = ml(source)
+    glitch_line = [i for i, line in enumerate(out.splitlines()) if "glitch" in line][0]
+    assert "n = n + 1" in out.splitlines()[glitch_line - 1]
+
+
+def test_a_wake_in_a_for_gets_no_increment():
+    # `wake` leaves the loop, so a skipped increment is exactly right.
+    source = "for x in xs:\n    if x == 1:\n        break\n    print(x)\n"
+    out = ml(source)
+    wake_line = [i for i, line in enumerate(out.splitlines()) if "wake" in line][0]
+    assert "n = n + 1" not in out.splitlines()[wake_line - 1]
+
+
+def test_a_glitch_in_a_plain_while_gets_no_increment():
+    # A Python `while` has no counter to advance.
+    source = "n = 0\nwhile n < 3:\n    n = n + 1\n    continue\n"
+    out = ml(source)
+    glitch_line = [i for i, line in enumerate(out.splitlines()) if "glitch" in line][0]
+    before = out.splitlines()[glitch_line - 1]
+    assert before.strip() == "n = n + 1"  # the reader's own line, not an inserted one
+
+
+def test_a_loop_with_no_glitch_is_unchanged():
+    # Loops without loop control must keep byte-for-byte the output the
+    # translator produced before this change, because the playground
+    # shows this code to the reader.
+    source = "for x in xs:\n    print(x)\n"
+    assert ml(source) == (
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  trace xs[n]\n"
+        "  n = n + 1\n"
+        "flatline\n"
+    )

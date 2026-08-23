@@ -13,8 +13,9 @@ import ast
 from matrixlang.errors import TooDeepError, recursion_guard
 from matrixlang.nodes import (
     Assign, Binary, BoolLiteral, Call, Declare, DictLiteral, Expr, ExprStmt,
-    FunctionDef, If, Index, IndexAssign, JackIn, ListLiteral, Name,
-    NumberLiteral, Program, Return, Stmt, StringLiteral, Trace, Unary, While,
+    FunctionDef, Glitch, If, Index, IndexAssign, JackIn, ListLiteral, Name,
+    NumberLiteral, Program, Return, Stmt, StringLiteral, Trace, Unary, Wake,
+    While,
 )
 from matrixlang.render import render_ascii
 from matrixlang.tokens import TokenType
@@ -271,6 +272,10 @@ class _Translator:
             return self._function(node)
         if isinstance(node, ast.Return):
             return [Return(self.expression(node.value) if node.value else None)]
+        if isinstance(node, ast.Break):
+            return [Wake()]
+        if isinstance(node, ast.Continue):
+            return [Glitch()]
         # An unsupported STATEMENT reports itself, never something nested
         # inside it. `class`, `try`, `raise` and `import` refuse whatever
         # they contain, so letting a `class` body's comprehension steal the
@@ -581,6 +586,7 @@ class _Translator:
         before.extend(hoisted)
 
         del self.substitutions[node.target.id]
+        body = _increment_before_glitches(body, counter)
         body.append(
             Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(1)))
         )
@@ -1039,6 +1045,50 @@ def _as_assignment(statement: Stmt) -> Stmt:
     return statement
 
 
+def _increment_before_glitches(body: list[Stmt], counter: str) -> list[Stmt]:
+    """Put the loop counter's increment before every `glitch` in `body`.
+
+    A `glitch` jumps to the loop's condition, so it skips the increment
+    the desugaring appends at the END of the body -- and a correct Python
+    loop becomes one that spins until the step limit.
+
+    Walks the ALREADY-TRANSLATED statements rather than the Python ast,
+    which is what makes the boundary rule fall out for free:
+
+      - A nested Python loop is already a While node here, so its own
+        `glitch` sits behind the stop and keeps the increment its own
+        translation inserted.
+      - A Python `while` has no counter, and stopping at While gives that
+        too.
+      - A nested `for` in a `for` gets the INNER counter incremented by
+        the inner translation, and this walk leaves it alone.
+
+    `wake` needs nothing: it leaves the loop, so a skipped increment is
+    exactly right.
+    """
+    out: list[Stmt] = []
+    for statement in body:
+        if isinstance(statement, Glitch):
+            out.append(
+                Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(1)))
+            )
+            out.append(statement)
+        elif isinstance(statement, If):
+            statement.then_body = _increment_before_glitches(
+                statement.then_body, counter
+            )
+            if statement.else_body is not None:
+                statement.else_body = _increment_before_glitches(
+                    statement.else_body, counter
+                )
+            out.append(statement)
+        else:
+            # While and FunctionDef fall here deliberately -- a `glitch`
+            # inside either belongs to that loop, not this one.
+            out.append(statement)
+    return out
+
+
 def _hoist_declares(
     body: list[Stmt], placeholders: dict[int, Declare]
 ) -> tuple[list[Stmt], list[Declare]]:
@@ -1191,8 +1241,6 @@ _DESCRIBE = {
     "Nonlocal": "`nonlocal`",
     "With": "`with`",
     "Assert": "`assert`",
-    "Break": "`break`",
-    "Continue": "`continue`",
     "Pass": "`pass`",
     "Match": "`match`",
     "AnnAssign": "a type annotation",
@@ -1245,17 +1293,6 @@ _IDIOM = {
         "MatrixLang's `/` truncates toward zero and `//` floors, so they part "
         "company on negatives (`-7 // 2` is -4, `-7 / 2` here is -3). Write the "
         "division in MatrixLang directly once you know the signs"
-    ),
-    # `break` and `continue` are what a Python reader hits hardest in a
-    # loop-heavy subset, so both name the shape that replaces them rather
-    # than only saying no.
-    "Break": (
-        "a `dejavu` leaves only by its own condition — keep a name the "
-        "condition tests, and set it when you want to stop"
-    ),
-    "Continue": (
-        "wrap the rest of the loop body in a `redpill` for the case you "
-        "wanted to skip"
     ),
     "Pass": "MatrixLang needs no filler statement; leave the body empty",
     "Delete": "MatrixLang has no `del`; a name lives as long as its scope",
