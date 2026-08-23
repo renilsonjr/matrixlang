@@ -36,19 +36,26 @@ generator that stops producing the hard shapes would quietly gut the
 property.
 
 And, for loop control — `wake` and `glitch` (STMT-2), the two node
-types with no operand at all: the whole statement is the keyword, which
-makes them the shape most likely to lose the render's indentation
-silently, since there is no child expression whose own render would
-carry the pad along. Both sit in `gen_statement`'s BASE kind list
-(alongside `declare`/`assign`/... , not gated on `depth > 0`), which is
-what gets them generated as children of `While`/`If`/agent bodies
-rather than only at a program's top level — a `wake` at the top level
-round-trips trivially and proves nothing about render nesting; one
-inside a `dejavu` body is the shape that matters. A node type outside
-this file is invisible to parse(render(t)) == t exactly as
-`decode`/`encode` once were, silently — that is what makes this file
-the third one (after render.py and treeview.py) a new statement kind
-must touch.
+types with no operand at all: the whole statement is the keyword. Both
+sit in `gen_statement`'s BASE kind list (alongside
+`declare`/`assign`/... , not gated on `depth > 0`), which is what gets
+them generated as children of `While`/`If`/agent bodies rather than
+only at a program's top level — a `wake` at the top level round-trips
+trivially, and a nested one proves the node SURVIVES being a child
+rather than a top-level statement (parses back to the same tree either
+way). It proves nothing about indentation: `lexer.py` has no INDENT
+concept, so render's leading whitespace is cosmetic and
+`parse(render(t)) == t` holds whether or not a nested `wake`/`glitch`
+is indented at all — deleting `pad +` from both of render.py's
+branches for these two node types leaves every seed in this file
+passing. Indentation for these two is guarded only by
+`tests/test_loops_render.py`'s `test_they_render_inside_a_loop_body`
+and `test_they_render_indented_inside_a_loop_in_the_glyph_face`;
+deleting either as "redundant with the property" would remove the only
+coverage of it. A node type outside this file is invisible to
+parse(render(t)) == t exactly as `decode`/`encode` once were, silently
+— that is what makes this file the third one (after render.py and
+treeview.py) a new statement kind must touch.
 """
 
 import random
@@ -123,8 +130,14 @@ def gen_statement(rng: random.Random, depth: int) -> Stmt:
         "declare", "assign", "trace", "return", "exprstmt", "indexassign",
         # Loop control. In the BASE list, not gated on depth: these are
         # leaves, and putting them here is what gets them nested inside
-        # While, If and agent bodies -- which is the shape that exercises
-        # the render's indentation for an operand-less statement.
+        # While, If and agent bodies -- which proves the node SURVIVES
+        # being a child rather than a top-level statement. It does NOT
+        # exercise the render's indentation: lexer.py has no INDENT
+        # concept, so parse(render(t)) == t holds whether or not a
+        # nested wake/glitch is indented -- deleting `pad +` from both
+        # render.py branches for these two leaves this property green.
+        # Indentation is guarded only by tests/test_loops_render.py's
+        # two hand-written nested-render tests.
         "wake", "glitch",
     ]
     if depth > 0:

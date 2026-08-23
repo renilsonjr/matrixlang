@@ -354,6 +354,34 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     # (test_round_trip) and Step 5's corpus counts stay pinned at the
     # canonical 300 seeds; this is a coverage meta-test sampling the same
     # generator, not that property.
+    #
+    # Updated again when `wake`/`glitch` joined treegen's STATEMENT base
+    # kinds list (6 options -> 8): that reshuffles the RNG draw sequence
+    # for every statement generated after the first one in a tree, which
+    # hits `(unplug a) == b` far harder than the unary-list change above
+    # did -- it fell from 5 hits in 1000 seeds to 1, and its first
+    # occurrence MOVED EARLIER, seed 694 -> seed 145. That second number
+    # is the one that matters here: the assertion is no longer surviving
+    # because the range is wide enough to reach a late occurrence: on
+    # this measurement, its only occurrence in 1000 seeds is an early
+    # one, and there is no second hit anywhere in the rest of the range.
+    # Widening the seed pool further would not have bought the earlier
+    # fix and is not expected to buy anything now -- a generator change
+    # that shifts the RNG stream can just as easily move the sole hit
+    # past whatever range is chosen, or erase it, and range alone cannot
+    # tell the two apart. If this assertion goes red, look at what
+    # changed in treegen's RNG draw sequence before reaching for a wider
+    # range.
+    #
+    # This is honestly a fall in real generation probability, not a
+    # reshuffling artifact that washes out over more seeds: `unplug` and
+    # `unplug_under_eq` both draw from spaces that the two new STATEMENT
+    # kinds do not touch directly, but every RNG call downstream of the
+    # first added kind shifts, which is why this shape in particular
+    # nearly disappeared while, e.g., `unplug_over_binary` (22 -> 24)
+    # did not fall at all -- the exact same reshuffle helps some shapes
+    # and hurts others, and there is no way to predict which from the
+    # kind list alone.
     for seed in range(1000):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
@@ -588,10 +616,21 @@ def test_the_generator_produces_the_string_method_shapes_too():
 def test_the_generator_produces_the_loop_control_shapes_too():
     # Two new STATEMENT node types, and the property only covers shapes
     # treegen produces. A `wake` at a program's top level would round
-    # trip trivially; the shape that matters is one INSIDE a loop body,
-    # because that is where the render's indentation for an
-    # operand-less statement is exercised. So both are counted, and
-    # counted separately for the nested case.
+    # trip trivially; a nested one proves the node SURVIVES being a
+    # child of a While body rather than only a top-level statement --
+    # that it round-trips there too, not just in isolation. So both are
+    # counted, and counted separately for the nested case.
+    #
+    # This does NOT exercise the render's indentation. lexer.py has no
+    # INDENT concept, so parse(render(t)) == t holds whether or not a
+    # nested wake/glitch is rendered with its leading pad at all --
+    # deleting `pad +` from both of render.py's branches for these two
+    # node types leaves this whole file, including this test, green.
+    # Indentation is guarded only by tests/test_loops_render.py's
+    # test_they_render_inside_a_loop_body and
+    # test_they_render_indented_inside_a_loop_in_the_glyph_face; deleting
+    # either as "redundant with the property" would remove the only
+    # coverage of it.
     from matrixlang.nodes import Glitch, IndexAssign, Wake
 
     counts = {"wake": 0, "glitch": 0, "in_loop": 0}
