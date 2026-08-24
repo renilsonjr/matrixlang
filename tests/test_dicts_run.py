@@ -102,9 +102,15 @@ def test_keymaker_of_a_non_dictionary_is_an_error():
     assert "'keymaker' takes a dictionary, got list" in error.message
 
 
-def test_oracle_on_a_non_dictionary_is_an_error():
-    error = fails('trace [1, 2] oracle "a"\n')
-    assert "'oracle' takes a dictionary, got list" in error.message
+def test_oracle_on_a_non_container_is_an_error():
+    # Was `[1, 2] oracle "a"`, back when a list was the example of "not a
+    # dictionary". Issue #134 made a list a perfectly good left operand,
+    # so the example moved to something that genuinely holds nothing.
+    error = fails('trace 1 oracle "a"\n')
+    assert (
+        "'oracle' takes a dictionary, a list or a string, got integer"
+        in error.message
+    )
 
 
 def test_tracing_a_cyclic_dictionary_does_not_call_it_a_list():

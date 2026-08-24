@@ -822,22 +822,66 @@ class Interpreter:
         if node.op in _EQUALITY_OPS or node.op in _ORDERING_OPS:
             return self._comparison(node, left, right)
         if node.op is TokenType.ORACLE:
-            if not is_dict(left):
-                raise RuntimeErrorML(
-                    f"'oracle' takes a dictionary, got {type_name(left)}",
-                    node.line,
-                    node.column,
-                )
-            try:
-                check_key(right)
-            except BadKey as bad:
-                raise RuntimeErrorML(
-                    f"a dictionary key must be a string or a number, "
-                    f"got {bad.name}",
-                    node.line,
-                    node.column,
-                ) from None
-            return right in left
+            # One question -- does this hold that? -- asked of the three
+            # things that can hold anything. The dictionary arm is
+            # unchanged; the other two are what issue #134 added.
+            if is_dict(left):
+                try:
+                    check_key(right)
+                except BadKey as bad:
+                    raise RuntimeErrorML(
+                        f"a dictionary key must be a string or a number, "
+                        f"got {bad.name}",
+                        node.line,
+                        node.column,
+                    ) from None
+                return right in left
+            if is_list(left):
+                for element in left:
+                    try:
+                        if equal(element, right):
+                            return True
+                    except Incomparable:
+                        # Skipped, not raised, and this is THE decision of
+                        # the design. `["a"] oracle 1` asks whether the
+                        # list contains the integer 1 -- which has a
+                        # truthful answer, no -- while `1 == "a"` asks
+                        # something with no answer at all, and rightly
+                        # raises. Membership is not equality.
+                        #
+                        # This is the one place in the language where a
+                        # type mismatch declines to raise where `==`
+                        # would. The alternative, raising on the first
+                        # incomparable element, would make the answer
+                        # depend on element ORDER: `["a", 1] oracle 1`
+                        # would error while `[1, "a"] oracle 1` would be
+                        # true. Same list, reordered, deciding whether
+                        # the program runs.
+                        continue
+                return False
+            if is_str(left):
+                if not is_str(right):
+                    raise RuntimeErrorML(
+                        f"'oracle' on a string looks for a string, got "
+                        f"{type_name(right)}",
+                        node.line,
+                        node.column,
+                    )
+                # A SUBSTRING test, matching Python -- so
+                # `"matrix" oracle "rix"` is true even though "rix" is not
+                # one of its characters. Everywhere else in the language a
+                # string is a sequence of characters (`length` counts
+                # them, `[i]` reads one), and this operator is the
+                # exception. It is bought deliberately: substring is what
+                # `if "@" in email:` means, and the translator cannot tell
+                # a string from a list to warn anyone if the two differed.
+                return right in left
+            raise RuntimeErrorML(
+                f"'oracle' takes a dictionary, a list or a string, got "
+                f"{type_name(left)}",
+                node.line,
+                node.column,
+            )
         if node.op is TokenType.CLEAVE:
             if not is_str(left):
                 raise RuntimeErrorML(
