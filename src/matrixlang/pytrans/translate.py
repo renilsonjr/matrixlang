@@ -773,8 +773,12 @@ class _Translator:
             )
         op, right = node.ops[0], node.comparators[0]
         if isinstance(op, ast.In):
-            # Only a dictionary. `in` over a list or a string has no
-            # MatrixLang form -- oracle asks a dictionary for a key.
+            # Unconditional: `k in d`, `2 in xs` and `"a" in s` are the same
+            # syntax, and telling them apart would be the type inference
+            # the governing rule forbids. That was once an unavoidable
+            # narrowing; now it is simply correct, because `oracle`
+            # answers the question for a dictionary, a list and a string
+            # alike.
             return Binary(
                 self.expression(right), TokenType.ORACLE, self.expression(node.left)
             )
@@ -1272,9 +1276,10 @@ _DESCRIBE = {
     # No "In" entry, deliberately. _compare handles ast.In before it ever
     # reaches the _COMPARE lookup that would refuse it: `in` always becomes
     # `oracle`, because nothing at translation time distinguishes a
-    # dictionary from a list, and over a list `oracle` fails loudly with a
-    # position. "NotIn" stays -- that one genuinely does refuse, since
-    # MatrixLang has no negated form of `oracle`.
+    # dictionary from a list from a string, and `oracle` now answers the
+    # membership question correctly for all three. "NotIn" stays -- that
+    # one genuinely does refuse, since MatrixLang has no negated form of
+    # `oracle`.
     "NotIn": "`not in`",
     # Not in the brief's list: the ast.Compare node itself is the culprit
     # when a comparison chains more than one operator (`a < b < c`), and

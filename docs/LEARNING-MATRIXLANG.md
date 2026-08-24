@@ -737,7 +737,7 @@ redpill fold typed == fold stored
 flatline
 ```
 
-### `oracle` — is a key there?
+### `oracle` — is it in there?
 
 ```
 construct aluno = {"id": 1, "grade": "B"}
@@ -766,6 +766,31 @@ flatline
 ```
 no turma yet
 ```
+
+`oracle` is not only for dictionaries. It asks any container the same
+question — *do you hold this?*
+
+```
+trace ["neo", "trinity"] oracle "neo"
+trace "matrix" oracle "rix"
+trace {"a": 1} oracle "a"
+```
+
+```
+true
+true
+true
+```
+
+A list is asked about its elements, a dictionary about its keys, and a
+string about the text inside it — so `"matrix" oracle "rix"` is true even
+though `"rix"` is not one of its characters.
+
+One rule worth knowing: an element a list cannot compare is simply not a
+match. `["a"] oracle 1` is `false`, not an error, even though `"a" == 1`
+*is* an error. Asking whether a list contains the number 1 has a truthful
+answer — it does not, it holds a string — while asking whether a string
+equals a number does not.
 
 ---
 
@@ -889,16 +914,18 @@ flatline
 
 Run it: `has items`.
 
-### Two things that translate, then fail loudly
+### `in` becomes `oracle`, and the one case that still fails loudly
 
-The translator refuses where a difference would be silent. Where
-MatrixLang will *say* what went wrong, with a line and a column you can
-act on, it translates and lets the language answer. Two cases in this
-subset land on that side of the line, and both are worth knowing before
-they surprise you.
+The translator refuses where a difference would be silent (above). Where
+it instead translates and lets MatrixLang answer, that answer can still
+arrive as a runtime error — MatrixLang will *say* what went wrong, with a
+line and a column you can act on. One case in this subset lands on that
+side of the line. A second used to as well, and no longer does; both are
+worth knowing.
 
-**`in` always becomes `oracle`.** MatrixLang's `oracle` asks a
-*dictionary* for a key (§8), and nothing else:
+**`in` always becomes `oracle`.** MatrixLang's `oracle` asks any
+container whether it holds something (§8) — which is why the translator
+can map `in` onto it without knowing which container it has:
 
 ```python
 print(translate('d = {"a": 1}\nprint("a" in d)\n').source)
@@ -924,15 +951,14 @@ construct xs = [1, 2]
 trace xs oracle 2
 ```
 
-Run *that* and you get an error, not a wrong answer:
-
-```
-matrixlang: [line 2, column 10] 'oracle' takes a dictionary, got list
-```
-
-To ask whether a list holds a value, walk it with a `dejavu` loop and a
-name you set when you find it. (`not in` has no MatrixLang form at all,
-so it is refused outright, and the refusal names `unplug (d oracle key)`.)
+Run *that* and, today, you get `true` — the same answer Python gives.
+That was not always so: before `oracle` learned to ask a list for an
+element, this translation looked fine and died on `Run` with `'oracle'
+takes a dictionary, got list`. Nothing about the translator changed to
+fix that; `oracle` itself was widened, so every program this rule had
+already produced started working. (`not in` still has no MatrixLang
+form, so it is refused outright, and the refusal names
+`unplug (xs oracle x)`.)
 
 **`for k in d:` walks a dictionary by index, not by key.** Rule 1 below
 turns a `for` into a counter and `length`, which is exactly right for a

@@ -85,9 +85,13 @@ Rules that differ from most languages:
   split.
 - A dictionary literal is `{"a": 1}`; keys must be strings or numbers.
   Reading a key that is not there is an error, so check first with
-  `oracle`, which is infix and gives a boolean: `d oracle "a"`.
-  `keymaker` takes a dictionary and gives the list of its keys, in
-  insertion order.
+  `oracle`. `keymaker` takes a dictionary and gives the list of its keys,
+  in insertion order.
+- `oracle` is infix and gives a boolean: it asks whether a container holds
+  something. `d oracle "a"` asks a dictionary for a key, `xs oracle 3` asks
+  a list whether it holds that element, and `s oracle "ab"` asks a string
+  whether that text appears in it. An element a list cannot compare is
+  simply not a match, so `["a"] oracle 1` is false rather than an error.
 - `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
   and never any other type.
 - `+` adds integers, joins strings, or concatenates lists — never a mix

@@ -53,8 +53,9 @@ lists, cannot be written to — **logical operators** — `splice` (and),
 xs[n] != target` never reads past the end of `xs` — **dictionaries** —
 `{"a": 1}` literals keyed by strings or integers, `d["a"]` to read and
 `d["a"] = v` to write or insert, `length` for the entry count, `keymaker`
-for the keys in insertion order, and the infix `oracle` to ask whether a
-key is there before reading it, since reading a missing one is an error
+for the keys in insertion order, and the infix `oracle` to ask any
+container whether it holds something — a dictionary for a key, a list for
+an element, a string for text inside it
 — **string methods** — `fold` lower-cases, `trim` removes whitespace from
 both ends, and the infix `cleave` splits on a separator, so `"a,b" cleave
 ","` is `["a", "b"]`, which makes a case-insensitive comparison `fold a ==
