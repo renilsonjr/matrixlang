@@ -1331,5 +1331,5 @@ _IDIOM = {
     "Slice": "MatrixLang has no slicing; copy with a `dejavu` loop",
     "Is": "MatrixLang has no identity check; compare values with `==`",
     "IsNot": "MatrixLang has no identity check; compare values with `!=`",
-    "NotIn": "MatrixLang has no `not in`; write `unplug (d oracle key)`",
+    "NotIn": "MatrixLang has no `not in`; write `unplug (xs oracle x)`",
 }
