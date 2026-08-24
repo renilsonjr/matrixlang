@@ -1,5 +1,13 @@
 """The translator's refusal machinery, and its promise never to raise."""
 
+import io
+
+import pytest
+
+from matrixlang.errors import RuntimeErrorML
+from matrixlang.interpreter import Interpreter
+from matrixlang.lexer import lex
+from matrixlang.parser import parse
 from matrixlang.pytrans import Refusals, Translated, translate
 
 
@@ -106,8 +114,6 @@ _REFUSALS = [
     ("global x\n", "`global`"),
     ("with open('f') as f:\n    pass\n", "`with`"),
     ("assert x == 1\n", "`assert`"),
-    ("while 1 < 2:\n    break\n", "`break`"),
-    ("while 1 < 2:\n    continue\n", "`continue`"),
     ("pass\n", "`pass`"),
     ("print(1 % 2)\n", "`%`"),
     ("print(2 ** 3)\n", "`**`"),
@@ -163,13 +169,6 @@ def test_no_refusal_leaks_a_python_ast_class_name():
         for refusal in translate(source).items:
             words = set(re.findall(r"\b[A-Z][A-Za-z]+\b", refusal.reason))
             assert not (words & ast_names), (source, refusal.reason)
-
-
-def test_break_and_continue_carry_an_idiom():
-    # The two a Python reader hits hardest in a loop-heavy subset, and the
-    # two that shipped with no idiom at all.
-    assert "condition" in translate("while 1 < 2:\n    break\n").items[0].idiom
-    assert "redpill" in translate("while 1 < 2:\n    continue\n").items[0].idiom
 
 
 def test_upper_is_refused_with_an_idiom():
@@ -289,3 +288,65 @@ def test_an_untranslatable_method_still_refuses_as_before():
 def test_a_refusal_still_carries_its_python_position():
     result = translate("s = 'a'\nprint(s.upper())\n")
     assert result.items[0].line == 2
+
+
+def test_break_and_continue_are_no_longer_refused():
+    result = translate("for x in xs:\n    break\n")
+    assert isinstance(result, Translated)
+    result = translate("for x in xs:\n    continue\n")
+    assert isinstance(result, Translated)
+
+
+def test_a_bare_break_outside_a_loop_now_translates():
+    # Before `wake`/`glitch` existed, `Break` sat in the refusal
+    # catalogue unconditionally, so a bare `break` at module level --
+    # invalid Python outside a loop, but `ast.parse` accepts what
+    # `compile` would reject -- was refused at translate time. That
+    # catalogue entry is gone now that `break` maps to `wake`, so this
+    # same input translates instead of refusing. This is a deliberate
+    # decision, not an oversight: the input was invalid Python either
+    # way, and the interpreter's own "'wake' outside a loop" points at
+    # the real problem at least as well as a translate-time refusal
+    # did. Pinning down the new behaviour so a future change to it is
+    # a choice, not a surprise.
+    result = translate("break\n")
+    assert isinstance(result, Translated)
+    assert result.source == "wake\n"
+
+    out = io.StringIO()
+    with pytest.raises(RuntimeErrorML) as caught:
+        Interpreter(out=out).run(parse(lex(result.source)))
+    assert caught.value.message == "'wake' outside a loop"
+    assert caught.value.line == 1
+    assert caught.value.column == 1
+
+
+def test_a_bare_continue_outside_a_loop_now_translates():
+    # Same story as the `break` case above, for `continue` / `glitch`.
+    result = translate("continue\n")
+    assert isinstance(result, Translated)
+    assert result.source == "glitch\n"
+
+    out = io.StringIO()
+    with pytest.raises(RuntimeErrorML) as caught:
+        Interpreter(out=out).run(parse(lex(result.source)))
+    assert caught.value.message == "'glitch' outside a loop"
+    assert caught.value.line == 1
+    assert caught.value.column == 1
+
+
+def test_loop_else_is_still_refused():
+    # Python's loop-else runs only when no `break` fired. Adding `break`
+    # without keeping this refusal would let a `for ... else` translate
+    # into something that quietly means the wrong thing.
+    #
+    # "for ... else" is carried in .idiom, not .reason -- self._no()'s
+    # reason falls back to _DESCRIBE.get("For", _UNNAMED), and "For" has
+    # no _DESCRIBE entry, so the reason is the generic "this construct
+    # cannot be translated". test_for_else_is_refused in
+    # test_pytrans_loops.py already checks .idiom for the plain (no
+    # `break`) case; this one checks the same field so it agrees with
+    # that established convention.
+    result = translate("for x in xs:\n    break\nelse:\n    print(1)\n")
+    assert isinstance(result, Refusals)
+    assert "for ... else" in result.items[0].idiom

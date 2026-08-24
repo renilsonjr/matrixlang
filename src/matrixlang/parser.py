@@ -14,6 +14,7 @@ from matrixlang.nodes import (
     DictLiteral,
     ExprStmt,
     FunctionDef,
+    Glitch,
     Index,
     IndexAssign,
     JackIn,
@@ -32,6 +33,7 @@ from matrixlang.nodes import (
     Stmt,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import Token, TokenType
@@ -174,6 +176,10 @@ class _Parser:
             return self._agent()
         if token.type is TokenType.JACKOUT:
             return self._return()
+        if token.type is TokenType.WAKE:
+            return self._bare(Wake)
+        if token.type is TokenType.GLITCH:
+            return self._bare(Glitch)
         if token.type is TokenType.IDENT:
             # One token of lookahead decides, and it is the suffix rather
             # than the '='. Dispatching on the paren means `x + 1` still
@@ -334,6 +340,18 @@ class _Parser:
             if not self.check(TokenType.COMMENT):
                 value = self.expression()
         node = Return(value, line=keyword.line, column=keyword.column)
+        self._end_statement(node)
+        return node
+
+    def _bare(self, kind: type[Stmt]) -> Stmt:
+        """A statement that is nothing but its keyword.
+
+        `wake` and `glitch` take no operand -- unlike `jackout`, which
+        may carry a value -- so anything after the keyword on the line is
+        an error rather than an expression to attach.
+        """
+        keyword = self.advance()
+        node = kind(line=keyword.line, column=keyword.column)
         self._end_statement(node)
         return node
 

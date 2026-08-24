@@ -56,13 +56,13 @@ class _NeedsInput(Exception):
     Three things make escaping mid-execution from arbitrary depth safe, and
     all three are properties of `interpreter.py` that a future change could
     take away: it opens no context manager (no `with` anywhere), it catches
-    nothing broad enough to swallow this (`_Jackout`, `RecursionError`,
-    `CyclicValue`, `TooManyDigits`, `ValueError`, `Incomparable` -- never a
-    bare `Exception`), and its one `finally` restores `self._env` after a
-    call frame, which is correct on any exception. Whatever state a
-    half-finished run leaves behind lives on the `Interpreter` instance,
-    and `run()` builds a fresh one every round, so none of it outlives the
-    escape.
+    nothing broad enough to swallow this (`_Jackout`, `_LoopSignal`,
+    `RecursionError`, `CyclicValue`, `TooManyDigits`, `ValueError`,
+    `Incomparable` -- never a bare `Exception`), and its one `finally`
+    restores `self._env` after a call frame, which is correct on any
+    exception. Whatever state a half-finished run leaves behind lives on
+    the `Interpreter` instance, and `run()` builds a fresh one every
+    round, so none of it outlives the escape.
     """
 
 

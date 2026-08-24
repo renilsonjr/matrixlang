@@ -15,7 +15,7 @@ real programs outranks one that has blocked none, whatever either looks like on
 paper.
 
 **Where the truth lives:** `src/matrixlang/pytrans/translate.py`'s `_DESCRIBE`
-catalogue is what the translator can actually refuse — 51 entries at the time of
+catalogue is what the translator can actually refuse — 49 entries at the time of
 writing. This document is a reading of that catalogue plus judgement about
 order. If the two ever disagree, the catalogue is right.
 
@@ -29,11 +29,12 @@ from the value types
 
 **Operators** — `+ - * /`, `== != < > <= >=`
 
-**Keywords (22)** — `construct` `trace` `redpill` `bluepill` `dejavu`
+**Keywords (24)** — `construct` `trace` `redpill` `bluepill` `dejavu`
 `flatline` `true` `false` `agent` `jackout` `length` `splice` `fork` `unplug`
-`jackin` `decode` `encode` `keymaker` `oracle` `fold` `trim` `cleave`
+`jackin` `decode` `encode` `keymaker` `oracle` `fold` `trim` `cleave` `wake`
+`glitch`
 
-**Glyph budget** — 52 slots used, 4 free.
+**Glyph budget** — 54 slots used, 2 free.
 
 ### One oddity worth knowing
 
@@ -64,16 +65,25 @@ Still refused, each with an idiom: `.upper()` (no operator, and nothing has
 been blocked by it yet) and bare `.split()` (splitting on runs of
 whitespace is a different operation, not a default separator).
 
-### 2. `break` and `continue` — #133 — *next*
+### 2. `break` and `continue` — #133 — **done**
 
-There is no loop control at all. Every search loop must run to the end even
-after it has found what it wanted. The current refusal tells a reader to restructure
-around the loop's own condition, which is honest but is not what their Python said.
+`wake` leaves the loop it sits in; `glitch` skips the rest of the current turn
+and goes back to the loop's condition. Both are bare words on a line of their
+own, like a bare `jackout`, and both belong to the **innermost** loop they sit
+in — a `wake` inside a loop inside another loop leaves only the inner one.
 
-Two keywords. The main question is what `dejavu` does about an early exit, not
-whether it should have one.
+Two rules bound the feature: outside a loop, either one is an error, and that
+includes inside an agent called from a loop — the agent's body is not in the
+loop, so it cannot reach out and stop the caller's. `jackout` beats both; a
+`jackout` inside a loop inside an agent returns from the agent, loop and all.
 
-### 3. `in` over a list or string — #134
+The translator's Python `for` still desugars to a `dejavu` with a hidden
+counter, and `continue` inside it becomes `glitch` — so the counter increment
+is inserted before every `glitch` the desugaring emits, not only at the end of
+the loop body, or a translated `continue` would loop forever on the same
+index.
+
+### 3. `in` over a list or string — #134 — *next*
 
 `oracle` asks a *dictionary* for a key. "Is this name in this list?" — one of
 the most ordinary things a beginner writes — has no MatrixLang form at all.
@@ -147,9 +157,19 @@ the pull request.
 
 Two constraints bind every one of them:
 
-- **The glyph budget is finite** — 4 slots left, hand-tracked in
+- **The glyph budget is finite** — 2 slots left, hand-tracked in
   `tests/test_glyphs.py` on purpose so that spending one is a decision somebody
   wrote down.
+
+  **Item 2 is spent: `wake` and `glitch` took the two slots budgeted for it.
+  Items 3 and 4 divide what remains.** Item 3 widens `oracle` rather than
+  adding a sibling, so it takes none; item 4 takes the last two for `.` and
+  `%`. Item 5 is translator-side and takes none. There is no margin, and
+  that is the point: the table stays inside its 56-slot block, and the ceiling
+  keeps the vocabulary small enough to hold in your head, which is the whole
+  reason this language is worth reading. If item 4 turns out to need a third
+  slot, that is a decision to take deliberately — not a shortfall to route
+  around by enlarging the block.
 - **D-03**: both textual faces must round-trip, `parse(lex(render_X(t))) == t`,
   and any new node type must enter `tests/treegen.py` in the same change that
   adds it. A diff that adds a node without touching treegen is incomplete —

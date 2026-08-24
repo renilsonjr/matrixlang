@@ -302,3 +302,84 @@ def test_the_products_search_agrees():
 
 def test_trim_and_cleave_agree():
     agree('s = "  a,b,c  "\nfor part in s.strip().split(","):\n    print(part)\n')
+
+
+def test_a_continue_nested_two_ifs_deep_agrees():
+    # Catches the walk not descending far enough.
+    agree(
+        "xs = [1, 2, 3, 4]\n"
+        "for x in xs:\n"
+        "    if x > 1:\n"
+        "        if x < 4:\n"
+        "            continue\n"
+        "    print(x)\n"
+    )
+
+
+def test_a_continue_in_a_while_nested_in_a_for_agrees():
+    # Catches the walk descending too far and double-incrementing the
+    # OUTER counter for a `glitch` that belongs to the inner while.
+    agree(
+        "xs = [1, 2]\n"
+        "for x in xs:\n"
+        "    n = 0\n"
+        "    while n < 3:\n"
+        "        n = n + 1\n"
+        "        if n == 2:\n"
+        "            continue\n"
+        "        print(n)\n"
+        "    print(x)\n"
+    )
+
+
+def test_a_continue_in_a_nested_for_agrees():
+    # Catches the wrong counter being incremented.
+    agree(
+        "rows = [[1, 2], [3, 4]]\n"
+        "for row in rows:\n"
+        "    for cell in row:\n"
+        "        if cell == 2:\n"
+        "            continue\n"
+        "        print(cell)\n"
+    )
+
+
+def test_a_break_in_a_for_agrees():
+    agree(
+        "xs = [1, 2, 3, 4]\n"
+        "for x in xs:\n"
+        "    if x == 3:\n"
+        "        break\n"
+        "    print(x)\n"
+    )
+
+
+def test_break_and_continue_together_agree():
+    agree(
+        "xs = [1, 2, 3, 4, 5]\n"
+        "for x in xs:\n"
+        "    if x == 2:\n"
+        "        continue\n"
+        "    if x == 4:\n"
+        "        break\n"
+        "    print(x)\n"
+    )
+
+
+def test_a_continue_in_an_else_branch_agrees():
+    # The `else_body` arm of `_increment_before_glitches` is the one
+    # branch of that helper with no guard at all -- all five differential
+    # cases the brief gave put `continue` in a `then` branch, so a
+    # regression that dropped the `else_body` rewrite entirely (e.g. an
+    # `and False` tacked onto its `if`) would pass the whole suite while
+    # sending a reader's ordinary `continue`-in-an-`else` into a loop that
+    # spins to the step limit.
+    agree(
+        "xs = [1, 2, 3, 4]\n"
+        "for x in xs:\n"
+        "    if x == 2:\n"
+        "        print(x)\n"
+        "    else:\n"
+        "        continue\n"
+        "    print(x * 10)\n"
+    )

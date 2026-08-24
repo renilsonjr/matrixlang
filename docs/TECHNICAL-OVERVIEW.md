@@ -86,16 +86,16 @@ anything about the language, which is the whole point of the split.
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 109 | Token vocabulary. Pure data |
-| `nodes.py` | 195 | AST node definitions. Pure data |
+| `tokens.py` | 113 | Token vocabulary. Pure data |
+| `nodes.py` | 213 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
 | `values.py` | 317 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 104 | The 52-slot bijective glyph table. 4 slots left of the block |
+| `glyphs.py` | 113 | The 54-slot bijective glyph table. 2 slots left of the block |
 | `lexer.py` | 271 | Source text → token list. Handles both faces |
-| `parser.py` | 561 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 928 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 347 | AST → source text, in either face |
-| `treeview.py` | 176 | AST → indented text, for teaching |
+| `parser.py` | 579 | Tokens → AST. Recursive descent |
+| `interpreter.py` | 986 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 353 | AST → source text, in either face |
+| `treeview.py` | 182 | AST → indented text, for teaching |
 | `repl.py` | 138 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
 | `input.py` | 124 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |
@@ -261,7 +261,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 52 slots is
+and a **per-seed randomly mixed** face where each of the 54 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -302,7 +302,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 52-entry table the renderer writes through, just
+The lexer reads the same 54-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.
@@ -668,7 +668,10 @@ size, and it is why every example in
 ## 9. What is deliberately absent
 
 Scope discipline is part of the design, and being able to say *why* something
-isn't there is usually more convincing than a feature list:
+isn't there is usually more convincing than a feature list. (`break` and
+`continue` used to be on this list; they shipped since, as `wake` and
+`glitch` — see [LEARNING-MATRIXLANG.md](LEARNING-MATRIXLANG.md)'s `wake`
+and `glitch` section for what they cover and where they stop.)
 
 - **Dictionaries and sets.** Stage 7 gave the language one collection
   type — a list — deliberately, not as a first installment; Stage 8 gave
@@ -679,18 +682,16 @@ isn't there is usually more convincing than a feature list:
   `find`, and the like). Stage 8 went as far as one character at a time
   — `name[0]` — and stopped; a range or a method table is more surface
   than the pedagogical goal needed. With Stage 9's logical operators
-  shipped, slicing is the largest remaining gap in the language: `else
-  if` is a nesting exercise, `break`/`continue` are two keywords and a
-  control-flow exception in the shape `jackout` already established, and
-  `xor` is one more entry in the same table `splice`/`fork` already
-  populate — none of those is a new kind of feature. Slicing is: it
-  needs new syntax (a colon inside `[`), a new AST node, and bounds
-  semantics for both strings and lists that the existing single-index
-  rules do not give away for free.
+  shipped — and `break`/`continue` shipped since, as `wake` and `glitch`,
+  the same control-flow exception in the shape `jackout` already
+  established — slicing is the largest remaining gap in the language:
+  `else if` is a nesting exercise, and `xor` is one more entry in the
+  same table `splice`/`fork` already populate — neither of those is a
+  new kind of feature. Slicing is: it needs new syntax (a colon inside
+  `[`), a new AST node, and bounds semantics for both strings and lists
+  that the existing single-index rules do not give away for free.
 - **Floats** — see §4.
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.
-- **`break` and `continue`.** A counter and a condition are how loops are
-  written instead (§4).
 - **`xor`.** `splice`, `fork` and `unplug` shipped in Stage 9; a fourth
   logical operator was reachable but not needed for Turing completeness
   or any demo, the same reasoning Stage 8 applied to slicing.

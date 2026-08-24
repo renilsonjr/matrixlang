@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has twenty-two keywords, five types, and two ways of writing
+MatrixLang has twenty-four keywords, five types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -227,12 +227,56 @@ flatline
 `dejavu` is *while*. Same rules: the condition must be boolean, and
 `flatline` closes it.
 
-There is no `for`, no `break`, and no `continue`. A counter and a
-condition are how loops are written here.
+There is no `for`. A counter and a condition are how loops are written
+here — but `wake` and `glitch`, below, give you the two escapes a `for`
+loop's `break` and `continue` would.
 
 > **A loop that never ends** is stopped after 200,000 statements with a
 > diagnostic rather than running forever. Raise or remove the limit with
 > `--max-steps N`, where `0` means no limit.
+
+### `wake` and `glitch`
+
+A `dejavu` normally runs until its condition goes false. Two keywords let
+you leave early.
+
+```
+construct n = 0
+dejavu n < 10
+  n = n + 1
+  redpill n == 3
+    glitch
+  flatline
+  redpill n == 6
+    wake
+  flatline
+  trace n
+flatline
+```
+
+```
+1
+2
+4
+5
+```
+
+`wake` leaves the loop entirely — you wake up, and the loop is over.
+`glitch` skips the rest of this turn and goes back to the condition. The
+name is the film's own: a déjà vu *is* a glitch in the Matrix, and the
+loop keyword is `dejavu`.
+
+Both are bare words on a line of their own, like a bare `jackout`. Both
+belong to the **innermost** loop they sit in, so a `wake` inside a loop
+inside another loop leaves only the inner one.
+
+Two rules worth knowing:
+
+- Outside a loop, either one is an error. That includes inside an agent
+  called from a loop — the agent's body is not in a loop, so it cannot
+  reach out and stop the caller's.
+- `jackout` beats both. A `jackout` inside a loop inside an agent returns
+  from the agent, loop and all.
 
 ---
 
@@ -1235,8 +1279,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Twenty-two keywords, eleven operators, parentheses, a comma, two brackets,
-a pair of braces, a colon, ten digits, and the comment marker — 52 slots
+Twenty-four keywords, eleven operators, parentheses, a comma, two brackets,
+a pair of braces, a colon, ten digits, and the comment marker — 54 slots
 in all.
 
 | | | | | | | |
@@ -1247,6 +1291,7 @@ in all.
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
 | `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | `oracle` `ｵ` |
 | `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | `fold` `ﾊ` | `trim` `ﾘ` | `cleave` `ﾛ` |
+| `wake` `ﾉ` | `glitch` `ﾕ` | | | | | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1669,7 +1714,8 @@ Being clear about this saves more time than any feature list:
   at a time (§7) is as far as string access goes
 - no removing a key from a dictionary (§8) — only reading, inserting, and
   updating one
-- no `for`, `break`, `continue`, or `else if`
+- no `for` or `else if` — but a `dejavu` loop can leave early with `wake`
+  and skip to its next turn with `glitch` (§5)
 - no way to *prompt* for input and wait — `jackin` (§19) reads lines that
   were already supplied, from the terminal or from the box beside the
   editor, and a program cannot stop mid-run to ask a question

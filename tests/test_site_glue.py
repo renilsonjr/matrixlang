@@ -401,3 +401,38 @@ def test_encoding_a_cyclic_value_returns_an_error_event_rather_than_raising():
     events = glue.run('construct xs = [1]\nxs[0] = xs\ntrace encode xs\n')
     assert events[-1]["kind"] == "error"
     assert "contains a cycle" in events[-1]["message"]
+
+
+def test_wake_and_glitch_run_without_raising():
+    # run() promises never to raise; that promise has been broken five
+    # times before. `interpreter.py._execute` emits a `Statement` event
+    # for EVERY statement before its isinstance dispatch, and that event
+    # is rendered by `server.sse.payload` -> `render_glyph` before this
+    # program's own control flow even matters. Until render.py grew
+    # branches for Wake and Glitch, a program containing either raised a
+    # bare AssertionError ("unhandled statement node: Wake") straight
+    # out of run() -- not caught, not turned into an {"kind": "error"}
+    # event, an uncaught crash of the whole call.
+    #
+    # `glitch` skips the `trace i` below on i == 2; `wake` breaks the
+    # loop on i == 4 before its `trace i` runs. So the loop's own output
+    # is "1" and "3" only, followed by "done" once the loop exits.
+    source = (
+        "construct i = 0\n"
+        "dejavu true\n"
+        "  i = i + 1\n"
+        "  redpill i == 2\n"
+        "    glitch\n"
+        "  flatline\n"
+        "  redpill i == 4\n"
+        "    wake\n"
+        "  flatline\n"
+        "  trace i\n"
+        "flatline\n"
+        "trace \"done\"\n"
+    )
+
+    events = glue.run(source)
+
+    assert [e["kind"] for e in events].count("error") == 0
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["1", "3", "done"]
