@@ -91,6 +91,47 @@ def test_a_mixed_list_still_answers_for_the_other_type():
     assert run('trace [1, "a"] oracle "a"\n') == "true\n"
 
 
+def test_a_boolean_and_an_integer_are_never_the_same_element():
+    # Catches replacing the equal/Incomparable scan with a naive
+    # `return right in left`: Python's list `in` compares with `==`,
+    # where `1 == True`, so a naive implementation would find a match
+    # here that `values.equal` correctly refuses -- for the same reason
+    # `{true: "a", 1: "b"}` must not collapse into one entry.
+    assert run("trace [1] oracle true\n") == "false\n"
+    assert run("trace [true] oracle 1\n") == "false\n"
+
+
+def test_the_bool_int_divergence_holds_one_level_down():
+    # `values.equal`'s own docstring records this as the exact bug that
+    # motivated recursing manually instead of delegating to Python's
+    # `==` for lists: `[1] == [True]` is True in Python. A naive
+    # `right in left` here is exactly that delegation, one level down.
+    assert run("trace [[1]] oracle [true]\n") == "false\n"
+
+
+def test_a_mutual_cycle_answers_instead_of_recursing_forever():
+    # Two independently built pairs of mutually self-referential lists,
+    # structurally equal but sharing no objects. `equal`'s seen-set of
+    # id-pairs is what terminates the walk. A naive `right in left`
+    # delegates to Python's own list equality, which has no such memo:
+    # verified separately that `d in a` for this exact shape raises
+    # RecursionError in plain Python, which the interpreter would then
+    # report as "expression is nested too deeply" -- wrong, since
+    # nothing here is nested, only mutually cyclic.
+    source = (
+        "construct a = [1]\n"
+        "construct b = [2]\n"
+        "a[0] = b\n"
+        "b[0] = a\n"
+        "construct d = [1]\n"
+        "construct e = [2]\n"
+        "d[0] = e\n"
+        "e[0] = d\n"
+        "trace a oracle d\n"
+    )
+    assert run(source) == "true\n"
+
+
 # --- the string --------------------------------------------------------
 
 
@@ -117,9 +158,22 @@ def test_every_string_contains_the_empty_string():
 def test_a_non_string_against_a_string_is_an_error():
     # CPython raises TypeError for `1 in "abc"`. Here it is a positioned
     # MatrixLang error instead -- nothing but MatrixLangError may escape.
+    # Full equality, not substring checks: both "'oracle'" and "string"
+    # also appear in the *fallback* message ("takes a dictionary, a list
+    # or a string, got string"), so a substring check can't tell which
+    # error actually fired.
     error = fails('trace "matrix" oracle 1\n')
-    assert "'oracle'" in error.message
-    assert "string" in error.message
+    assert error.message == "'oracle' on a string looks for a string, got integer"
+
+
+def test_the_empty_string_contains_only_the_empty_string():
+    # The design spec's edge table lists "" on both sides; the previous
+    # test only covered the right side.
+    assert run('trace "" oracle ""\n') == "true\n"
+
+
+def test_the_empty_string_contains_nothing_else():
+    assert run('trace "" oracle "a"\n') == "false\n"
 
 
 # --- everything else ---------------------------------------------------
