@@ -668,7 +668,10 @@ size, and it is why every example in
 ## 9. What is deliberately absent
 
 Scope discipline is part of the design, and being able to say *why* something
-isn't there is usually more convincing than a feature list:
+isn't there is usually more convincing than a feature list. (`break` and
+`continue` used to be on this list; they shipped since, as `wake` and
+`glitch` — see [LEARNING-MATRIXLANG.md](LEARNING-MATRIXLANG.md)'s `wake`
+and `glitch` section for what they cover and where they stop.)
 
 - **Dictionaries and sets.** Stage 7 gave the language one collection
   type — a list — deliberately, not as a first installment; Stage 8 gave
@@ -679,18 +682,16 @@ isn't there is usually more convincing than a feature list:
   `find`, and the like). Stage 8 went as far as one character at a time
   — `name[0]` — and stopped; a range or a method table is more surface
   than the pedagogical goal needed. With Stage 9's logical operators
-  shipped, slicing is the largest remaining gap in the language: `else
-  if` is a nesting exercise, `break`/`continue` are two keywords and a
-  control-flow exception in the shape `jackout` already established, and
-  `xor` is one more entry in the same table `splice`/`fork` already
-  populate — none of those is a new kind of feature. Slicing is: it
-  needs new syntax (a colon inside `[`), a new AST node, and bounds
-  semantics for both strings and lists that the existing single-index
-  rules do not give away for free.
+  shipped — and `break`/`continue` shipped since, as `wake` and `glitch`,
+  the same control-flow exception in the shape `jackout` already
+  established — slicing is the largest remaining gap in the language:
+  `else if` is a nesting exercise, and `xor` is one more entry in the
+  same table `splice`/`fork` already populate — neither of those is a
+  new kind of feature. Slicing is: it needs new syntax (a colon inside
+  `[`), a new AST node, and bounds semantics for both strings and lists
+  that the existing single-index rules do not give away for free.
 - **Floats** — see §4.
 - **`else if` chaining** — nest a `redpill` inside a `bluepill`.
-- **`break` and `continue`.** A counter and a condition are how loops are
-  written instead (§4).
 - **`xor`.** `splice`, `fork` and `unplug` shipped in Stage 9; a fourth
   logical operator was reachable but not needed for Turing completeness
   or any demo, the same reasoning Stage 8 applied to slicing.

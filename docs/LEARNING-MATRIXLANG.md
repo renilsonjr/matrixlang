@@ -1714,7 +1714,8 @@ Being clear about this saves more time than any feature list:
   at a time (§7) is as far as string access goes
 - no removing a key from a dictionary (§8) — only reading, inserting, and
   updating one
-- no `for`, `break`, `continue`, or `else if`
+- no `for` or `else if` — but a `dejavu` loop can leave early with `wake`
+  and skip to its next turn with `glitch` (§5)
 - no way to *prompt* for input and wait — `jackin` (§19) reads lines that
   were already supplied, from the terminal or from the box beside the
   editor, and a program cannot stop mid-run to ask a question
