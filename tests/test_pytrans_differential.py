@@ -364,3 +364,22 @@ def test_break_and_continue_together_agree():
         "        break\n"
         "    print(x)\n"
     )
+
+
+def test_a_continue_in_an_else_branch_agrees():
+    # The `else_body` arm of `_increment_before_glitches` is the one
+    # branch of that helper with no guard at all -- all five differential
+    # cases the brief gave put `continue` in a `then` branch, so a
+    # regression that dropped the `else_body` rewrite entirely (e.g. an
+    # `and False` tacked onto its `if`) would pass the whole suite while
+    # sending a reader's ordinary `continue`-in-an-`else` into a loop that
+    # spins to the step limit.
+    agree(
+        "xs = [1, 2, 3, 4]\n"
+        "for x in xs:\n"
+        "    if x == 2:\n"
+        "        print(x)\n"
+        "    else:\n"
+        "        continue\n"
+        "    print(x * 10)\n"
+    )

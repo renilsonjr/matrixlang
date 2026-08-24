@@ -210,12 +210,18 @@ def test_a_wake_in_a_for_gets_no_increment():
 
 
 def test_a_glitch_in_a_plain_while_gets_no_increment():
-    # A Python `while` has no counter to advance.
-    source = "n = 0\nwhile n < 3:\n    n = n + 1\n    continue\n"
+    # A Python `while` has no counter to advance. The body's own increment
+    # is `n = n + 2`, deliberately different from the `+ 1` the helper
+    # would insert for a `for`'s counter -- if a plain `while` ever
+    # started calling `_increment_before_glitches`, the line before
+    # `glitch` would read `n = n + 1`, not `n = n + 2`, and this would
+    # fail. (With `+ 1` the inserted line and the reader's own line are
+    # textually identical, so nothing could ever distinguish them.)
+    source = "n = 0\nwhile n < 6:\n    n = n + 2\n    continue\n"
     out = ml(source)
     glitch_line = [i for i, line in enumerate(out.splitlines()) if "glitch" in line][0]
     before = out.splitlines()[glitch_line - 1]
-    assert before.strip() == "n = n + 1"  # the reader's own line, not an inserted one
+    assert before.strip() == "n = n + 2"  # the reader's own line, not an inserted one
 
 
 def test_a_loop_with_no_glitch_is_unchanged():
