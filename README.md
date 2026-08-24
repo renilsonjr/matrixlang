@@ -133,7 +133,7 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — twenty-two keywords, five types, and both faces —
+teaches the whole language — twenty-four keywords, five types, and both faces —
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade
