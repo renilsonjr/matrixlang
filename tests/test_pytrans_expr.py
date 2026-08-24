@@ -149,16 +149,20 @@ def test_an_operator_refusal_carries_the_expression_s_position():
     assert refusal.column == 6
 
 
-def test_in_translates_unconditionally_and_a_list_fails_loudly():
-    # `k in d` and `2 in xs` are the same syntax, and only the runtime
-    # value says which is which -- deciding would be type inference, which
-    # the governing rule forbids. So `in` always becomes `oracle`, and over
-    # a list MatrixLang says so itself, with a line and a column. Loud and
-    # positioned is what the rule permits; a refusal here would have to
-    # guess to be right.
+def test_in_translates_unconditionally_over_every_container():
+    # `k in d`, `2 in xs` and `"a" in s` are the same syntax, and only the
+    # runtime value says which is which -- deciding would be the type
+    # inference the governing rule forbids. So `in` always becomes
+    # `oracle`, unconditionally.
+    #
+    # This test used to end by asserting that the list form then FAILED at
+    # runtime, with "takes a dictionary". That was honest about a real
+    # gap: the translation looked fine and died on Run, naming an operator
+    # the reader never typed. Issue #134 closed it by widening `oracle`
+    # rather than by teaching the translator to guess, so the second half
+    # now asserts the program runs and prints the right answer.
     import io
 
-    from matrixlang.errors import RuntimeErrorML
     from matrixlang.interpreter import Interpreter
     from matrixlang.lexer import lex
     from matrixlang.parser import parse
@@ -166,15 +170,16 @@ def test_in_translates_unconditionally_and_a_list_fails_loudly():
     assert ml("xs = [1, 2]\nprint(2 in xs)\n") == (
         "construct xs = [1, 2]\ntrace xs oracle 2\n"
     )
-    try:
-        Interpreter(out=io.StringIO()).run(
-            parse(lex("construct xs = [1, 2]\ntrace xs oracle 2\n"))
-        )
-    except RuntimeErrorML as error:
-        assert "takes a dictionary" in str(error)
-        assert error.line == 2
-    else:
-        raise AssertionError("`oracle` over a list should have failed loudly")
+    assert ml('print("a" in d)\n') == 'trace d oracle "a"\n'
+    assert ml('s = "abc"\nprint("b" in s)\n') == (
+        'construct s = "abc"\ntrace s oracle "b"\n'
+    )
+
+    out = io.StringIO()
+    Interpreter(out=out).run(
+        parse(lex("construct xs = [1, 2]\ntrace xs oracle 2\n"))
+    )
+    assert out.getvalue() == "true\n"
 
 
 def test_not_in_is_still_refused():

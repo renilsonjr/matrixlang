@@ -83,16 +83,33 @@ is inserted before every `glitch` the desugaring emits, not only at the end of
 the loop body, or a translated `continue` would loop forever on the same
 index.
 
-### 3. `in` over a list or string — #134 — *next*
+### 3. `in` over a list or string — #134 — **done**
 
-`oracle` asks a *dictionary* for a key. "Is this name in this list?" — one of
-the most ordinary things a beginner writes — has no MatrixLang form at all.
-Today `2 in xs` translates to `xs oracle 2` and fails at runtime.
+`oracle` now asks a dictionary for a key, a list for an element and a string
+for a substring, so `2 in xs` translates to `xs oracle 2` and runs to the
+same answer Python gives.
 
-Either widen `oracle` or give it a sibling. Small, and it removes a case that
-currently fails *after* translation rather than during it.
+The design decision was the skip: over a list, an element that cannot be
+compared to the one being asked about — `["a"] oracle 1`, say — is skipped
+rather than raised. That has to be order-independent, or the answer would
+depend on where the incomparable element sits: raising on the first one
+found would make `["a", 1] oracle 1` error while `[1, "a"] oracle 1` did
+not, the same list in a different order deciding whether the program runs.
 
-### 4. Numbers — decimals and `%` — #135
+It widened `oracle` rather than adding a sibling keyword, so it cost no
+glyph slot.
+
+One case still disagrees with Python, silently. `True in [1]` is `true`
+in Python, because `True == 1` there; `[1] oracle true` is `false` here,
+because MatrixLang's `==` never equates a boolean with a number — the
+same rule that keeps `{true: "a", 1: "b"}` as two entries rather than
+one. The translator cannot refuse this program, because `True in [1]`
+and `"a" in xs` are the same syntax and telling them apart would be the
+type inference the translator's governing rule forbids. This is
+deliberate and must not be "fixed" by making `oracle` treat `true` and
+`1` as the same element — that would collapse dictionary keys instead.
+
+### 4. Numbers — decimals and `%` — #135 — *next*
 
 The biggest unlock and the biggest decision.
 
@@ -162,9 +179,9 @@ Two constraints bind every one of them:
   wrote down.
 
   **Item 2 is spent: `wake` and `glitch` took the two slots budgeted for it.
-  Items 3 and 4 divide what remains.** Item 3 widens `oracle` rather than
-  adding a sibling, so it takes none; item 4 takes the last two for `.` and
-  `%`. Item 5 is translator-side and takes none. There is no margin, and
+  Item 3 is spent too, and took none: it widened `oracle` rather than adding
+  a sibling.** Item 4 takes what remains — the last two, for `.` and `%`.
+  Item 5 is translator-side and takes none. There is no margin, and
   that is the point: the table stays inside its 56-slot block, and the ceiling
   keeps the vocabulary small enough to hold in your head, which is the whole
   reason this language is worth reading. If item 4 turns out to need a third

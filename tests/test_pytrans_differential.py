@@ -383,3 +383,76 @@ def test_a_continue_in_an_else_branch_agrees():
         "        continue\n"
         "    print(x * 10)\n"
     )
+
+
+def test_in_over_a_list_agrees():
+    # Printing the `in` result directly can never agree() -- Python spells
+    # it True/False, MatrixLang true/false (see this file's own docstring,
+    # and matrixlang_prints below). So, like test_a_membership_search_loop_
+    # agrees, the boolean is routed through if/else into a non-boolean
+    # sentinel that still depends entirely on oracle's answer.
+    agree(
+        'names = ["neo", "trinity", "morpheus"]\n'
+        'for name in names:\n'
+        '    if name in names:\n'
+        '        print("yes")\n'
+        '    else:\n'
+        '        print("no")\n'
+        'if "smith" in names:\n'
+        '    print("yes")\n'
+        'else:\n'
+        '    print("no")\n'
+    )
+
+
+def test_in_over_a_string_agrees():
+    # Substring, not character -- "rix" is not one of "matrix"'s
+    # characters, and both sides must still say the same thing.
+    agree(
+        's = "matrix"\n'
+        'for needle in ["rix", "m", "zion", ""]:\n'
+        '    if needle in s:\n'
+        '        print("yes")\n'
+        '    else:\n'
+        '        print("no")\n'
+    )
+
+
+def test_in_over_a_mixed_list_agrees_in_both_orders():
+    # The skip decision, and the reason it was chosen. Both orders must
+    # give the same answers, and both must match Python.
+    agree(
+        'a = ["a", 1]\n'
+        'b = [1, "a"]\n'
+        'if 1 in a:\n    print("yes")\nelse:\n    print("no")\n'
+        'if 1 in b:\n    print("yes")\nelse:\n    print("no")\n'
+        'if "a" in a:\n    print("yes")\nelse:\n    print("no")\n'
+        'if "a" in b:\n    print("yes")\nelse:\n    print("no")\n'
+        'if 2 in a:\n    print("yes")\nelse:\n    print("no")\n'
+    )
+
+
+def test_in_over_a_dictionary_still_agrees():
+    agree(
+        'd = {"a": 1, "b": 2}\n'
+        'for key in ["a", "z"]:\n'
+        '    if key in d:\n'
+        '        print("yes")\n'
+        '    else:\n'
+        '        print("no")\n'
+    )
+
+
+def test_a_membership_search_loop_agrees():
+    # The shape the register was actually about: a search that stops
+    # early, now that both `in` and `wake` exist.
+    agree(
+        'names = ["neo", "trinity"]\n'
+        'wanted = "trinity"\n'
+        'found = 0\n'
+        'for name in names:\n'
+        '    if wanted in name:\n'
+        '        found = 1\n'
+        '        break\n'
+        'print(found)\n'
+    )
