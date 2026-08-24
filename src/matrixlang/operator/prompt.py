@@ -91,7 +91,9 @@ Rules that differ from most languages:
   something. `d oracle "a"` asks a dictionary for a key, `xs oracle 3` asks
   a list whether it holds that element, and `s oracle "ab"` asks a string
   whether that text appears in it. An element a list cannot compare is
-  simply not a match, so `["a"] oracle 1` is false rather than an error.
+  simply not a match, so `["a"] oracle 1` is false rather than an error —
+  but the right side of a string `oracle` must itself be a string;
+  `"matrix" oracle 1` is an error, not false.
 - `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
   and never any other type.
 - `+` adds integers, joins strings, or concatenates lists — never a mix

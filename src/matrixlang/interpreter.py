@@ -877,7 +877,7 @@ class Interpreter:
                 # a string from a list to warn anyone if the two differed.
                 return right in left
             raise RuntimeErrorML(
-                f"'oracle' takes a dictionary, a list or a string, got "
+                f"'oracle' takes a list, a string or a dictionary, got "
                 f"{type_name(left)}",
                 node.line,
                 node.column,

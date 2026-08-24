@@ -93,11 +93,21 @@ The design decision was the skip: over a list, an element that cannot be
 compared to the one being asked about — `["a"] oracle 1`, say — is skipped
 rather than raised. That has to be order-independent, or the answer would
 depend on where the incomparable element sits: raising on the first one
-found would make `[1, "a"] oracle 1` error while `["a", 1] oracle 1` did
+found would make `["a", 1] oracle 1` error while `[1, "a"] oracle 1` did
 not, the same list in a different order deciding whether the program runs.
 
 It widened `oracle` rather than adding a sibling keyword, so it cost no
 glyph slot.
+
+One case still disagrees with Python, silently. `True in [1]` is `true`
+in Python, because `True == 1` there; `[1] oracle true` is `false` here,
+because MatrixLang's `==` never equates a boolean with a number — the
+same rule that keeps `{true: "a", 1: "b"}` as two entries rather than
+one. The translator cannot refuse this program, because `True in [1]`
+and `"a" in xs` are the same syntax and telling them apart would be the
+type inference the translator's governing rule forbids. This is
+deliberate and must not be "fixed" by making `oracle` treat `true` and
+`1` as the same element — that would collapse dictionary keys instead.
 
 ### 4. Numbers — decimals and `%` — #135 — *next*
 

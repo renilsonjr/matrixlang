@@ -776,9 +776,13 @@ class _Translator:
             # Unconditional: `k in d`, `2 in xs` and `"a" in s` are the same
             # syntax, and telling them apart would be the type inference
             # the governing rule forbids. That was once an unavoidable
-            # narrowing; now it is simply correct, because `oracle`
-            # answers the question for a dictionary, a list and a string
-            # alike.
+            # narrowing; now it is correct for a dictionary, a list and a
+            # string alike -- with one deliberate exception: MatrixLang's
+            # `oracle` never equates a boolean with a number (the same
+            # rule that keeps `{true: "a", 1: "b"}` from collapsing into
+            # one key), so `True in [1]` is `true` in Python but
+            # `[1] oracle true` is `false` here. That divergence is not a
+            # bug to close -- equating them would break dictionary keys.
             return Binary(
                 self.expression(right), TokenType.ORACLE, self.expression(node.left)
             )
@@ -1336,5 +1340,5 @@ _IDIOM = {
     "Slice": "MatrixLang has no slicing; copy with a `dejavu` loop",
     "Is": "MatrixLang has no identity check; compare values with `==`",
     "IsNot": "MatrixLang has no identity check; compare values with `!=`",
-    "NotIn": "MatrixLang has no `not in`; write `unplug (xs oracle x)`",
+    "NotIn": "MatrixLang has no `not in`; write `unplug (container oracle value)`",
 }

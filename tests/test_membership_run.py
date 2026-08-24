@@ -132,6 +132,29 @@ def test_a_mutual_cycle_answers_instead_of_recursing_forever():
     assert run(source) == "true\n"
 
 
+def test_a_genuinely_deep_scan_still_errors_loudly():
+    # Closes a surviving mutant: widening `except Incomparable:` in the
+    # list arm to `except Exception:` leaves every other test in this
+    # file green, because RecursionError -- and MemoryError, and
+    # site/glue.py's own _NeedsInput -- are Exception subclasses too.
+    # That mutation would turn a genuine internal failure mid-scan into
+    # a quiet `false` instead of the loud, positioned error a reader is
+    # promised. Built at runtime, not as a ~4000-deep list literal --
+    # a literal that deep blows the *parser*, which is a different
+    # failure than the one this test targets.
+    source = (
+        'construct xs = [1]\n'
+        "construct n = 0\n"
+        "dejavu n < 4000\n"
+        "  xs = [xs]\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace xs oracle xs\n"
+    )
+    error = fails(source)
+    assert "nested too deeply" in error.message
+
+
 # --- the string --------------------------------------------------------
 
 
@@ -159,11 +182,20 @@ def test_a_non_string_against_a_string_is_an_error():
     # CPython raises TypeError for `1 in "abc"`. Here it is a positioned
     # MatrixLang error instead -- nothing but MatrixLangError may escape.
     # Full equality, not substring checks: both "'oracle'" and "string"
-    # also appear in the *fallback* message ("takes a dictionary, a list
-    # or a string, got string"), so a substring check can't tell which
+    # also appear in the *fallback* message ("takes a list, a string or
+    # a dictionary, got string"), so a substring check can't tell which
     # error actually fired.
     error = fails('trace "matrix" oracle 1\n')
     assert error.message == "'oracle' on a string looks for a string, got integer"
+
+
+def test_a_list_against_a_string_is_also_an_error():
+    # A second wrong type on the right, distinct from the integer above --
+    # this is the assertion that stands between a reader and a raw Python
+    # TypeError escaping `right in left` when `right` is unhashable/
+    # uncomparable to a string, not just the wrong scalar type.
+    error = fails('trace "matrix" oracle ["m"]\n')
+    assert error.message == "'oracle' on a string looks for a string, got list"
 
 
 def test_the_empty_string_contains_only_the_empty_string():
@@ -186,7 +218,7 @@ def test_the_empty_string_contains_nothing_else():
 def test_oracle_refuses_a_non_container(left, name):
     error = fails(f"trace {left} oracle 1\n")
     assert error.message == (
-        f"'oracle' takes a dictionary, a list or a string, got {name}"
+        f"'oracle' takes a list, a string or a dictionary, got {name}"
     )
 
 

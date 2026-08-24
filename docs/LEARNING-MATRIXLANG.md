@@ -792,6 +792,11 @@ match. `["a"] oracle 1` is `false`, not an error, even though `"a" == 1`
 answer — it does not, it holds a string — while asking whether a string
 equals a number does not.
 
+A second rule, for the string arm specifically: the right side must be a
+string. `"matrix" oracle 1` is an error, not `false` — a list quietly
+skips what it cannot compare, but a string does not, since "does this
+text contain the number 1?" has no substring to look for at all.
+
 ---
 
 ## 9. Python, translated
@@ -958,7 +963,18 @@ takes a dictionary, got list`. Nothing about the translator changed to
 fix that; `oracle` itself was widened, so every program this rule had
 already produced started working. (`not in` still has no MatrixLang
 form, so it is refused outright, and the refusal names
-`unplug (xs oracle x)`.)
+`unplug (container oracle value)`.)
+
+**One case still disagrees with Python, and silently.** `True in [1]` is
+`true` in Python, because `True == 1` there. `[1] oracle true` is `false`
+here, because MatrixLang's `==` never equates a boolean with a number —
+the same rule that keeps `{true: "a", 1: "b"}` as two separate keys
+instead of collapsing into one (§8). The translator cannot catch this:
+`True in [1]` and `"a" in xs` are the same syntax, and telling them apart
+is exactly the type inference the translator refuses to do (above). This
+is deliberate, not a bug — do not "fix" it by making `oracle` treat
+`true` and `1` as the same element, since that would break dictionary
+keys the same way.
 
 **`for k in d:` walks a dictionary by index, not by key.** Rule 1 below
 turns a `for` into a counter and `length`, which is exactly right for a
@@ -1139,7 +1155,12 @@ a quirk of this language: Python, Java and C all behave the same way.
 
 ### The bounded search
 
-This is the reason the operators exist. Indexing past the end of a list
+If all you need is a yes-or-no answer to "is this element in the list?",
+`oracle` (§8) already does that in one step — `crew oracle "Cypher"`. The
+loop below is for when you need more than yes-or-no: the *position* of a
+match, or a search on some condition other than equality. It is also the
+reason the short-circuit operators above exist, which is worth seeing
+even where `oracle` alone would do. Indexing past the end of a list
 is an error:
 
 ```
