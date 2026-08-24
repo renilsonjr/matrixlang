@@ -223,12 +223,42 @@ def test_jackout_beats_a_loop():
     assert run(source) == "4\n"
 
 
-def test_wake_still_counts_against_the_step_limit():
-    # Steps count executed statements, so neither keyword can be used to
-    # loop without being counted. A loop that glitches forever must hit
-    # the limit rather than hang.
+def test_glitch_still_counts_against_the_step_limit():
+    # Steps count executed statements, so `glitch` cannot be used to loop
+    # without being counted. A loop that glitches forever must hit the
+    # limit rather than hang.
     source = "dejavu true\n  glitch\nflatline\n"
     out = io.StringIO()
     with pytest.raises(RuntimeErrorML) as caught:
         Interpreter(out=out, max_steps=50).run(parse(lex(source)))
     assert "step limit" in caught.value.message
+
+
+def test_wake_still_counts_against_the_step_limit():
+    # `wake` can't be tested the same way as `glitch` above: the `While`
+    # branch in interpreter.py catches `_Wake` with `break`, not
+    # `continue`, so a loop that wakes immediately leaves rather than
+    # coming back around. There is no source that makes `wake` alone
+    # produce a runaway loop -- the scenario the sibling test above
+    # covers for `glitch` cannot happen for `wake` at all, by
+    # construction of the mechanism, not by absence of a test for it.
+    #
+    # What genuinely is `wake`'s relationship to the step limit, and
+    # is worth pinning down: reaching `wake` still spends a step like
+    # any other statement. It is not a free, uncounted control
+    # transfer. A `dejavu true` loop that wakes on its very first
+    # statement costs exactly two steps -- the `dejavu` line itself,
+    # then `wake` -- and never a third, because `wake` truly leaves.
+    # max_steps=1 must fail while executing `wake` (proving `wake` is
+    # counted, not skipped); max_steps=2 must be enough to finish
+    # (proving it costs no more than that, unlike `glitch`).
+    source = "dejavu true\n  wake\nflatline\n"
+
+    out = io.StringIO()
+    with pytest.raises(RuntimeErrorML) as caught:
+        Interpreter(out=out, max_steps=1).run(parse(lex(source)))
+    assert "step limit" in caught.value.message
+    assert caught.value.line == 2  # the `wake` statement itself
+
+    out = io.StringIO()
+    Interpreter(out=out, max_steps=2).run(parse(lex(source)))  # does not raise

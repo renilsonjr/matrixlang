@@ -1,5 +1,13 @@
 """The translator's refusal machinery, and its promise never to raise."""
 
+import io
+
+import pytest
+
+from matrixlang.errors import RuntimeErrorML
+from matrixlang.interpreter import Interpreter
+from matrixlang.lexer import lex
+from matrixlang.parser import parse
 from matrixlang.pytrans import Refusals, Translated, translate
 
 
@@ -287,6 +295,44 @@ def test_break_and_continue_are_no_longer_refused():
     assert isinstance(result, Translated)
     result = translate("for x in xs:\n    continue\n")
     assert isinstance(result, Translated)
+
+
+def test_a_bare_break_outside_a_loop_now_translates():
+    # Before `wake`/`glitch` existed, `Break` sat in the refusal
+    # catalogue unconditionally, so a bare `break` at module level --
+    # invalid Python outside a loop, but `ast.parse` accepts what
+    # `compile` would reject -- was refused at translate time. That
+    # catalogue entry is gone now that `break` maps to `wake`, so this
+    # same input translates instead of refusing. This is a deliberate
+    # decision, not an oversight: the input was invalid Python either
+    # way, and the interpreter's own "'wake' outside a loop" points at
+    # the real problem at least as well as a translate-time refusal
+    # did. Pinning down the new behaviour so a future change to it is
+    # a choice, not a surprise.
+    result = translate("break\n")
+    assert isinstance(result, Translated)
+    assert result.source == "wake\n"
+
+    out = io.StringIO()
+    with pytest.raises(RuntimeErrorML) as caught:
+        Interpreter(out=out).run(parse(lex(result.source)))
+    assert caught.value.message == "'wake' outside a loop"
+    assert caught.value.line == 1
+    assert caught.value.column == 1
+
+
+def test_a_bare_continue_outside_a_loop_now_translates():
+    # Same story as the `break` case above, for `continue` / `glitch`.
+    result = translate("continue\n")
+    assert isinstance(result, Translated)
+    assert result.source == "glitch\n"
+
+    out = io.StringIO()
+    with pytest.raises(RuntimeErrorML) as caught:
+        Interpreter(out=out).run(parse(lex(result.source)))
+    assert caught.value.message == "'glitch' outside a loop"
+    assert caught.value.line == 1
+    assert caught.value.column == 1
 
 
 def test_loop_else_is_still_refused():
