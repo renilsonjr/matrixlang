@@ -145,6 +145,43 @@ is not the shape they expected.
 later addition must either reuse an existing word, live in the translator, or
 argue for a larger block.
 
+## Precision: two contexts, one rule
+
+Found while planning, and it would have been a silent regression.
+
+`Decimal` rounds every operation to its context precision, which defaults to 28
+significant digits. At that default:
+
+```
+Decimal("9" * 40) * 2   ->   2.000000000000000000000000000E+40
+```
+
+Today `int` gives the exact `19999999999999999999999999999999999999998`. So the
+naive move loses precision **and** leaks scientific notation, on a value the
+language currently handles exactly. Raising the precision to fix it makes
+`1 / 3` produce that many digits instead.
+
+**The rule: division is the only operation that can go on forever, so it is the
+only one that rounds.**
+
+- `+`, `-`, `*` and `%` run in a context with precision **1000** — high enough
+  that any number a program can display is exact, since display is capped well
+  below that.
+- `/` runs in a context with precision **28**, which is where
+  `0.3333333333333333333333333333` comes from.
+
+Verified end to end:
+
+| Expression | Result |
+| --- | --- |
+| `0.1 + 0.2` | `0.3` |
+| `("9" × 40) * 2` | `19999999999999999999999999999999999999998` |
+| `49.90 + 120.00` | `169.90` |
+| `2.50 * 2` | `5.00` |
+| `1 / 3` | `0.3333333333333333333333333333` |
+| `7 / 2` | `3.5` |
+| `-7 / 2` | `-3.5` |
+
 ## The literal form
 
 **Digits are required on both sides of the point.** `0.5` is a number; `.5` and
