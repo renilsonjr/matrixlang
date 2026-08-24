@@ -15,7 +15,7 @@ real programs outranks one that has blocked none, whatever either looks like on
 paper.
 
 **Where the truth lives:** `src/matrixlang/pytrans/translate.py`'s `_DESCRIBE`
-catalogue is what the translator can actually refuse — 51 entries at the time of
+catalogue is what the translator can actually refuse — 49 entries at the time of
 writing. This document is a reading of that catalogue plus judgement about
 order. If the two ever disagree, the catalogue is right.
 
