@@ -8,6 +8,7 @@ unary operands (R-PAREN-3) emits source that parses to a DIFFERENT tree
 
 import ast
 import string
+from decimal import Decimal
 from pathlib import Path
 
 from matrixlang.glyphs import GLYPHS
@@ -38,7 +39,7 @@ def prog(*statements) -> Program:
 
 
 def test_numbers_render_in_decimal():
-    assert render_ascii(prog(Trace(NumberLiteral(42)))) == "trace 42\n"
+    assert render_ascii(prog(Trace(NumberLiteral(Decimal(42))))) == "trace 42\n"
 
 
 def test_strings_render_quoted_with_escapes_reapplied():
@@ -60,16 +61,16 @@ def test_booleans_render_in_the_language_s_spelling():
 
 def test_r_paren_1_lower_precedence_children_get_parens():
     tree = prog(
-        Trace(Binary(Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2)),
-                     TokenType.STAR, NumberLiteral(3)))
+        Trace(Binary(Binary(NumberLiteral(Decimal(1)), TokenType.PLUS, NumberLiteral(Decimal(2))),
+                     TokenType.STAR, NumberLiteral(Decimal(3))))
     )
     assert render_ascii(tree) == "trace (1 + 2) * 3\n"
 
 
 def test_r_paren_1_flat_left_chains_need_no_parens():
     tree = prog(
-        Trace(Binary(Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2)),
-                     TokenType.PLUS, NumberLiteral(3)))
+        Trace(Binary(Binary(NumberLiteral(Decimal(1)), TokenType.PLUS, NumberLiteral(Decimal(2))),
+                     TokenType.PLUS, NumberLiteral(Decimal(3))))
     )
     assert render_ascii(tree) == "trace 1 + 2 + 3\n"
 
@@ -78,19 +79,19 @@ def test_r_paren_2_equal_precedence_right_children_get_parens():
     # Binary(1, +, Binary(2, +, 3)) is NOT the tree '1 + 2 + 3' parses to.
     # Rendering it without parens changes the tree; for '-' and '/' it
     # changes the VALUE: 10 - (3 - 2) is 9, 10 - 3 - 2 is 5.
-    plus = prog(Trace(Binary(NumberLiteral(1), TokenType.PLUS,
-                             Binary(NumberLiteral(2), TokenType.PLUS,
-                                    NumberLiteral(3)))))
+    plus = prog(Trace(Binary(NumberLiteral(Decimal(1)), TokenType.PLUS,
+                             Binary(NumberLiteral(Decimal(2)), TokenType.PLUS,
+                                    NumberLiteral(Decimal(3))))))
     assert render_ascii(plus) == "trace 1 + (2 + 3)\n"
 
-    minus = prog(Trace(Binary(NumberLiteral(10), TokenType.MINUS,
-                              Binary(NumberLiteral(3), TokenType.MINUS,
-                                     NumberLiteral(2)))))
+    minus = prog(Trace(Binary(NumberLiteral(Decimal(10)), TokenType.MINUS,
+                              Binary(NumberLiteral(Decimal(3)), TokenType.MINUS,
+                                     NumberLiteral(Decimal(2))))))
     assert render_ascii(minus) == "trace 10 - (3 - 2)\n"
 
-    slash = prog(Trace(Binary(NumberLiteral(8), TokenType.SLASH,
-                              Binary(NumberLiteral(4), TokenType.SLASH,
-                                     NumberLiteral(2)))))
+    slash = prog(Trace(Binary(NumberLiteral(Decimal(8)), TokenType.SLASH,
+                              Binary(NumberLiteral(Decimal(4)), TokenType.SLASH,
+                                     NumberLiteral(Decimal(2))))))
     assert render_ascii(slash) == "trace 8 / (4 / 2)\n"
 
 
@@ -99,13 +100,13 @@ def test_r_paren_3_binary_operands_of_unary_get_parens():
     # as Binary(Unary(-,2), *, 3): same value here, different tree — and
     # for '+' a different VALUE: -(2 + 3) is -5, -2 + 3 is 1.
     tree = prog(Trace(Unary(TokenType.MINUS,
-                            Binary(NumberLiteral(2), TokenType.STAR,
-                                   NumberLiteral(3)))))
+                            Binary(NumberLiteral(Decimal(2)), TokenType.STAR,
+                                   NumberLiteral(Decimal(3))))))
     assert render_ascii(tree) == "trace -(2 * 3)\n"
 
 
 def test_unary_needs_no_parens_for_atoms_or_nested_unary():
-    assert render_ascii(prog(Trace(Unary(TokenType.MINUS, NumberLiteral(5))))) == (
+    assert render_ascii(prog(Trace(Unary(TokenType.MINUS, NumberLiteral(Decimal(5)))))) == (
         "trace -5\n"
     )
     tree = prog(Trace(Unary(TokenType.MINUS, Unary(TokenType.MINUS, Name("x")))))
@@ -189,12 +190,12 @@ def test_an_empty_program_renders_empty():
 def test_the_glyph_face_maps_structure_and_only_structure():
     # ﾄ=trace ﾀ=+ ｧ=1 ｨ=2. Identifiers stay ASCII (D-03: in a wall of
     # green, the Latin text is the thing you need to find).
-    tree = prog(Trace(Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2))))
+    tree = prog(Trace(Binary(NumberLiteral(Decimal(1)), TokenType.PLUS, NumberLiteral(Decimal(2)))))
     assert render_glyph(tree) == "ﾄ ｧ ﾀ ｨ\n"
 
 
 def test_glyph_digits_map_per_digit():
-    assert render_glyph(prog(Trace(NumberLiteral(42)))) == "ﾄ ｪｨ\n"
+    assert render_glyph(prog(Trace(NumberLiteral(Decimal(42))))) == "ﾄ ｪｨ\n"
 
 
 def test_identifiers_strings_and_comment_text_bypass_the_table():
@@ -207,7 +208,7 @@ def test_identifiers_strings_and_comment_text_bypass_the_table():
 
 def test_a_partial_face_renders_mixed_source():
     # Any subset of the table is a legal face — §6.3's mixed-face claim.
-    tree = prog(Trace(Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2))))
+    tree = prog(Trace(Binary(NumberLiteral(Decimal(1)), TokenType.PLUS, NumberLiteral(Decimal(2)))))
     assert render(tree, {"trace": "ﾄ"}) == "ﾄ 1 + 2\n"
 
 

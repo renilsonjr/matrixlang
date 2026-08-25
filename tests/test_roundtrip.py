@@ -382,19 +382,46 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     # did not fall at all -- the exact same reshuffle helps some shapes
     # and hurts others, and there is no way to predict which from the
     # kind list alone.
-    for seed in range(1000):
+    #
+    # Updated a third time (Task 6, decimal literals): `_NUMBERS` grew
+    # from 6 entries to 10 (whole numbers plus four Decimal literals,
+    # one of them a trailing-zero shape needed elsewhere). NumberLiteral
+    # sits behind an atom draw that every expression bottoms out at, so
+    # widening that one list reshuffles the RNG stream for every tree,
+    # same mechanism as the two changes above. Measured at 1000 seeds,
+    # before -> after this change:
+    #   splice                    492 -> 507
+    #   fork                      535 -> 515
+    #   unplug                     99 -> 107
+    #   unplug_over_binary         24 ->  29
+    #   fork_over_splice           16 ->  19
+    #   logical_over_comparison   140 -> 145
+    #   splice_over_fork           15 ->  11
+    #   unplug_under_eq             1 ->   0   <- went to zero, the rest stayed positive
+    #   unplug_over_splice          2 ->   3
+    # Only `unplug_under_eq` crossed to zero; every other shape in this
+    # test stayed comfortably above it, positive in both directions same
+    # as the unary-list change. This is an honest fall in the shape's
+    # real generation probability, not a reshuffling artifact that
+    # would wash out at a slightly wider range: at 1000 seeds its lone
+    # hit is simply gone, not merely moved late. Scanning further out,
+    # its first occurrence in the new stream is seed 1075 (6 hits by
+    # seed 2000, versus the single hit at seed 145 in the pre-Task-6
+    # stream) -- so the range widens to 2000, comfortably past that
+    # first occurrence, rather than to some value that barely clears it.
+    for seed in range(2000):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert splice, "no splice in 1000 seeds"
-    assert fork, "no fork in 1000 seeds"
-    assert unplug, "no unplug in 1000 seeds"
-    assert unplug_over_binary, "no `unplug (a == b)` shape in 1000 seeds"
-    assert fork_over_splice, "no `a fork (b splice c)` shape in 1000 seeds"
-    assert logical_over_comparison, "no logical-over-comparison shape in 1000 seeds"
-    assert splice_over_fork, "no `a splice (b fork c)` shape in 1000 seeds"
-    assert unplug_under_eq, "no `(unplug a) == b` shape in 1000 seeds"
-    assert unplug_over_splice, "no `unplug (a splice b)` shape in 1000 seeds"
+    assert splice, "no splice in 2000 seeds"
+    assert fork, "no fork in 2000 seeds"
+    assert unplug, "no unplug in 2000 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 2000 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 2000 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 2000 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 2000 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 2000 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 2000 seeds"
 
 
 def test_the_generator_produces_every_unary_operator():
@@ -659,3 +686,68 @@ def test_the_generator_produces_the_loop_control_shapes_too():
     assert counts["wake"], "no `wake` in 300 seeds — the property proves nothing about it"
     assert counts["glitch"], "no `glitch` in 300 seeds"
     assert counts["in_loop"], "no loop-control statement INSIDE a loop body in 300 seeds"
+
+
+def test_the_generator_produces_decimal_literals_too():
+    # A NumberLiteral holding a whole number round-trips through a code
+    # path that never touches the point, so a corpus of whole numbers
+    # would leave the decimal render completely untested while the
+    # property stayed green.
+    from decimal import Decimal
+
+    from matrixlang.nodes import IndexAssign, NumberLiteral
+
+    counts = {"whole": 0, "fractional": 0, "trailing_zero": 0}
+
+    def walk_expr(expr):
+        if isinstance(expr, NumberLiteral):
+            if expr.value == expr.value.to_integral_value():
+                counts["whole"] += 1
+            else:
+                counts["fractional"] += 1
+            if str(expr.value).endswith("0") and "." in str(expr.value):
+                counts["trailing_zero"] += 1
+        elif isinstance(expr, Unary):
+            walk_expr(expr.operand)
+        elif isinstance(expr, Binary):
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
+
+    def walk_stmt(stmt):
+        if isinstance(stmt, IndexAssign):
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    print("decimal corpus:", counts)
+    assert counts["whole"], "no whole-number literal in 300 seeds"
+    assert counts["fractional"], "no decimal literal in 300 seeds"
+    assert counts["trailing_zero"], (
+        "no trailing-zero literal in 300 seeds — the one shape the "
+        "round-trip property cannot police, since 2.50 == 2.5"
+    )

@@ -9,6 +9,7 @@ construction -- it came from the same classes the parser produces.
 """
 
 import ast
+from decimal import Decimal
 
 from matrixlang.errors import TooDeepError, recursion_guard
 from matrixlang.nodes import (
@@ -565,7 +566,7 @@ class _Translator:
                 holder = self._fresh("xs")
                 before.append(Declare(holder, value))
             self.substitutions[node.target.id] = Index(Name(holder), Name(counter))
-            before.append(Declare(counter, NumberLiteral(0)))
+            before.append(Declare(counter, NumberLiteral(Decimal(0))))
             condition = Binary(
                 Name(counter), TokenType.LT, Unary(TokenType.LENGTH, Name(holder))
             )
@@ -588,7 +589,7 @@ class _Translator:
         del self.substitutions[node.target.id]
         body = _increment_before_glitches(body, counter)
         body.append(
-            Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(1)))
+            Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(Decimal(1))))
         )
         return before + [While(condition, body)]
 
@@ -599,9 +600,9 @@ class _Translator:
             and isinstance(node.func, ast.Name)
             and node.func.id == "range"
         ):
-            return NumberLiteral(0), None
+            return NumberLiteral(Decimal(0)), None
         if len(node.args) == 1:
-            return NumberLiteral(0), self.expression(node.args[0])
+            return NumberLiteral(Decimal(0)), self.expression(node.args[0])
         if len(node.args) == 2:
             return self.expression(node.args[0]), self.expression(node.args[1])
         raise _Unsupported(
@@ -745,7 +746,7 @@ class _Translator:
                 )
             )
         if isinstance(value, int):
-            return NumberLiteral(value)
+            return NumberLiteral(Decimal(value))
         if isinstance(value, str):
             return StringLiteral(value)
         if isinstance(value, complex):
@@ -1078,7 +1079,7 @@ def _increment_before_glitches(body: list[Stmt], counter: str) -> list[Stmt]:
     for statement in body:
         if isinstance(statement, Glitch):
             out.append(
-                Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(1)))
+                Assign(counter, Binary(Name(counter), TokenType.PLUS, NumberLiteral(Decimal(1))))
             )
             out.append(statement)
         elif isinstance(statement, If):
@@ -1144,7 +1145,7 @@ def _hoist_declares(
                 if id(statement) in placeholders:
                     hoisted.append(statement)
                     continue
-                placeholder = Declare(statement.name, NumberLiteral(0))
+                placeholder = Declare(statement.name, NumberLiteral(Decimal(0)))
                 placeholders[id(placeholder)] = placeholder
                 hoisted.append(placeholder)
                 out.append(_as_assignment(statement))

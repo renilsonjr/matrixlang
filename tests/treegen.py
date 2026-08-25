@@ -59,6 +59,7 @@ treeview.py) a new statement kind must touch.
 """
 
 import random
+from decimal import Decimal
 
 from matrixlang.nodes import (
     Assign,
@@ -100,7 +101,13 @@ _STRING_CHARS = [
     "a", "b", "z", " ", "_", '"', "\\", "\n", "0", "7", "#", "ｱ", "flatline",
 ]
 _COMMENT_CHARS = ["a", "b", " ", "9", "+", "#", "ｱ", '"', "flatline"]
-_NUMBERS = [0, 1, 7, 10, 42, 305]
+# Decimals as well as whole numbers, and a trailing zero among them --
+# `2.50` renders differently from `2.5` while comparing equal, so the
+# corpus has to contain one for the render to be exercised at all.
+_NUMBERS = [
+    Decimal(0), Decimal(1), Decimal(7), Decimal(10), Decimal(42), Decimal(305),
+    Decimal("0.5"), Decimal("2.50"), Decimal("1.25"), Decimal("0.001"),
+]
 _BINARY_OPS = [
     TokenType.EQ, TokenType.NEQ,
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,

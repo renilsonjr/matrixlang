@@ -15,6 +15,8 @@ per block depth, one statement per line, single spaces around binary
 operators, no blank lines, trailing comments after two spaces.
 """
 
+from decimal import Decimal
+
 from matrixlang.glyphs import GLYPHS
 from matrixlang.nodes import (
     Call,
@@ -342,10 +344,17 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
     raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
 
-def _number(value: int, face: Face) -> str:
-    # §6.2: digits map per-digit, positionally. NumberLiteral values are
-    # non-negative — a minus sign is a Unary node, never part of a number.
-    return "".join(_map(face, digit) for digit in str(value))
+def _number(value: Decimal, face: Face) -> str:
+    # §6.2: digits map per-digit, positionally, and the point is one more
+    # slot in the same table. format(value, "f") rather than str(): str
+    # emits scientific notation past certain exponents, which would not
+    # re-lex. NumberLiteral values are non-negative — a minus sign is a
+    # Unary node, never part of a number.
+    #
+    # The text is what matters, not the value: Decimal("2.50") equals
+    # Decimal("2.5"), so dropping a trailing zero here would still satisfy
+    # the round-trip property while changing what the program means.
+    return "".join(_map(face, ch) for ch in format(value, "f"))
 
 
 def _string(value: str) -> str:

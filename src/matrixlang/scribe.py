@@ -9,6 +9,7 @@ this module only produces.
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 
 from matrixlang.nodes import (
     Assign, Binary, Declare, Expr, FunctionDef, If, Index, ListLiteral, Name,
@@ -261,8 +262,8 @@ def _num_or_name(token: str) -> Expr:
     if re.fullmatch(r"-?\d+", token):
         value = int(token)
         if value < 0:
-            return Unary(op=TokenType.MINUS, operand=NumberLiteral(value=-value))
-        return NumberLiteral(value=value)
+            return Unary(op=TokenType.MINUS, operand=NumberLiteral(value=Decimal(-value)))
+        return NumberLiteral(value=Decimal(value))
     return Name(ident=token)
 
 
@@ -316,13 +317,13 @@ _Intent(
 
 def _build_double(m):
     a = _num_or_name(m.group("a"))
-    expr = Binary(left=a, op=TokenType.STAR, right=NumberLiteral(value=2))
+    expr = Binary(left=a, op=TokenType.STAR, right=NumberLiteral(value=Decimal(2)))
     return Program(statements=[Trace(value=expr)])
 
 
 def _build_half(m):
     a = _num_or_name(m.group("a"))
-    expr = Binary(left=a, op=TokenType.SLASH, right=NumberLiteral(value=2))
+    expr = Binary(left=a, op=TokenType.SLASH, right=NumberLiteral(value=Decimal(2)))
     return Program(statements=[Trace(value=expr)])
 
 
@@ -446,7 +447,7 @@ def _counter_step(name: str, step: int) -> Assign:
         value=Binary(
             left=Name(ident=name),
             op=op,
-            right=NumberLiteral(value=abs(step)),
+            right=NumberLiteral(value=Decimal(abs(step))),
         ),
     )
 
@@ -530,7 +531,7 @@ _INDEX_MAX = len(_DEMO_LIST) - 1
 def _demo_list(name: str) -> Declare:
     return Declare(
         name=name,
-        value=ListLiteral(elements=[NumberLiteral(value=v) for v in _DEMO_LIST]),
+        value=ListLiteral(elements=[NumberLiteral(value=Decimal(v)) for v in _DEMO_LIST]),
     )
 
 
@@ -609,7 +610,7 @@ def _build_double_fn(m):
         FunctionDef(
             name="double",
             params=["n"],
-            body=[Return(value=Binary(left=Name(ident="n"), op=TokenType.STAR, right=NumberLiteral(value=2)))],
+            body=[Return(value=Binary(left=Name(ident="n"), op=TokenType.STAR, right=NumberLiteral(value=Decimal(2))))],
         ),
     ])
 
