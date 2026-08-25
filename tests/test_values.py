@@ -6,7 +6,6 @@ from matrixlang.values import (
     BadKey,
     check_key,
     is_bool,
-    is_int,
     is_str,
     to_display,
     type_name,
@@ -390,4 +389,88 @@ def test_a_list_key_is_rejected():
 def test_a_dictionary_key_is_rejected():
     with pytest.raises(BadKey):
         check_key({})
+
+
+def test_a_number_is_a_decimal():
+    from decimal import Decimal
+
+    from matrixlang.values import is_number, is_whole
+
+    assert is_number(Decimal("1.5"))
+    assert is_number(Decimal(3))
+    assert not is_number(3)
+    assert not is_number("3")
+    assert not is_number(True)
+
+
+def test_whole_means_nothing_after_the_point():
+    from decimal import Decimal
+
+    from matrixlang.values import is_whole
+
+    assert is_whole(Decimal(3))
+    assert is_whole(Decimal("3.0"))
+    assert not is_whole(Decimal("3.5"))
+    assert not is_whole("3")
+
+
+def test_the_type_name_is_number():
+    from decimal import Decimal
+
+    from matrixlang.values import type_name
+
+    assert type_name(Decimal(3)) == "number"
+    assert type_name(Decimal("3.5")) == "number"
+
+
+def test_a_boolean_is_still_not_a_number():
+    # The bool/int separation that check_key depends on must survive the
+    # move to Decimal. type(True) is bool, never Decimal, so it holds by
+    # construction -- but it is load-bearing enough to pin.
+    from matrixlang.values import is_number, type_name
+
+    assert not is_number(True)
+    assert type_name(True) == "boolean"
+
+
+def test_whole_numbers_display_without_a_point():
+    from decimal import Decimal
+
+    from matrixlang.values import to_display
+
+    assert to_display(Decimal(3)) == "3"
+    assert to_display(Decimal("3.0")) == "3.0"
+    assert to_display(Decimal("2.50")) == "2.50"
+
+
+def test_display_never_uses_scientific_notation():
+    # str(Decimal("1e3")) is "1E+3". A reader must never see that.
+    from decimal import Decimal
+
+    from matrixlang.values import to_display
+
+    assert to_display(Decimal("1e3")) == "1000"
+    assert to_display(Decimal("1e-3")) == "0.001"
+
+
+def test_arithmetic_is_exact_where_it_can_be():
+    from decimal import Decimal
+
+    from matrixlang.values import EXACT
+
+    assert EXACT.add(Decimal("0.1"), Decimal("0.2")) == Decimal("0.3")
+    assert EXACT.multiply(Decimal("9" * 40), Decimal(2)) == Decimal(
+        "1" + "9" * 39 + "8"
+    )
+
+
+def test_division_rounds_where_it_must():
+    from decimal import Decimal
+
+    from matrixlang.values import DIVISION
+
+    assert DIVISION.divide(Decimal(1), Decimal(3)) == Decimal(
+        "0.3333333333333333333333333333"
+    )
+    assert DIVISION.divide(Decimal(7), Decimal(2)) == Decimal("3.5")
 

@@ -19,6 +19,7 @@ on `nodes` or the interpreter is created.
 
 import sys
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_EVEN, Context, Decimal
 from typing import Any
 
 
@@ -132,8 +133,37 @@ class TooManyDigits(Exception):
         super().__init__(f"more than {limit} digits")
 
 
-def is_int(value: object) -> bool:
-    return type(value) is int
+# Two contexts, one rule: division is the only operation that can go on
+# forever, so it is the only one that rounds.
+#
+# Decimal rounds every operation to its context precision, and the default
+# 28 is not enough -- `Decimal("9" * 40) * 2` comes back as
+# 2.000000000000000000000000000E+40, losing precision AND leaking
+# scientific notation on a value `int` handled exactly. 1000 is far above
+# anything display can emit, so `+ - * %` are exact for every number a
+# program can show a reader.
+EXACT = Context(prec=1000, rounding=ROUND_HALF_EVEN)
+# 28 is where 0.3333333333333333333333333333 comes from.
+DIVISION = Context(prec=28, rounding=ROUND_HALF_EVEN)
+
+
+def is_number(value: object) -> bool:
+    """The language's one numeric type.
+
+    `type(value) is Decimal`, not isinstance, for the same reason every
+    other predicate here is exact: a bool is not a number, and an
+    isinstance check on a Decimal subclass would let something else in.
+    """
+    return type(value) is Decimal
+
+
+def is_whole(value: object) -> bool:
+    """A number with nothing after the point.
+
+    Indexes, `length`'s result and dictionary keys all need this. `3.0`
+    is whole; `3.5` is not.
+    """
+    return is_number(value) and value == value.to_integral_value()
 
 
 def is_bool(value: object) -> bool:
@@ -157,23 +187,27 @@ def is_dict(value: object) -> bool:
 
 
 def check_key(key: object) -> None:
-    """Refuse keys that cannot work, before one reaches a dictionary.
+    """Strings and numbers only.
 
-    Strings and integers only. Booleans are refused because CPython gives
-    True and 1 the same hash and calls them equal, so `{true: "a", 1: "b"}`
-    would collapse into one entry -- the reader writes two keys and gets
-    one, with nothing to tell them. Lists and dictionaries are refused
-    because they are mutable: a key that changes after insertion is a
-    lookup that stops working for reasons invisible where it is written.
+    Booleans are refused because CPython gives True and 1 the same hash
+    and calls them equal, so `{true: "a", 1: "b"}` would collapse into one
+    entry -- the reader writes two keys and gets one, with nothing to tell
+    them. Lists and dictionaries are refused because they are mutable: a
+    key that changes after insertion is a lookup that stops working for
+    reasons invisible where it is written.
+
+    `Decimal("1")` and `Decimal("1.0")` hash equal, so `{1: "a", 1.0: "b"}`
+    collapses to one entry too -- matching Python, where the same thing
+    happens, so it is intended rather than the bug the bool case describes.
     """
-    if is_bool(key) or not (is_str(key) or is_int(key)):
+    if is_bool(key) or not (is_str(key) or is_number(key)):
         raise BadKey(type_name(key))
 
 
 def type_name(value: object) -> str:
     """The language's own word for a value's type, for error messages."""
-    if is_int(value):
-        return "integer"
+    if is_number(value):
+        return "number"
     if is_bool(value):
         return "boolean"
     if is_str(value):
@@ -228,15 +262,20 @@ def _display(value: object, nested: bool, seen: frozenset) -> str:
             for k, v in value.items()
         )
         return "{" + inner + "}"
-    try:
-        return str(value)
-    except ValueError:
-        # Integers only, and only very long ones: CPython caps str(int)
-        # at sys.get_int_max_str_digits(). Caught rather than
-        # length-checked beforehand, so the limit reported is the one the
-        # running interpreter actually enforces — it is settable at
-        # runtime — rather than a 4300 copied into this file.
-        raise TooManyDigits(sys.get_int_max_str_digits()) from None
+    if is_number(value):
+        # format(value, "f") rather than str(value): str emits scientific
+        # notation for large and small exponents -- str(Decimal("1e3")) is
+        # "1E+3" -- and a reader must never see that. "f" is always
+        # positional, and preserves trailing zeros, which are significant
+        # here (2.50 * 2 is 5.00).
+        if abs(value.adjusted()) > sys.get_int_max_str_digits():
+            # The positional form would be enormous. Same cap and same
+            # reasoning as the old str(int) guard: report the limit the
+            # running interpreter actually enforces rather than a
+            # constant copied into this file.
+            raise TooManyDigits(sys.get_int_max_str_digits())
+        return format(value, "f")
+    return str(value)
 
 
 def equal(left: object, right: object) -> bool:
