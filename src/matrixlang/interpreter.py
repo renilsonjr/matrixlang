@@ -46,20 +46,23 @@ from matrixlang.nodes import (
 )
 from matrixlang.tokens import TokenType
 from matrixlang.values import (
+    EXACT,
     NOTHING,
     BadKey,
     CyclicValue,
     Function,
     Incomparable,
+    NumberOverflow,
     TooManyDigits,
     check_key,
     equal,
     is_bool,
     is_dict,
     is_function,
-    is_int,
     is_list,
+    is_number,
     is_str,
+    is_whole,
     to_display,
     type_name,
 )
@@ -591,7 +594,7 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     ) from None
-            self._require_int(operand, expr.operand, "operand of unary '-'")
+            self._require_number(operand, expr.operand, "operand of unary '-'")
             return -operand
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
             # Intercepted HERE, not in _binary, and that is the whole
@@ -929,12 +932,12 @@ class Interpreter:
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
         if node.op in _ORDERING_OPS:
-            # Not _require_int: that helper also serves unary minus and
-            # arithmetic, which still require integers. Ordering is now a
-            # rule about the PAIR — both integers or both strings — so it
+            # Not _require_number: that helper also serves unary minus and
+            # arithmetic, which still require numbers. Ordering is now a
+            # rule about the PAIR — both numbers or both strings — so it
             # gets its own check and reports the operator's position, the
             # way `cannot compare` and `cannot add` already do.
-            orderable = (is_int(left) and is_int(right)) or (
+            orderable = (is_number(left) and is_number(right)) or (
                 is_str(left) and is_str(right)
             )
             if not orderable:
@@ -972,27 +975,42 @@ class Interpreter:
         raise AssertionError(f"unhandled equality operator: {node.op.name}")
 
     def _arithmetic(self, node: Binary, left: object, right: object) -> object:
-        self._require_int(left, node.left, "left operand")
-        self._require_int(right, node.right, "right operand")
-        if node.op is TokenType.PLUS:
-            return left + right
-        if node.op is TokenType.MINUS:
-            return left - right
-        if node.op is TokenType.STAR:
-            return left * right
+        self._require_number(left, node.left, "left operand")
+        self._require_number(right, node.right, "right operand")
+        try:
+            if node.op is TokenType.PLUS:
+                return EXACT.add(left, right)
+            if node.op is TokenType.MINUS:
+                return EXACT.subtract(left, right)
+            if node.op is TokenType.STAR:
+                return EXACT.multiply(left, right)
+        except NumberOverflow:
+            # Same shape as the TooManyDigits conversions above: values.py
+            # knows the result cannot be represented, this module knows
+            # where it was written. Newly reachable now that `+ - *` run
+            # through EXACT instead of Python's arbitrary-precision int --
+            # squaring a value about twenty times gets here well inside
+            # the step limit, and nothing but MatrixLangError may escape
+            # this interpreter (site/glue.py's run() promises that, and
+            # the promise has been broken six times already).
+            raise RuntimeErrorML(
+                "arithmetic result is too large to represent",
+                node.line,
+                node.column,
+            ) from None
         if node.op is TokenType.SLASH:
             if right == 0:
                 raise RuntimeErrorML("cannot divide by zero", node.line, node.column)
-            # Truncate toward zero. Python's // floors, which differs for
-            # negatives: -7 // 2 is -4, but the spec requires -3.
+            # Still truncating. Task 4 makes this true division -- it is
+            # the branch's one breaking change and gets its own commit.
             quotient = abs(left) // abs(right)
             return -quotient if (left < 0) != (right < 0) else quotient
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
-    def _require_int(self, value: object, node: Expr, role: str) -> None:
-        if not is_int(value):
+    def _require_number(self, value: object, node: Expr, role: str) -> None:
+        if not is_number(value):
             raise RuntimeErrorML(
-                f"{role} must be an integer, got {type_name(value)}",
+                f"{role} must be a number, got {type_name(value)}",
                 node.line,
                 node.column,
             )

@@ -191,6 +191,12 @@ class _GuardedContext(Context):
     reach here through the Decimal constructor itself (a lexer parsing a
     number token, say) -- that is out of this module's reach and is a
     later task's guard to add, not this one's.
+
+    Guarded: add, subtract, multiply, remainder, divide -- the five
+    assigned below. NOT guarded: power, abs, minus, plus, quantize,
+    compare and to_integral_value -- call those on a context and
+    decimal.Overflow escapes bare. Whoever wires one of those in next
+    needs to decide whether it should be guarded too.
     """
 
     add = _overflow_guarded(Context.add)
