@@ -38,3 +38,16 @@ def test_a_decimal_renders_in_the_glyph_face():
 def test_a_negative_decimal_keeps_its_sign_outside_the_literal():
     # NumberLiteral values are non-negative; the minus is a Unary node.
     assert ascii_face("trace -0.5\n") == "trace -0.5\n"
+
+
+def test_a_very_small_decimal_does_not_go_exponential():
+    # THE reason _number uses format(value, "f") rather than str(value):
+    # str(Decimal("0.0000001")) is "1E-7", which does not re-lex (the
+    # lexer has no notion of scientific notation, so it would stop at
+    # 'E' with a ParseError). _NUMBERS bottoms out at Decimal("0.001"),
+    # whose str() is still positional, so nothing in the property corpus
+    # exercises this -- it has to be pinned directly. Reverting _number
+    # to str(value) makes this the one test in the whole suite that goes
+    # red; every round-trip and every other render test stays green,
+    # because 1E-7 == 0.0000001 as *values* even though the text differs.
+    assert ascii_face("trace 0.0000001\n") == "trace 0.0000001\n"

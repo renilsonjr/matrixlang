@@ -544,14 +544,35 @@ def test_the_generator_produces_the_dictionary_shapes_too():
             for child in getattr(stmt, name, None) or []:
                 walk_stmt(child)
 
-    for seed in range(300):
+    # 600, not 300 (Task 6, decimal literals): `_NUMBERS` growing from 6
+    # entries to 10 reshuffled the RNG stream for every generated tree,
+    # same mechanism as the stage-9 widenings above. `dict_in_dict` was
+    # already the thinnest surviving shape here before that change --
+    # measured before -> after at 300 seeds: 7 -> 4 hits, the largest
+    # proportional fall of any shape in this file that stayed positive.
+    # Its hit seeds at 300 are [159, 252, 279, 299] -- the last hit lands
+    # on the FINAL seed in the range, which is fragile in a way a bare
+    # nonzero count does not show: any later reshuffle just as plausibly
+    # pushes that seed past 300 as it does any other, and Tasks 7-9 all
+    # still touch treegen. Widening to 600 buys real headroom rather than
+    # a value that barely clears zero: measured at 600 seeds, hit seeds
+    # are [159, 252, 279, 299, 348, 374, 469, 533, 583] -- 9 hits, spread
+    # across the range rather than clustered at the boundary, with the
+    # last one 17 seeds shy of the new cap rather than sitting on it.
+    # This is an honest read of where the shape's hits currently fall,
+    # not a claim that its real generation probability is unchanged --
+    # doubling the range roughly doubles the hit count for a shape whose
+    # rate did not change, which is consistent with what was measured
+    # here, but the point of recording seeds rather than just counts is
+    # that the NEXT reshuffle could move them again in either direction.
+    for seed in range(600):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert empty_dict, "no {} in 300 seeds"
-    assert populated_dict, "no populated dictionary in 300 seeds"
-    assert dict_in_dict, "no dictionary inside a dictionary in 300 seeds"
-    assert oracle, "no `oracle` binary in 300 seeds"
+    assert empty_dict, "no {} in 600 seeds"
+    assert populated_dict, "no populated dictionary in 600 seeds"
+    assert dict_in_dict, "no dictionary inside a dictionary in 600 seeds"
+    assert oracle, "no `oracle` binary in 600 seeds"
 
 
 def test_the_generator_produces_the_string_method_shapes_too():

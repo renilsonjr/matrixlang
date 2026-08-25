@@ -10,6 +10,7 @@ different line/column numbers, so positions carry compare=False.
 """
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from matrixlang.tokens import TokenType
 
@@ -30,7 +31,13 @@ class Expr(Node):
 
 @dataclass
 class NumberLiteral(Expr):
-    value: int
+    # Must be a Decimal, not a bare int -- this is load-bearing, not a
+    # hint. render.py's _number walks format(value, "f") character by
+    # character; handed a plain int, format(5, "f") silently succeeds as
+    # "5.000000" instead of raising, so a stray int here renders wrong
+    # (`trace 5.000000`) with no error anywhere, and the interpreter
+    # only catches the mistake later, at arithmetic.
+    value: Decimal
 
 
 @dataclass
