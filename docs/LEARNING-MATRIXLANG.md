@@ -75,13 +75,15 @@ tells you the name already exists somewhere above.
 
 | Type | Examples |
 | --- | --- |
-| integer | `0`, `42`, `-7` |
+| number | `0`, `42`, `-7`, `3.5`, `-0.25` |
 | boolean | `true`, `false` |
 | string | `"Neo"`, `""`, `"wake up"` |
 | list | `[1, 2, 3]`, `[]`, `["Neo", true]` |
 | dictionary | `{"id": 1}`, `{}` |
 
-No floats, no sets, and **no null**. If you are used to a language
+One number type, not two — there is no separate integer type to spill
+into or out of. `3` and `3.0` are the same value; more on what that
+means below. No sets, and **no null**. If you are used to a language
 where a missing value is `null` or `None`, there is nothing here that
 corresponds — a name either holds a value or does not exist. Lists and
 dictionaries each get their own section (§7, §8) once agents have been
@@ -96,13 +98,109 @@ mutation.
 trace 7 + 3        # 10
 trace 7 - 3        # 4
 trace 7 * 3        # 21
-trace 7 / 3        # 2
+trace 7 / 2        # 3.5
 ```
 
-Division **truncates toward zero**, so `-7 / 2` is `-3`, not `-4`. Most
-languages that floor would give you `-4`; this one rounds toward zero in
-both directions, which is the behaviour most people expect when they first
-meet it.
+`/` is **true division**, the same operation Python's `/` performs —
+`7 / 2` is `3.5`, not `3`. A division that does not come out even keeps
+going to 28 significant digits rather than stopping short or rounding to
+something misleadingly tidy:
+
+```
+trace 7 / 3
+```
+
+```
+2.333333333333333333333333333
+```
+
+### `%` is the remainder
+
+```
+trace 7 % 2         # 1
+trace -7 % 2        # 1
+trace 7 % -2        # -1
+trace -7 % -2       # -1
+```
+
+`%` follows **the sign of the right operand**, the same rule Python's `%`
+uses — not the sign of the left operand, which is what some other
+languages give you. That is why `-7 % 2` is `1`, not `-1`: the result
+takes the divisor's sign, not the dividend's. Even and odd are
+`n % 2 == 0` and `n % 2 != 0`, and that holds for negative `n` too,
+precisely because of this rule.
+
+### One number type, more precisely
+
+`3` and `3.0` compare equal:
+
+```
+trace 3 == 3.0
+```
+
+```
+true
+```
+
+A whole-number *result* of arithmetic prints without a point — `6 / 2`
+is `3`, not `3.0` — but a value that is written or computed with a
+fractional part keeps it, trailing zero and all:
+
+```
+trace 6 / 2
+trace 1.5 + 1.5
+trace 2.50
+```
+
+```
+3
+3.0
+2.50
+```
+
+That last line is not a typo: `2.50` and `2.5` are the same value
+(`2.50 == 2.5` is `true`), but the language does not quietly drop the
+zero you wrote. Trailing zeros are significant to *how a value prints*,
+even though they make no difference to *what it equals*.
+
+This exactness is also why `0.1 + 0.2` behaves the way you would hope,
+not the way binary floating point makes it behave in most languages:
+
+```
+trace 0.1 + 0.2
+```
+
+```
+0.3
+```
+
+The language stores `0.1` as the decimal digits `0.1`, not as the
+nearest binary fraction, so arithmetic on it never picks up the rounding
+error that gives other languages `0.30000000000000004`.
+
+### An index must be whole
+
+`xs[i]` requires `i` to be a whole number. `2` and `2.0` both work,
+because they are the same value; `2.5` does not, because there is no
+list element halfway between two positions:
+
+```
+construct xs = ["a", "b", "c"]
+trace xs[2.0]
+```
+
+```
+c
+```
+
+```
+construct xs = ["a", "b", "c"]
+trace xs[2.5]
+```
+
+```
+matrixlang: [line 2, column 9] an index must be a whole number, got 2.5
+```
 
 ### `+` joins strings too
 
@@ -113,7 +211,7 @@ trace "wake up, " + "Neo"     # wake up, Neo
 But never both at once:
 
 ```
-trace "n = " + 5              # error: cannot add string and integer
+trace "n = " + 5              # error: cannot add string and number
 ```
 
 There is no automatic conversion. If you want a number in a message, you
@@ -160,7 +258,7 @@ trace "Neo" < 5
 ```
 
 ```
-matrixlang: [line 1, column 13] cannot order string with integer
+matrixlang: [line 1, column 13] cannot order string with number
 ```
 
 ---
@@ -189,7 +287,7 @@ flatline
 **Conditions must be boolean.** There is no truthiness:
 
 ```
-redpill 1          # error: condition must be a boolean, got integer
+redpill 1          # error: condition must be a boolean, got number
 ```
 
 There is no `else if`. Nest instead:
@@ -559,7 +657,7 @@ trace n[0]
 ```
 
 ```
-matrixlang: [line 2, column 8] cannot index integer
+matrixlang: [line 2, column 8] cannot index number
 ```
 
 ```
@@ -567,7 +665,7 @@ trace [1] + 2
 ```
 
 ```
-matrixlang: [line 1, column 11] cannot add list and integer
+matrixlang: [line 1, column 11] cannot add list and number
 ```
 
 Indexing a string out of bounds gives the same message as a list, with
@@ -615,7 +713,7 @@ trace aluno
 ```
 
 A dictionary literal is `{`, comma-separated `key: value` pairs, `}`.
-**Keys are strings or integers only**, and like a list literal (§7),
+**Keys are strings or numbers only**, and like a list literal (§7),
 the whole thing is **one line, with no trailing comma**.
 
 ### Reading a value — `d["key"]`
@@ -833,23 +931,45 @@ and column, and, where one exists, the MatrixLang idiom to write instead.
 A program with five problems shows you all five in one pass, not one per
 attempt.
 
-**The subset:** `+`, `-`, `*` and comparisons, `print`, assignment (`=`
-and `+=`), `if`/`elif`/`else`, `while`, `for` over a list or `range(...)`,
-`def`/`return`, lists, dictionaries, `input()`, and f-strings. **Refused,
-always:** `class`, `try`/`except`, `import`, comprehensions, `lambda`,
-slicing, **both of Python's divisions**, and anything else MatrixLang
-genuinely cannot express — not a temporary gap, but the same "no floats,
-no sets, no null" boundary the rest of this guide draws around
-MatrixLang itself.
+**The subset:** `+`, `-`, `*`, `/`, `%` and comparisons, `print`,
+assignment (`=` and `+=`), `if`/`elif`/`else`, `while`, `for` over a list
+or `range(...)`, `def`/`return`, lists, dictionaries, `input()`, and
+f-strings. **Refused, always:** `class`, `try`/`except`, `import`,
+comprehensions, `lambda`, slicing, `//`, and anything else MatrixLang
+genuinely cannot express — not a temporary gap, but the same "no sets,
+no null" boundary the rest of this guide draws around MatrixLang itself.
 
 Division is worth a sentence, because MatrixLang has `/` and Python has
-two of them. Python's `/` gives a fraction (`7 / 2` is `3.5`) and there is
-no MatrixLang value for that; Python's `//` floors, and MatrixLang's `/`
-truncates toward zero, so the two agree on `7 // 2` and disagree on
-`-7 // 2` (`-4` in Python, `-3` here). Which one applies depends on the
-sign of a value that does not exist yet when the translator runs — the
-same thing that makes truthiness un-guessable (below) — so both are
-refused, and you write the `/` you meant in MatrixLang yourself.
+two of them. Python's `/` is true division, and so is MatrixLang's — the
+two agree everywhere, `7 / 2` is `3.5` in both — so `/` translates
+straight across:
+
+```python
+print(translate('a = 7\nb = 2\nprint(a / b)\n').source)
+```
+
+```
+construct a = 7
+construct b = 2
+trace a / b
+```
+
+`//` is the one Python operator this document's title claims and cannot
+deliver. Python's `//` floors (`-7 // 2` is `-4`); MatrixLang has no
+floor operator to translate it to, and the glyph table that would carry
+one is full — 56 slots used, 0 free (§13) — so there is no slot left to
+buy. This is not a translation gap the way truthiness (below) is; it is
+permanent, the same way `class` and `lambda` are permanent, and the
+refusal says so:
+
+```python
+result = translate('a = 7\nb = 2\nprint(a // b)\n')
+print(result.items[0].idiom)
+```
+
+```
+MatrixLang has no floor operator, and no free glyph slot is left to add one. `//` floors (`-7 // 2` is `-4` in Python) while MatrixLang's `/` is true division (`-7 / 2` here is `-3.5`); work out the floor yourself once you know the sign
+```
 
 ### The governing rule: syntax, not types
 
@@ -1098,7 +1218,7 @@ trace 1 splice true
 ```
 
 ```
-matrixlang: [line 1, column 7] 'splice' takes booleans, got integer
+matrixlang: [line 1, column 7] 'splice' takes booleans, got number
 ```
 
 ### `unplug` binds looser than comparison
@@ -1122,7 +1242,7 @@ trace (unplug n) == 1
 ```
 
 ```
-matrixlang: [line 2, column 8] 'unplug' takes a boolean, got integer
+matrixlang: [line 2, column 8] 'unplug' takes a boolean, got number
 ```
 
 ### `splice` and `fork` short-circuit
@@ -1146,7 +1266,7 @@ trace true splice 1
 ```
 
 ```
-matrixlang: [line 1, column 19] 'splice' takes booleans, got integer
+matrixlang: [line 1, column 19] 'splice' takes booleans, got number
 ```
 
 Same shape, same `1` on the right — one runs, one errors, because the
@@ -1326,9 +1446,10 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Twenty-four keywords, eleven operators, parentheses, a comma, two brackets,
-a pair of braces, a colon, ten digits, and the comment marker — 54 slots
-in all.
+Twenty-four keywords, twelve operators (`%` among them), parentheses, a
+comma, two brackets, a pair of braces, a colon, a decimal point, ten
+digits, and the comment marker — 56 slots in all. The table is full:
+0 slots free, and every one of those 56 is spoken for.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1338,7 +1459,7 @@ in all.
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
 | `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | `oracle` `ｵ` |
 | `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | `fold` `ﾊ` | `trim` `ﾘ` | `cleave` `ﾛ` |
-| `wake` `ﾉ` | `glitch` `ﾕ` | | | | | |
+| `wake` `ﾉ` | `glitch` `ﾕ` | `.` `ｰ` | `%` `ﾝ` | | | |
 
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1398,10 +1519,10 @@ The ones you will meet first:
 | --- | --- |
 | `'x' is already declared` | A second `construct` for the same name in the same scope |
 | `'x' is not declared — use 'construct' first` | Assigning or reading a name that does not exist. Often a typo |
-| `condition must be a boolean, got integer` | `redpill 1` — there is no truthiness |
-| `'splice' takes booleans, got integer` | An operand of `splice` or `fork` was not a boolean — same rule as `redpill` |
-| `cannot add string and integer` | `"n = " + 5`. There is no automatic conversion |
-| `cannot compare string with integer` | `==` across two types |
+| `condition must be a boolean, got number` | `redpill 1` — there is no truthiness |
+| `'splice' takes booleans, got number` | An operand of `splice` or `fork` was not a boolean — same rule as `redpill` |
+| `cannot add string and number` | `"n = " + 5`. There is no automatic conversion |
+| `cannot compare string with number` | `==` across two types |
 | `agent 'f' takes 2 arguments, got 1` | Wrong number of arguments |
 | `agent 'f' did not jack out a value` | Used the result of an agent that returns nothing |
 | `program exceeded the step limit — likely an infinite loop` | A loop that does not end — or a genuinely long program; see `--max-steps` |
@@ -1590,10 +1711,29 @@ echo "41" | .venv/bin/matrixlang run --no-window add.rain
 42
 ```
 
-`decode` is strict. It refuses text that is not a whole number, refuses a
-decimal point (this language has integers only), and refuses a value that is
-already a number — the same way `splice` refuses anything that is not a
-boolean rather than guessing what you meant.
+`decode` is strict, but it accepts exactly what the language's own number
+grammar accepts — which now includes a decimal point:
+
+```
+trace decode "5.5" + 1
+```
+
+```
+6.5
+```
+
+It refuses text that is not a number at all — no digits, more than one
+point, a point with nothing on one side of it — and refuses a value that
+is already a number, the same way `splice` refuses anything that is not
+a boolean rather than guessing what you meant:
+
+```
+trace decode "hi"
+```
+
+```
+matrixlang: [line 1, column 7] 'decode' needs a number, got "hi"
+```
 
 Spaces and tabs either side of the number are forgiven, and so is a leading
 `-`: `decode` reads ` -3 ` as `-3`. A leading `+` is not. The asymmetry is
@@ -1654,7 +1794,7 @@ true
 `encode` refuses two things outright, both about the value's shape
 rather than its type: a value that contains itself (a list or dictionary
 that holds itself, directly or indirectly, has no finite text form), and
-an integer past the same digit ceiling described below. A value nested
+a number past the same digit ceiling described below. A value nested
 too many levels deep also comes back refused, the same host recursion
 limit `trace` runs into rather than a rule `encode` itself enforces.
 Everything else comes back as text.
@@ -1671,7 +1811,7 @@ trace encode n + 1
 ```
 
 ```
-matrixlang: [line 2, column 16] cannot add string and integer
+matrixlang: [line 2, column 16] cannot add string and number
 ```
 
 `decode encode n == n` holds for every number the language can write out —
@@ -1756,7 +1896,9 @@ output, every time. The playground is built on that.
 
 Being clear about this saves more time than any feature list:
 
-- no floats, sets, or null
+- no sets, or null
+- no `//` — MatrixLang's `/` is true division, and there is no floor
+  operator to spell alongside it; the glyph table is full (§13)
 - no slicing (`name[0:2]`) and no string methods — indexing one character
   at a time (§7) is as far as string access goes
 - no removing a key from a dictionary (§8) — only reading, inserting, and
