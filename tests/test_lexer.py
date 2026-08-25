@@ -1,7 +1,7 @@
 import pytest
 
 from matrixlang.errors import LexError
-from matrixlang.glyphs import GLYPHS
+from matrixlang.glyphs import BLOCK_END, BLOCK_START, GLYPHS
 from matrixlang.lexer import lex
 from matrixlang.tokens import KEYWORDS, TokenType
 
@@ -365,19 +365,40 @@ def test_a_block_character_outside_the_table_is_still_an_error():
     # It had already drifted once besides: the comment said "the 32 mapped
     # glyphs" long after the table passed 32.
     #
-    # So the specimen is now DERIVED from the table rather than chosen.
-    # The guarantee is unchanged — a half-width form the table does not
-    # claim is an unknown-character error, never an identifier — but it can
-    # no longer go stale when a slot is filled, and it needs no comment
-    # saying how many slots there are, because it counts them.
+    # First fix derived the specimen from range(0xFF61, 0xFF9E) instead —
+    # wider than glyphs.py's own BLOCK_START (0xFF66), by five code
+    # points (U+FF61-FF65: halfwidth ideographic full stop, both corner
+    # brackets, comma, and the middle dot — punctuation, not katakana).
+    # Nothing in glyphs.py ever assigns a code point below BLOCK_START,
+    # so those five can NEVER enter GLYPHS — which meant the non-vacuity
+    # assertion below could never fire again no matter how full the
+    # table's REAL, assignable range got. That hid exactly the scenario
+    # it existed to catch, which is what happened the moment this task
+    # filled the table to 56/56.
+    #
+    # Second fix (this one): scan glyphs.py's own BLOCK_START..BLOCK_END,
+    # not a hand-picked bound and not the wider Unicode "Halfwidth and
+    # Fullwidth Forms" block. That range is now, by this task's own
+    # ledger (56 used, 0 free), genuinely and permanently fully claimed —
+    # `unclaimed` below is expected to be empty from this commit forward,
+    # not by accident of which slots happen to be free this week, but
+    # because there are no more slots, ever. The loop stays rather than
+    # getting deleted: if a later change ever widens BLOCK_END or frees a
+    # slot, this starts testing the freed code point again with no edit
+    # needed here — the assertion is capable of firing on that, unlike
+    # the range it replaces. What the assertion checks flipped along with
+    # it: it no longer demands a free slot exist (impossible to promise
+    # once the table is closed), it demands the table's real range and
+    # the ledger's "0 free" claim agree.
     unclaimed = [
-        chr(cp) for cp in range(0xFF61, 0xFF9E) if chr(cp) not in set(GLYPHS.values())
+        chr(cp)
+        for cp in range(BLOCK_START, BLOCK_END + 1)
+        if chr(cp) not in set(GLYPHS.values())
     ]
-    # If the block is ever fully claimed this property becomes untestable,
-    # and a vacuous pass is the worst way to find that out.
-    assert unclaimed, (
-        "every code point in the half-width block is a token now, so this "
-        "property cannot be tested — widen the block or delete this test"
+    assert not unclaimed, (
+        f"the ledger says 56 used / 0 free but {unclaimed!r} is still "
+        "unclaimed in glyphs.py's own BLOCK_START..BLOCK_END range — "
+        "update this test's expectation or fix the ledger"
     )
 
     for glyph in unclaimed:

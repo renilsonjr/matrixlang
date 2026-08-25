@@ -1121,8 +1121,27 @@ class Interpreter:
             # since. `to_integral_value` is the one Decimal instance
             # method that takes no context and cannot round or overflow,
             # so it is safe to call bare.
-            floor = EXACT.divide(left, right).to_integral_value(ROUND_FLOOR)
-            return EXACT.subtract(left, EXACT.multiply(floor, right))
+            #
+            # EXACT.divide and EXACT.multiply are both _GuardedContext
+            # methods, so either can raise NumberOverflow rather than a
+            # bare decimal.Overflow -- but NumberOverflow is not itself a
+            # MatrixLangError, so it still needs converting here, the
+            # same as + - * and / above. Reachable even when NEITHER
+            # operand overflows on its own: 19 squarings of 10 and 19
+            # squarings of 0.1 each land comfortably inside EXACT's
+            # +-999999 exponent range individually, but their quotient's
+            # exponent is (roughly) the DIFFERENCE of the two, which
+            # overflows -- the same shape of surprise as DIVISION's
+            # comment above, one level up in precision.
+            try:
+                floor = EXACT.divide(left, right).to_integral_value(ROUND_FLOOR)
+                return EXACT.subtract(left, EXACT.multiply(floor, right))
+            except NumberOverflow:
+                raise RuntimeErrorML(
+                    "arithmetic result is too large to represent",
+                    node.line,
+                    node.column,
+                ) from None
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
     def _require_number(self, value: object, node: Expr, role: str) -> None:

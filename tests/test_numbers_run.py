@@ -238,3 +238,25 @@ def test_even_and_odd():
 def test_remainder_binds_like_multiplication():
     # Same rung as * and /, as in Python: 1 + 7 % 2 is 1 + (7 % 2).
     assert run("trace 1 + 7 % 2\n") == "2\n"
+
+
+def test_a_runaway_remainder_reports_a_positioned_matrixlang_error():
+    # Mirrors test_a_runaway_multiplication_reports_a_positioned_matrixlang_error
+    # above. `%`'s floor/multiply/subtract all go through EXACT, same as
+    # `+ - *`, but unlike every other arithmetic operator had no
+    # try/except NumberOverflow around it. Neither operand overflows on
+    # its own here -- 19 squarings of 10 lands `a`'s exponent around
+    # +524288, 19 squarings of 0.1 lands `b`'s around -524288, both well
+    # inside EXACT's +-999999 range individually -- but `a % b`'s
+    # quotient exponent is roughly their DIFFERENCE, ~1048576, past
+    # EXACT's Emax, and that overflow happens inside EXACT.divide itself,
+    # before either to_integral_value or the final subtract. Without a
+    # guard this raises a bare values.NumberOverflow straight out of the
+    # interpreter -- exactly the promise ("nothing but MatrixLangError
+    # may escape") that test above already exists to police for `*`.
+    # 40 statements, well inside the step limit.
+    lines = ["construct a = 10"] + ["a = a * a"] * 19
+    lines += ["construct b = 0.1"] + ["b = b * b"] * 19
+    lines += ["trace a % b"]
+    error = fails("\n".join(lines) + "\n")
+    assert "too large" in error.message
