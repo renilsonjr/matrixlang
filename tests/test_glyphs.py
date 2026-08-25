@@ -4,7 +4,7 @@ from matrixlang.glyphs import BLOCK_END, BLOCK_START, GLYPHS, REVERSE
 from matrixlang.tokens import KEYWORDS
 
 
-def test_the_table_covers_exactly_the_54_slots():
+def test_the_table_covers_exactly_the_55_slots():
     # Language spec §3.1, plus Stage 6: 11 keywords (agent and jackout
     # join, length in Stage 7) + 11 operators + 2 parens + a comma +
     # 2 brackets + 10 digits + the '#' comment marker + Stage 9: 3 logical
@@ -13,6 +13,7 @@ def test_the_table_covers_exactly_the_54_slots():
     # + dictionaries: keymaker and oracle, and { } : for the literal.
     # + string methods: fold, trim and cleave.
     # + loop control: wake and glitch.
+    # + numbers: the decimal point.
     # Nothing more (identifiers and string contents stay ASCII, per D-03),
     # nothing less.
     expected = (
@@ -23,9 +24,10 @@ def test_the_table_covers_exactly_the_54_slots():
         | {"{", "}", ":"}
         | set(string.digits)
         | {"#"}
+        | {"."}
     )
     assert set(GLYPHS) == expected
-    assert len(expected) == 54
+    assert len(expected) == 55
 
 
 def test_the_glyph_budget_is_tracked_not_discovered():
@@ -40,13 +42,14 @@ def test_the_glyph_budget_is_tracked_not_discovered():
     # Loop control spends 2 -- wake and glitch -- so 4 - 2 = 2 left. Both
     # survivors are non-syllabic marks, held for the punctuation the
     # numbers item needs.
+    # Numbers spends 1 -- the decimal point -- so 2 - 1 = 1 left.
     # Finite, and worth knowing.
     free = sum(
         1
         for code in range(BLOCK_START, BLOCK_END + 1)
         if chr(code) not in set(GLYPHS.values())
     )
-    assert free == 2
+    assert free == 1
 
 
 def test_the_mapping_is_bijective():

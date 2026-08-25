@@ -368,9 +368,12 @@ def test_katakana_outside_the_table_is_still_an_error():
 
 def test_every_slot_lexes_to_the_same_type_as_its_ascii_spelling():
     # The whole-table property, so a future glyph-set swap stays honest.
-    # '#' is excluded: a lone '#' opens a comment, checked above.
+    # Two slots are excluded because they never stand alone as a token:
+    # '#' opens a comment, checked above, and '.' (#135) is consumed
+    # inside a NUMBER -- which is exactly what makes '.5' and '1.' lex
+    # errors without a rule of their own.
     for slot, glyph in GLYPHS.items():
-        if slot == "#":
+        if slot in ("#", "."):
             continue
         assert lex(glyph + "\n")[0].type is lex(slot + "\n")[0].type, slot
 
@@ -501,23 +504,24 @@ def test_encode_lexes_in_both_faces():
     assert glyph_token.type is token.type
 
 
-def test_a_number_literal_past_the_digit_ceiling_is_a_lex_error():
-    # CPython refuses int(str) past sys.get_int_max_str_digits() with a
-    # bare ValueError, and this is the one place the language calls
-    # int() on text a person typed. Unguarded it left here as a Python
-    # exception, past every `except MatrixLangError` the CLI, the
-    # operator's dry run and site/glue.py's run() rely on -- run()
-    # promises never to raise. The computed counterpart is guarded in
-    # values.py; this is the literal one.
+def test_a_number_literal_past_the_old_digit_ceiling_now_lexes():
+    # Before #135, CPython's int(str) refused past
+    # sys.get_int_max_str_digits() with a bare ValueError, and this test
+    # pinned the LexError this module converted that into. decimal.Decimal
+    # has no such ceiling -- Decimal(digits) is exact regardless of length
+    # -- so the literal now lexes cleanly. The cap did not vanish, it moved
+    # to display: tests/test_values.py::
+    # test_a_number_too_long_to_render_raises_a_named_signal pins it there
+    # now, and interpreter.py's Trace handler converts that into a
+    # positioned RuntimeErrorML (see
+    # test_an_oversized_literal_fails_at_trace_not_at_lex_or_parse below).
     import sys
+    from decimal import Decimal
 
     limit = sys.get_int_max_str_digits()
-    with pytest.raises(LexError) as excinfo:
-        lex("trace " + "1" * (limit + 1) + "\n")
-    assert "number too long to read" in excinfo.value.message
-    assert str(limit + 1) in excinfo.value.message
-    assert excinfo.value.line == 1
-    assert excinfo.value.column == 7
+    digits = "1" * (limit + 1)
+    tokens = [t for t in lex("trace " + digits + "\n") if t.type is TokenType.NUMBER]
+    assert tokens[0].value == Decimal(digits)
 
 
 def test_a_number_literal_at_the_digit_ceiling_still_lexes():
@@ -531,13 +535,17 @@ def test_a_number_literal_at_the_digit_ceiling_still_lexes():
     assert token.value == int("1" * limit)
 
 
-def test_a_glyph_number_past_the_ceiling_is_a_lex_error_too():
-    # The digits are transliterated back before int() sees them, so the
-    # glyph face reaches the same ceiling by the same path. Both faces
-    # are the same language or neither is.
+def test_a_glyph_number_past_the_old_ceiling_now_lexes_too():
+    # The digits are transliterated back through REVERSE before Decimal()
+    # sees them, so the glyph face has no ceiling for the same reason the
+    # ASCII face above does not: both faces are the same language or
+    # neither is. Kept as its own test (rather than folded into the ASCII
+    # one) because it is the proof that per-digit mapping still works at
+    # this length, which the ASCII test cannot show.
     import sys
+    from decimal import Decimal
 
     limit = sys.get_int_max_str_digits()
-    with pytest.raises(LexError) as excinfo:
-        lex(GLYPHS["1"] * (limit + 1))
-    assert "number too long to read" in excinfo.value.message
+    digits = "1" * (limit + 1)
+    tokens = [t for t in lex(GLYPHS["1"] * (limit + 1)) if t.type is TokenType.NUMBER]
+    assert tokens[0].value == Decimal(digits)

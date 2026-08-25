@@ -1,7 +1,7 @@
 """The MatrixLang scanner: source text in, token list out."""
 
 import string
-import sys
+from decimal import Decimal
 
 from matrixlang.errors import LexError
 from matrixlang.glyphs import GLYPHS, REVERSE
@@ -38,6 +38,7 @@ _DIGITS = frozenset(string.digits)
 _GLYPH_DIGITS = frozenset(GLYPHS[digit] for digit in string.digits)
 _ANY_DIGIT = _DIGITS | _GLYPH_DIGITS
 _COMMENT_MARKERS = frozenset({"#", GLYPHS["#"]})
+_POINTS = frozenset({".", GLYPHS["."]})
 
 # Glyph char -> TokenType for the single-glyph tokens (keywords, operators,
 # parens). Digits and the comment marker are handled by their own branches.
@@ -136,28 +137,23 @@ def lex(source: str) -> list[Token]:
             while index < length and source[index] in _ANY_DIGIT:
                 index += 1
                 column += 1
+            # One point, and only with a digit on the far side. `1.` leaves
+            # the point unconsumed so it lands on the unexpected-character
+            # path, and `.5` never enters this branch at all -- which is
+            # how both become lex errors without a rule of their own.
+            if (
+                index + 1 < length
+                and source[index] in _POINTS
+                and source[index + 1] in _ANY_DIGIT
+            ):
+                index += 1
+                column += 1
+                while index < length and source[index] in _ANY_DIGIT:
+                    index += 1
+                    column += 1
             lexeme = source[start:index]
             digits = "".join(REVERSE.get(c, c) for c in lexeme)
-            try:
-                value = int(digits)
-            except ValueError:
-                # CPython caps int(str) at sys.get_int_max_str_digits()
-                # (4300 by default) and raises a bare ValueError. A
-                # literal that long is something a person can type -- and
-                # paste -- so it has to leave here as a LexError like
-                # every other refusal in this module. Everything
-                # downstream (site/glue.py's run(), which promises never
-                # to raise; the operator's dry run; the CLI's diagnostic)
-                # catches MatrixLangError and nothing else. Same ceiling,
-                # and deliberately the same wording, as values.py's
-                # TooManyDigits, which guards the numbers a program
-                # COMPUTES rather than the ones it is written with.
-                raise LexError(
-                    f"number too long to read — {len(digits)} digits, "
-                    f"more than the {sys.get_int_max_str_digits()} allowed",
-                    line,
-                    start_column,
-                ) from None
+            value = Decimal(digits)
             tokens.append(
                 Token(TokenType.NUMBER, lexeme, line, start_column, value)
             )

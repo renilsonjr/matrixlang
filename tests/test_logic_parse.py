@@ -47,9 +47,9 @@ def test_each_new_slot_has_a_single_glyph(slot):
     assert len(GLYPHS[slot]) == 1
 
 
-def test_the_table_is_still_bijective_at_54():
-    # 54 since loop control; the same count tests/test_glyphs.py tracks.
-    assert len(set(GLYPHS.values())) == len(GLYPHS) == 54
+def test_the_table_is_still_bijective_at_55():
+    # 55 since numbers; the same count tests/test_glyphs.py tracks.
+    assert len(set(GLYPHS.values())) == len(GLYPHS) == 55
 
 
 # --- unplug's shape -----------------------------------------------------

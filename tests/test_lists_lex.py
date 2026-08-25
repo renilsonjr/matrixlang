@@ -65,5 +65,5 @@ def test_each_new_slot_has_a_glyph(slot):
 
 
 def test_the_table_is_still_bijective():
-    # 54 since loop control; the same count tests/test_glyphs.py tracks.
-    assert len(set(GLYPHS.values())) == len(GLYPHS) == 54
+    # 55 since numbers; the same count tests/test_glyphs.py tracks.
+    assert len(set(GLYPHS.values())) == len(GLYPHS) == 55

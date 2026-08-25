@@ -1,4 +1,4 @@
-"""The 54-slot glyph table — D-03's fixed bijective mapping.
+"""The 55-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
@@ -68,6 +68,11 @@ GLYPHS: dict[str, str] = {
     # the next item in the register needs exactly two punctuation slots.
     "wake": "ﾉ",
     "glitch": "ﾕ",
+    # Numbers. The point takes ｰ, the prolonged-sound mark. The
+    # string-methods branch passed this slot over precisely because it
+    # "reads as punctuation rather than a word" -- which is what a decimal
+    # point is.
+    ".": "ｰ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
