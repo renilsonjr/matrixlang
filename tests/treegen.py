@@ -112,6 +112,7 @@ _BINARY_OPS = [
     TokenType.EQ, TokenType.NEQ,
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH,
+    TokenType.PERCENT,
     TokenType.ORACLE,
     TokenType.CLEAVE,
 ]

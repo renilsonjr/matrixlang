@@ -357,13 +357,33 @@ def test_glyph_comments_normalize_to_canonical_trivia():
     assert comment.lexeme == "# note"
 
 
-def test_katakana_outside_the_table_is_still_an_error():
-    # Replaces test_katakana_is_not_an_identifier: the 32 mapped glyphs
-    # are now claimed as tokens, but unmapped katakana (ﾝ, U+FF9D) stays
-    # an unknown-character error — glyphs never become identifiers.
-    with pytest.raises(LexError) as excinfo:
-        lex("construct ﾝ = 1\n")
-    assert excinfo.value.column == 11
+def test_a_block_character_outside_the_table_is_still_an_error():
+    # Was test_katakana_outside_the_table_is_still_an_error, which named ﾝ
+    # (U+FF9D) as its specimen of an unmapped glyph. Task 7 spent ﾝ on `%`,
+    # the last free slot, and this test broke — its premise had been true
+    # only by accident of which slots happened to be unclaimed that week.
+    # It had already drifted once besides: the comment said "the 32 mapped
+    # glyphs" long after the table passed 32.
+    #
+    # So the specimen is now DERIVED from the table rather than chosen.
+    # The guarantee is unchanged — a half-width form the table does not
+    # claim is an unknown-character error, never an identifier — but it can
+    # no longer go stale when a slot is filled, and it needs no comment
+    # saying how many slots there are, because it counts them.
+    unclaimed = [
+        chr(cp) for cp in range(0xFF61, 0xFF9E) if chr(cp) not in set(GLYPHS.values())
+    ]
+    # If the block is ever fully claimed this property becomes untestable,
+    # and a vacuous pass is the worst way to find that out.
+    assert unclaimed, (
+        "every code point in the half-width block is a token now, so this "
+        "property cannot be tested — widen the block or delete this test"
+    )
+
+    for glyph in unclaimed:
+        with pytest.raises(LexError) as excinfo:
+            lex(f"construct {glyph} = 1\n")
+        assert excinfo.value.column == 11, glyph
 
 
 def test_every_slot_lexes_to_the_same_type_as_its_ascii_spelling():

@@ -57,6 +57,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
     TokenType.SLASH: "/",
+    TokenType.PERCENT: "%",
     TokenType.EQ: "==",
     TokenType.NEQ: "!=",
     TokenType.LT: "<",
@@ -104,6 +105,9 @@ _LEVEL: dict[TokenType, int] = {
     TokenType.MINUS: 7,
     TokenType.STAR: 8,
     TokenType.SLASH: 8,
+    # Same rung as `*` and `/` -- parser._FACTOR_OPS puts all three
+    # together, as Python does.
+    TokenType.PERCENT: 8,
 }
 # `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
 # unlike `-` and `length` it binds LOOSER than every binary operator

@@ -203,3 +203,38 @@ def test_a_whole_and_its_decimal_spelling_are_one_key():
     # Decimal("1") and Decimal("1.0") hash equal, so these collapse --
     # exactly as {1: "a", 1.0: "b"} does in Python.
     assert run('trace length {1: "a", 1.0: "b"}\n') == "1\n"
+
+
+@pytest.mark.parametrize(
+    "expression,expected",
+    [
+        ("7 % 2", "1"),
+        ("-7 % 2", "1"),
+        ("7 % -2", "-1"),
+        ("-7 % -2", "-1"),
+        ("7.5 % 2", "1.5"),
+        ("-7.5 % 2", "0.5"),
+    ],
+)
+def test_remainder_follows_pythons_rule(expression, expected):
+    # Decimal's own % follows the DIVIDEND's sign and gives -1 for
+    # `-7 % 2`; Python's follows the DIVISOR's and gives 1. The translator
+    # maps `a % b` straight through and cannot see signs, so Decimal's
+    # rule would be a silent disagreement with Python on every negative
+    # operand -- exactly what the governing rule forbids.
+    assert run(f"trace {expression}\n") == f"{expected}\n"
+
+
+def test_remainder_by_zero_is_an_error():
+    error = fails("trace 1 % 0\n")
+    assert "zero" in error.message
+
+
+def test_even_and_odd():
+    assert run("trace 4 % 2 == 0\n") == "true\n"
+    assert run("trace 5 % 2 == 0\n") == "false\n"
+
+
+def test_remainder_binds_like_multiplication():
+    # Same rung as * and /, as in Python: 1 + 7 % 2 is 1 + (7 % 2).
+    assert run("trace 1 + 7 % 2\n") == "2\n"

@@ -12,6 +12,7 @@ _SINGLE: dict[str, TokenType] = {
     "-": TokenType.MINUS,
     "*": TokenType.STAR,
     "/": TokenType.SLASH,
+    "%": TokenType.PERCENT,
     "(": TokenType.LPAREN,
     ")": TokenType.RPAREN,
     "=": TokenType.ASSIGN,

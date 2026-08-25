@@ -108,7 +108,7 @@ _COMPARISON_OPS = (
 # parentheses.
 _CLEAVE_OPS = (TokenType.CLEAVE,)
 _TERM_OPS = (TokenType.PLUS, TokenType.MINUS)
-_FACTOR_OPS = (TokenType.STAR, TokenType.SLASH)
+_FACTOR_OPS = (TokenType.STAR, TokenType.SLASH, TokenType.PERCENT)
 
 
 class _Parser:

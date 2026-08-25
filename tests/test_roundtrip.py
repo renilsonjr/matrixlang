@@ -409,19 +409,45 @@ def test_the_generator_produces_the_stage_9_shapes_too():
     # seed 2000, versus the single hit at seed 145 in the pre-Task-6
     # stream) -- so the range widens to 2000, comfortably past that
     # first occurrence, rather than to some value that barely clears it.
-    for seed in range(2000):
+    #
+    # Updated a fourth time (Task 7, `%`): `_BINARY_OPS` grew from 10
+    # entries to 11, reshuffling the RNG stream for every Binary draw --
+    # the same mechanism as every widening above, this time from the
+    # operator list itself rather than an atom pool. Measured at 2000
+    # seeds, before -> after this change:
+    #   splice                   1039 -> 1042
+    #   fork                     1065 -> 1062
+    #   unplug                    215 ->  223
+    #   unplug_over_binary         42 ->   45
+    #   fork_over_splice           41 ->   41
+    #   logical_over_comparison   308 ->  278
+    #   splice_over_fork           22 ->   26
+    #   unplug_under_eq              6 ->    5   <- the thin one, fell again
+    #   unplug_over_splice           5 ->    5
+    # Every shape but `unplug_under_eq` stayed comfortably positive --
+    # `logical_over_comparison` moved the most in absolute terms (308 ->
+    # 278) but from a count nowhere near zero, so it needs no widening.
+    # `unplug_under_eq` is the one this file has already had to rescue
+    # twice; at 2000 seeds it now sits at seeds [1075, 1200, 1348, 1729,
+    # 1861], 5 hits, the last only 139 shy of the cap -- fragile in the
+    # same way earlier revisions of this comment describe. Measured
+    # further out: 7 hits by seed 3000, 12 hits by seed 4000, last hit
+    # at seed 3666 -- comfortably inside 4000, not merely clearing it.
+    # Widening to 4000 buys real headroom rather than a value that
+    # barely survives the next reshuffle.
+    for seed in range(4000):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert splice, "no splice in 2000 seeds"
-    assert fork, "no fork in 2000 seeds"
-    assert unplug, "no unplug in 2000 seeds"
-    assert unplug_over_binary, "no `unplug (a == b)` shape in 2000 seeds"
-    assert fork_over_splice, "no `a fork (b splice c)` shape in 2000 seeds"
-    assert logical_over_comparison, "no logical-over-comparison shape in 2000 seeds"
-    assert splice_over_fork, "no `a splice (b fork c)` shape in 2000 seeds"
-    assert unplug_under_eq, "no `(unplug a) == b` shape in 2000 seeds"
-    assert unplug_over_splice, "no `unplug (a splice b)` shape in 2000 seeds"
+    assert splice, "no splice in 4000 seeds"
+    assert fork, "no fork in 4000 seeds"
+    assert unplug, "no unplug in 4000 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 4000 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 4000 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 4000 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 4000 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 4000 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 4000 seeds"
 
 
 def test_the_generator_produces_every_unary_operator():
@@ -565,14 +591,28 @@ def test_the_generator_produces_the_dictionary_shapes_too():
     # rate did not change, which is consistent with what was measured
     # here, but the point of recording seeds rather than just counts is
     # that the NEXT reshuffle could move them again in either direction.
-    for seed in range(600):
+    #
+    # Widened again (Task 7, `%`): `_BINARY_OPS` grew from 10 entries to
+    # 11, reshuffling the RNG stream for every Binary draw, the same
+    # mechanism as the decimal-literals change above. `dict_in_dict` was
+    # already the thinnest shape tracked in this file -- measured before
+    # -> after at 600 seeds: 9 -> 8 hits (counting `event` occurrences,
+    # where one seed can contribute two: 10 -> 9 with seed 583's double
+    # hit counted twice). Its hit seeds at 600 stay [159, 252, 279, 299,
+    # 348, 469, 533, 583, 583] with seed 374's hit gone -- an honest fall
+    # in the shape's real generation probability, not a reshuffling
+    # artifact, the same conclusion the earlier widening in this comment
+    # reached. Doubling to 1200 restores headroom: measured at 1200
+    # seeds, 21 hits (seeds spread out to 1180), 20 shy of the new cap
+    # rather than the 17-seed margin the previous widening bought at 600.
+    for seed in range(1200):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert empty_dict, "no {} in 600 seeds"
-    assert populated_dict, "no populated dictionary in 600 seeds"
-    assert dict_in_dict, "no dictionary inside a dictionary in 600 seeds"
-    assert oracle, "no `oracle` binary in 600 seeds"
+    assert empty_dict, "no {} in 1200 seeds"
+    assert populated_dict, "no populated dictionary in 1200 seeds"
+    assert dict_in_dict, "no dictionary inside a dictionary in 1200 seeds"
+    assert oracle, "no `oracle` binary in 1200 seeds"
 
 
 def test_the_generator_produces_the_string_method_shapes_too():

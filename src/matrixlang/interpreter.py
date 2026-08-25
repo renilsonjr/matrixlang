@@ -12,7 +12,7 @@ either source face.
 import dataclasses
 import string
 import sys
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
@@ -1100,6 +1100,29 @@ class Interpreter:
                     node.line,
                     node.column,
                 ) from None
+        if node.op is TokenType.PERCENT:
+            if right == 0:
+                raise RuntimeErrorML(
+                    "cannot take the remainder by zero", node.line, node.column
+                )
+            # Python's rule, not Decimal's. Decimal's native % follows the
+            # DIVIDEND's sign: Decimal(-7) % Decimal(2) is -1, where
+            # Python's -7 % 2 is 1. The translator maps `a % b` straight
+            # through and cannot see signs, so taking Decimal's answer
+            # would disagree with Python silently on every negative
+            # operand -- exactly what the governing rule forbids.
+            #
+            # Every step goes through EXACT explicitly, never through a
+            # bare Python operator (`//`, `%`, unary `-`) on a Decimal --
+            # those round through the thread-local default context at
+            # precision 28, not through this language's own contexts.
+            # That exact mistake has cost this branch a Critical already
+            # (unary minus) and an escaping decimal.InvalidOperation
+            # since. `to_integral_value` is the one Decimal instance
+            # method that takes no context and cannot round or overflow,
+            # so it is safe to call bare.
+            floor = EXACT.divide(left, right).to_integral_value(ROUND_FLOOR)
+            return EXACT.subtract(left, EXACT.multiply(floor, right))
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
     def _require_number(self, value: object, node: Expr, role: str) -> None:
