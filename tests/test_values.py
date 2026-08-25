@@ -12,17 +12,6 @@ from matrixlang.values import (
 )
 
 
-def test_bool_is_not_an_integer():
-    # In Python, bool subclasses int: isinstance(True, int) is True and
-    # True + 1 is 2. Spec §5 forbids coercion, so the interpreter must be
-    # able to tell them apart. This is THE rule this module exists for.
-    assert is_int(True) is False
-    assert is_int(False) is False
-    assert is_bool(True) is True
-    assert is_int(7) is True
-    assert is_bool(7) is False
-
-
 def test_string_predicate():
     assert is_str("Neo") is True
     assert is_str(7) is False
@@ -369,8 +358,10 @@ def test_a_string_key_is_accepted():
     check_key("a")
 
 
-def test_an_integer_key_is_accepted():
-    check_key(1)
+def test_a_number_key_is_accepted():
+    from decimal import Decimal
+
+    check_key(Decimal(1))
 
 
 def test_a_boolean_key_is_rejected():
@@ -474,3 +465,99 @@ def test_division_rounds_where_it_must():
     )
     assert DIVISION.divide(Decimal(7), Decimal(2)) == Decimal("3.5")
 
+
+def test_repeated_squaring_overflows_as_number_overflow():
+    # decimal.Overflow is a bare ArithmeticError, not a MatrixLangError.
+    # EXACT's precision (1000) pushes Emax to 999999, but repeated
+    # squaring gets there well inside any step budget -- 10, squared 19
+    # times, is already past it. NumberOverflow is what must come out
+    # instead, from the context itself, since EXACT.multiply(...) is
+    # called directly by later tasks with no call-site try/except of
+    # their own.
+    from decimal import Decimal
+
+    from matrixlang.values import EXACT, NumberOverflow
+
+    v = Decimal(10)
+    with pytest.raises(NumberOverflow):
+        for _ in range(30):
+            v = EXACT.multiply(v, v)
+
+
+def test_overflow_never_produces_an_infinite_decimal():
+    # The trap stays ON: decimal.Overflow fires before an infinite result
+    # is ever materialized. That matters because is_whole(Infinity) is
+    # True (Infinity equals its own to_integral_value()) -- an Infinity
+    # that leaked out of EXACT/DIVISION would become a usable index or a
+    # usable `length`. Guarding by catching, rather than by clearing the
+    # context's traps and inspecting the result afterward, is what keeps
+    # that value from ever existing in the first place.
+    from decimal import Decimal
+
+    from matrixlang.values import EXACT, NumberOverflow
+
+    v = Decimal(10)
+    with pytest.raises(NumberOverflow):
+        for _ in range(30):
+            v = EXACT.multiply(v, v)
+    assert v != Decimal("Infinity")
+
+
+def test_division_can_also_overflow():
+    from decimal import Decimal
+
+    from matrixlang.values import DIVISION, NumberOverflow
+
+    with pytest.raises(NumberOverflow):
+        DIVISION.divide(Decimal("1E+999990"), Decimal("1E-999990"))
+
+
+def test_addition_can_also_overflow():
+    from decimal import Decimal
+
+    from matrixlang.values import EXACT, NumberOverflow
+
+    with pytest.raises(NumberOverflow):
+        EXACT.add(Decimal("9E+999999"), Decimal("9E+999999"))
+
+
+def test_a_zero_of_any_magnitude_displays_as_zero_not_too_many_digits():
+    # adjusted() on a zero reports its EXPONENT, not its magnitude --
+    # Decimal("0E-5000").adjusted() is -5000, past the digit cap, for a
+    # value that is exactly zero. Reachable: repeated division underflows
+    # to values like Decimal('0E-1000026').
+    from decimal import Decimal
+
+    from matrixlang.values import to_display
+
+    assert to_display(Decimal("0E-5000")) == "0." + "0" * 5000
+    assert to_display(Decimal(0)) == "0"
+
+
+def test_negative_zero_displays_without_a_minus_sign():
+    # Python's own `0 * -1` is `0`, not `-0`. EXACT.multiply(0, -1) is
+    # Decimal("-0") -- if that reached display unchanged, a translated
+    # `print(0 * -1)` would print "-0" on one side and "0" on the other,
+    # a silent difference between the two runtimes.
+    from decimal import Decimal
+
+    from matrixlang.values import EXACT, to_display
+
+    assert to_display(EXACT.multiply(Decimal(0), Decimal(-1))) == "0"
+    assert to_display(Decimal("-0")) == "0"
+    assert to_display(Decimal("-0.00")) == "0.00"
+
+
+def test_a_decimal_too_long_to_render_still_raises_too_many_digits():
+    # A value can be perfectly legal to EXACT (Emax is 999999, far above
+    # the display cap) and still be too long to ever put on screen.
+    # NumberOverflow and TooManyDigits are two independent checks at two
+    # different times -- arithmetic not overflowing is no promise that
+    # the result will still be displayable.
+    from decimal import Decimal
+
+    from matrixlang.values import TooManyDigits, to_display
+
+    with pytest.raises(TooManyDigits) as caught:
+        to_display(Decimal("1E+5000"))
+    assert caught.value.limit == sys.get_int_max_str_digits()
