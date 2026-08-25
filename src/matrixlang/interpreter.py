@@ -12,6 +12,7 @@ either source face.
 import dataclasses
 import string
 import sys
+from decimal import ROUND_DOWN
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
@@ -595,7 +596,14 @@ class Interpreter:
                         expr.column,
                     ) from None
             self._require_number(operand, expr.operand, "operand of unary '-'")
-            return -operand
+            # copy_negate(), NOT Python's `-operand`: Decimal's own
+            # __neg__ rounds through the thread-local DEFAULT context
+            # (prec=28), not EXACT -- so `-x` and `0 - x` could silently
+            # disagree past 28 significant digits, with no error and no
+            # scientific notation, just a wrong number. copy_negate is a
+            # context-free, exact sign flip; it cannot round and cannot
+            # raise.
+            return operand.copy_negate()
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
             # Intercepted HERE, not in _binary, and that is the whole
             # point: the Binary branch below evaluates both operands
@@ -1001,10 +1009,33 @@ class Interpreter:
         if node.op is TokenType.SLASH:
             if right == 0:
                 raise RuntimeErrorML("cannot divide by zero", node.line, node.column)
-            # Still truncating. Task 4 makes this true division -- it is
-            # the branch's one breaking change and gets its own commit.
-            quotient = abs(left) // abs(right)
-            return -quotient if (left < 0) != (right < 0) else quotient
+            # Still truncating toward zero -- Task 4 replaces this whole
+            # branch with DIVISION.divide (true division) and it is the
+            # branch's one breaking change, gets its own commit. Until
+            # then: Python's bare abs() and // on a Decimal round through
+            # the thread-local DEFAULT context (prec=28), not EXACT --
+            # silently wrong past 28 significant digits (see the unary
+            # '-' comment above) and decimal.InvalidOperation can escape
+            # outright when the truncated quotient needs more digits
+            # than that. copy_abs is context-free and exact; the
+            # division itself goes through EXACT the same way + - * do,
+            # guarded against overflow; to_integral_value is also
+            # context-free (values.py's _GuardedContext docstring notes
+            # it cannot overflow) and rounds toward zero on its own,
+            # which is the truncation this branch wants -- Python's //
+            # floors instead, which differs for negatives (-7 // 2 is
+            # -4, but the spec requires -3), so the abs/sign dance below
+            # still exists to correct for that.
+            try:
+                magnitude = EXACT.divide(left.copy_abs(), right.copy_abs())
+            except NumberOverflow:
+                raise RuntimeErrorML(
+                    "arithmetic result is too large to represent",
+                    node.line,
+                    node.column,
+                ) from None
+            quotient = magnitude.to_integral_value(rounding=ROUND_DOWN)
+            return quotient.copy_negate() if (left < 0) != (right < 0) else quotient
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
     def _require_number(self, value: object, node: Expr, role: str) -> None:

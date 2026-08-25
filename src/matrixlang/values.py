@@ -193,10 +193,26 @@ class _GuardedContext(Context):
     later task's guard to add, not this one's.
 
     Guarded: add, subtract, multiply, remainder, divide -- the five
-    assigned below. NOT guarded: power, abs, minus, plus, quantize,
-    compare and to_integral_value -- call those on a context and
-    decimal.Overflow escapes bare. Whoever wires one of those in next
-    needs to decide whether it should be guarded too.
+    assigned below. NOT guarded: power, quantize and compare -- call
+    THOSE on a context object (`EXACT.power(a, b)`, say) and the
+    precision is right but decimal.Overflow escapes bare. Whoever wires
+    one of those in next needs to decide whether it should be guarded
+    too.
+
+    minus, plus and abs are a SEPARATE hazard, not a missing guard.
+    Python's own operators and builtins on a Decimal -- `-x`, `+x`,
+    `abs(x)`, and likewise `x // y`, `x % y`, `x ** y` -- do not call
+    this context at all, guarded or not. They round through the
+    thread-local DEFAULT context (prec=28) regardless of which
+    _GuardedContext exists, so `-x` can silently return a DIFFERENT,
+    WRONG number past 28 significant digits -- no exception, no
+    scientific notation, just disagreement with `0 - x`. Reaching this
+    context's precision for a sign flip or magnitude means calling
+    `EXACT.minus(x)` / `EXACT.abs(x)` explicitly (still unguarded against
+    Overflow, per above) or using a context-free Decimal instance method
+    that cannot round at all: copy_negate(), copy_abs(), and
+    to_integral_value() (which also cannot overflow) are exact and safe
+    to call bare, with no context, guarded or not.
     """
 
     add = _overflow_guarded(Context.add)

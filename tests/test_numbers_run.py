@@ -93,3 +93,33 @@ def test_a_runaway_multiplication_reports_a_positioned_matrixlang_error():
     error = fails("\n".join(lines) + "\n")
     assert "too large" in error.message
     assert 2 <= error.line <= 31
+
+
+def test_unary_minus_agrees_with_zero_minus_past_28_digits():
+    # Decimal's own __neg__ rounds through the thread-local DEFAULT
+    # context (prec=28), not EXACT -- so `-x` and `0 - x` could silently
+    # disagree past 28 significant digits, with no error and no
+    # scientific notation, just a different, wrong number. 29 nines is
+    # one digit past that boundary.
+    digits = "9" * 29
+    assert run(f"trace -{digits}\n") == run(f"trace 0 - {digits}\n")
+    assert run(f"trace -{digits}\n") == f"-{digits}\n"
+
+
+def test_division_truncates_exactly_past_28_digits():
+    # abs() and // on a bare Decimal round through the same default
+    # context as unary minus -- wrong past 28 significant digits, and
+    # decimal.InvalidOperation can escape outright when the truncated
+    # quotient itself needs more digits than that. Both operands here
+    # are 40 digits long.
+    assert (
+        run("trace 9999999999999999999999999999999999999999 / 3\n")
+        == "3333333333333333333333333333333333333333\n"
+    )
+    assert (
+        run(
+            "trace 9999999999999999999999999999999999999999 / "
+            "10000000000000\n"
+        )
+        == "999999999999999999999999999\n"
+    )
