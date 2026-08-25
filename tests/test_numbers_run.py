@@ -106,20 +106,52 @@ def test_unary_minus_agrees_with_zero_minus_past_28_digits():
     assert run(f"trace -{digits}\n") == f"-{digits}\n"
 
 
-def test_division_truncates_exactly_past_28_digits():
-    # abs() and // on a bare Decimal round through the same default
-    # context as unary minus -- wrong past 28 significant digits, and
-    # decimal.InvalidOperation can escape outright when the truncated
-    # quotient itself needs more digits than that. Both operands here
-    # are 40 digits long.
+def test_division_rounds_to_28_significant_digits_on_huge_operands():
+    # This test used to pin truncation past 28 digits: the old SLASH
+    # branch's abs()/// dance rounded through the thread-local default
+    # context, silently wrong past 28 significant digits. Task 4 (#135)
+    # replaced it with DIVISION.divide, a context call, so the rounding
+    # is now correct by construction: the quotient is rounded to
+    # DIVISION's 28 significant digits, not truncated. Both operands
+    # here are 40 digits long, so the exact quotient of the first case
+    # (40 threes) has more than 28 significant digits and comes back
+    # rounded, with the dropped digits standing in as trailing zeros in
+    # positional form -- this is not the exact mathematical answer, and
+    # is not supposed to be.
     assert (
         run("trace 9999999999999999999999999999999999999999 / 3\n")
-        == "3333333333333333333333333333333333333333\n"
+        == "3333333333333333333333333333000000000000\n"
     )
     assert (
         run(
             "trace 9999999999999999999999999999999999999999 / "
             "10000000000000\n"
         )
-        == "999999999999999999999999999\n"
+        == "1000000000000000000000000000\n"
     )
+
+
+def test_division_is_true_division():
+    # Was 3. This is the branch's breaking change: Python's `/` and this
+    # one now agree exactly, which is what makes `a / b` translatable at
+    # all.
+    assert run("trace 7 / 2\n") == "3.5\n"
+
+
+def test_division_agrees_with_python_on_negatives():
+    # The old truncating `/` gave -3 and Python's `//` gives -4; neither
+    # matched Python's `/`. This does.
+    assert run("trace -7 / 2\n") == "-3.5\n"
+
+
+def test_division_that_does_not_terminate_rounds():
+    assert run("trace 1 / 3\n") == "0.3333333333333333333333333333\n"
+
+
+def test_division_by_zero_is_still_an_error():
+    error = fails("trace 1 / 0\n")
+    assert "cannot divide by zero" in error.message
+
+
+def test_dividing_money_in_half():
+    assert run("trace 49.90 / 2\n") == "24.95\n"

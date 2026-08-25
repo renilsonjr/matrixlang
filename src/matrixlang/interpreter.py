@@ -12,7 +12,6 @@ either source face.
 import dataclasses
 import string
 import sys
-from decimal import ROUND_DOWN
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
@@ -47,6 +46,7 @@ from matrixlang.nodes import (
 )
 from matrixlang.tokens import TokenType
 from matrixlang.values import (
+    DIVISION,
     EXACT,
     NOTHING,
     BadKey,
@@ -1009,33 +1009,33 @@ class Interpreter:
         if node.op is TokenType.SLASH:
             if right == 0:
                 raise RuntimeErrorML("cannot divide by zero", node.line, node.column)
-            # Still truncating toward zero -- Task 4 replaces this whole
-            # branch with DIVISION.divide (true division) and it is the
-            # branch's one breaking change, gets its own commit. Until
-            # then: Python's bare abs() and // on a Decimal round through
-            # the thread-local DEFAULT context (prec=28), not EXACT --
-            # silently wrong past 28 significant digits (see the unary
-            # '-' comment above) and decimal.InvalidOperation can escape
-            # outright when the truncated quotient needs more digits
-            # than that. copy_abs is context-free and exact; the
-            # division itself goes through EXACT the same way + - * do,
-            # guarded against overflow; to_integral_value is also
-            # context-free (values.py's _GuardedContext docstring notes
-            # it cannot overflow) and rounds toward zero on its own,
-            # which is the truncation this branch wants -- Python's //
-            # floors instead, which differs for negatives (-7 // 2 is
-            # -4, but the spec requires -3), so the abs/sign dance below
-            # still exists to correct for that.
+            # True division, in the one context that rounds. Division is
+            # the only operation that can go on forever -- 1 / 3 has no
+            # finite decimal form -- so it is the only one that needs a
+            # precision, and DIVISION's 28 is where
+            # 0.3333333333333333333333333333 comes from.
+            #
+            # This replaced truncation, which matched neither of Python's
+            # two divisions: `/` is true division and `//` floors, while
+            # this truncated toward zero. That mismatch is why the
+            # translator refused BOTH for the language's whole history.
+            #
+            # DIVISION is a _GuardedContext, so an overflowing quotient
+            # raises NumberOverflow rather than a bare decimal.Overflow
+            # -- but NumberOverflow is not itself a MatrixLangError, so
+            # it still needs converting here, the same as + - * above.
+            # Reachable: DIVISION.divide(Decimal("1E+999990"),
+            # Decimal("1E-999990")) overflows even though neither
+            # operand does, because the quotient's exponent is
+            # (roughly) the sum of the two.
             try:
-                magnitude = EXACT.divide(left.copy_abs(), right.copy_abs())
+                return DIVISION.divide(left, right)
             except NumberOverflow:
                 raise RuntimeErrorML(
                     "arithmetic result is too large to represent",
                     node.line,
                     node.column,
                 ) from None
-            quotient = magnitude.to_integral_value(rounding=ROUND_DOWN)
-            return quotient.copy_negate() if (left < 0) != (right < 0) else quotient
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
     def _require_number(self, value: object, node: Expr, role: str) -> None:

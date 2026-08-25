@@ -106,16 +106,20 @@ def test_integer_arithmetic():
     assert output("trace 10 - 3 - 2\n") == "5\n"
 
 
-def test_division_truncates_toward_zero_not_floor():
-    # Python's // floors: -7 // 2 == -4. Spec §5 requires -3.
-    # All four sign combinations. (-,-) matters most: it is the case that
-    # still looks right if someone "simplifies" the sign logic back to //,
-    # because -7 // -2 == 3 agrees with truncation. Assert it anyway, so the
-    # test pins the rule rather than two-thirds of it.
-    assert output("trace 7 / 2\n") == "3\n"
-    assert output("trace -7 / 2\n") == "-3\n"
-    assert output("trace 7 / -2\n") == "-3\n"
-    assert output("trace -7 / -2\n") == "3\n"
+def test_division_agrees_with_python_on_all_sign_combinations():
+    # `/` was truncating division until #135: `7 / 2` was 3 and `-7 / 2`
+    # was -3, matching neither of Python's two divisions (`//` floors,
+    # `-7 // 2 == -4`). It is now true division, which matches Python's
+    # `/` exactly on every sign combination, and that is what let the
+    # translator stop refusing `a / b`. All four sign combinations:
+    # (-,-) matters most, since -7 / -2 == 3.5 also looks plausible to
+    # someone who "simplifies" this back toward truncation or floor
+    # division, so the test pins all four rather than the one that would
+    # catch the most regressions on its own.
+    assert output("trace 7 / 2\n") == "3.5\n"
+    assert output("trace -7 / 2\n") == "-3.5\n"
+    assert output("trace 7 / -2\n") == "-3.5\n"
+    assert output("trace -7 / -2\n") == "3.5\n"
 
 
 def test_division_by_zero_is_a_runtime_error():
