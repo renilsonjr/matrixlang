@@ -24,18 +24,20 @@ from matrixlang.tokens import TokenType
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
 from matrixlang.pytrans.names import bound_names, free_name
 
-# Deliberately no division. MatrixLang's `/` truncates toward zero
-# (interpreter.py's _arithmetic), which is neither of Python's two
-# divisions: `/` produces a fraction MatrixLang has no value for, and `//`
-# floors, which differs from truncation on negative operands (-7 // 2 is
-# -4 in Python, -7 / 2 is -3 here). Which of the two a given `a // b`
-# agrees with depends on the SIGN of values that do not exist yet at
-# translation time -- the same "the translator cannot know the runtime
-# value, so it must not guess" argument that refuses truthiness. Both are
-# refused; see _DESCRIBE/_IDIOM for what the reader is told.
+# `/` and `%` translate. MatrixLang's `/` is true division, rounded at
+# precision 28 (interpreter.py's DIVISION context) -- the same operation
+# Python's `/` performs, so there is no sign-dependent guessing the way
+# the old truncating `/` demanded. `%` follows Python's rule rather than
+# Decimal's (interpreter.py's _arithmetic explains why).
+#
+# `//` alone stays refused, and permanently: MatrixLang has no floor
+# operator, and the glyph table that would carry one is full (56 used, 0
+# free), so there is no glyph left to buy. See _DESCRIBE/_IDIOM for what
+# the reader is told.
 _BINOP = {
     ast.Add: TokenType.PLUS, ast.Sub: TokenType.MINUS,
-    ast.Mult: TokenType.STAR,
+    ast.Mult: TokenType.STAR, ast.Div: TokenType.SLASH,
+    ast.Mod: TokenType.PERCENT,
 }
 
 _COMPARE = {
@@ -720,10 +722,10 @@ class _Translator:
         raise _Unsupported(self._no(node))
 
     def _constant(self, node: ast.Constant) -> Expr:
-        # None and float go through Refusal directly rather than self._no():
-        # both share the ast class "Constant" with every other literal, so
-        # the name-keyed _DESCRIBE catalogue can't tell them apart, and a
-        # reason of "Constant cannot be translated" would name neither.
+        # None goes through Refusal directly rather than self._no(): it
+        # shares the ast class "Constant" with every other literal, so the
+        # name-keyed _DESCRIBE catalogue can't tell them apart, and a
+        # reason of "Constant cannot be translated" would not name it.
         value = node.value
         if value is True or value is False:
             return BoolLiteral(value)
@@ -737,14 +739,12 @@ class _Translator:
                 )
             )
         if isinstance(value, float):
-            raise _Unsupported(
-                Refusal(
-                    "a float cannot be translated",
-                    node.lineno,
-                    node.col_offset,
-                    "MatrixLang has no floats; use whole numbers",
-                )
-            )
+            # Decimal(str(value)), never Decimal(value): the latter gives
+            # the exact binary expansion, so 0.1 would become
+            # 0.1000000000000000055511151231257827. str() gives Python's
+            # own shortest round-tripping form, which is the text the
+            # reader wrote.
+            return NumberLiteral(Decimal(str(value)))
         if isinstance(value, int):
             return NumberLiteral(Decimal(value))
         if isinstance(value, str):
@@ -754,7 +754,7 @@ class _Translator:
                 self._because(
                     node,
                     "a complex number cannot be translated",
-                    "MatrixLang has only whole numbers",
+                    "MatrixLang has no imaginary part; use the real number alone",
                 )
             )
         if isinstance(value, bytes):
@@ -1005,10 +1005,10 @@ class _Translator:
     ) -> Refusal:
         """Refuse `node`, positioned at `at` when `node` has no position.
 
-        Python's operator nodes (`ast.Div`, `ast.Mod`, `ast.Is`, ...) carry
-        no lineno/col_offset at all -- they are singletons hanging off the
-        expression that uses them -- so naming one as the culprit without
-        `at` would report every `%` in a file at line 1, column 0. The
+        Python's operator nodes (`ast.FloorDiv`, `ast.Pow`, `ast.Is`, ...)
+        carry no lineno/col_offset at all -- they are singletons hanging off
+        the expression that uses them -- so naming one as the culprit without
+        `at` would report every `**` in a file at line 1, column 0. The
         operator is still what gets NAMED; only the position comes from
         the expression around it.
         """
@@ -1257,7 +1257,6 @@ _DESCRIBE = {
     "IfExp": "a conditional expression",
     "Starred": "`*` unpacking",
     "Attribute": "attribute access",
-    "Mod": "`%`",
     "Pow": "`**`",
     "MatMult": "`@`",
     "LShift": "`<<`",
@@ -1274,7 +1273,6 @@ _DESCRIBE = {
     "Tuple": "a tuple",
     "Set": "a set",
     "Slice": "a slice",
-    "Div": "`/`",
     "FloorDiv": "`//`",
     "Is": "`is`",
     "IsNot": "`is not`",
@@ -1294,15 +1292,11 @@ _DESCRIBE = {
 }
 
 _IDIOM = {
-    "Div": (
-        "MatrixLang has no fractions, and its own `/` truncates toward zero — "
-        "`7 / 2` there is `3`, not `3.5`. Write the division in MatrixLang "
-        "directly if truncation is what you want"
-    ),
     "FloorDiv": (
-        "MatrixLang's `/` truncates toward zero and `//` floors, so they part "
-        "company on negatives (`-7 // 2` is -4, `-7 / 2` here is -3). Write the "
-        "division in MatrixLang directly once you know the signs"
+        "MatrixLang has no floor operator, and no free glyph slot is left to "
+        "add one. `//` floors (`-7 // 2` is `-4` in Python) while MatrixLang's "
+        "`/` is true division (`-7 / 2` here is `-3.5`); work out the floor "
+        "yourself once you know the sign"
     ),
     "Pass": "MatrixLang needs no filler statement; leave the body empty",
     "Delete": "MatrixLang has no `del`; a name lives as long as its scope",
@@ -1322,7 +1316,6 @@ _IDIOM = {
     "Yield": "build the whole list and `jackout` it",
     "YieldFrom": "build the whole list and `jackout` it",
     "Await": "MatrixLang runs one statement after another and never waits",
-    "Mod": "MatrixLang has no remainder operator",
     "Pow": "multiply in a `dejavu` loop",
     "MatMult": "MatrixLang has no matrix multiply, despite the name",
     "LShift": "MatrixLang has no bitwise operators",

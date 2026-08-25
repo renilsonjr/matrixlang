@@ -456,3 +456,19 @@ def test_a_membership_search_loop_agrees():
         '        break\n'
         'print(found)\n'
     )
+
+
+def test_decimal_arithmetic_agrees():
+    agree("print(49.90 + 120.00)\nprint(2.5 * 4)\nprint(1.5 - 0.5)\n")
+
+
+def test_division_agrees():
+    agree("print(7 / 2)\nprint(-7 / 2)\nprint(49.90 / 2)\n")
+
+
+def test_remainder_agrees():
+    agree("print(7 % 2)\nprint(-7 % 2)\nprint(7 % -2)\nprint(7.5 % 2)\n")
+
+
+def test_an_even_odd_loop_agrees():
+    agree("for n in range(6):\n    if n % 2 == 0:\n        print(n)\n")

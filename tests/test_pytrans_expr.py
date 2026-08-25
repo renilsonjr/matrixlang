@@ -76,11 +76,6 @@ def test_precedence_is_rebuilt_not_copied():
     assert ml("print(a * b + c)\n") == "trace a * b + c\n"
 
 
-def test_a_float_is_refused():
-    refusal = refused("print(1.5)\n")[0]
-    assert "float" in refusal.reason
-
-
 def test_none_is_refused():
     assert "None" in refused("print(None)\n")[0].reason
 
@@ -113,38 +108,26 @@ def test_a_bare_expression_statement_is_refused():
     assert refused("1 + 1\n")[0].idiom is not None
 
 
-def test_true_division_is_refused():
-    # MatrixLang's `/` truncates toward zero, so `print(7 / 2)` used to
-    # translate clean and print `3` where Python prints `3.5` -- a program
-    # that runs and quietly means something else, which is the one outcome
-    # the translator exists to prevent. Even exact division diverges:
-    # Python's `4 / 2` is `2.0`, MatrixLang's is `2`.
-    refusal = refused("print(7 / 2)\n")[0]
-    assert "`/`" in refusal.reason
-    assert refusal.line == 1
-    assert "truncates" in refusal.idiom
-
-
 def test_floor_division_is_refused():
-    # Agrees with MatrixLang's `/` for non-negative operands and disagrees
-    # for negative ones, and which of the two applies depends on values
-    # that do not exist at translation time.
+    # `/` is true division now, so this is not the sign-dependent guess it
+    # used to be: MatrixLang simply has no floor operator, and the glyph
+    # table that would carry one is full (56 used, 0 free).
     refusal = refused("print(a // b)\n")[0]
     assert "`//`" in refusal.reason
-    assert "negatives" in refusal.idiom
+    assert "floor operator" in refusal.idiom
 
 
-def test_dividing_in_place_is_refused_naming_the_operator():
-    refusal = refused("x = 8\nx /= 2\n")[0]
-    assert "`/`" in refusal.reason
+def test_dividing_in_place_by_floor_is_refused_naming_the_operator():
+    refusal = refused("x = 8\nx //= 2\n")[0]
+    assert "`//`" in refusal.reason
     assert refusal.line == 2
 
 
 def test_an_operator_refusal_carries_the_expression_s_position():
     # Python's operator nodes hold no position of their own, so without
-    # borrowing one from the expression around them every `%` in a file
+    # borrowing one from the expression around them every `**` in a file
     # reported at line 1, column 0.
-    refusal = refused("x = 1\ny = 2\nprint(x % y)\n")[0]
+    refusal = refused("x = 1\ny = 2\nprint(x ** y)\n")[0]
     assert refusal.line == 3
     assert refusal.column == 6
 
@@ -213,3 +196,21 @@ def test_a_case_insensitive_comparison_translates_whole():
 
 def test_a_chained_strip_and_split_translates():
     assert 'trim s cleave ","' in ml("s = ' a,b '\nprint(s.strip().split(','))\n")
+
+
+def test_a_float_translates_now():
+    assert ml("print(0.5)\n") == "trace 0.5\n"
+
+
+def test_a_float_keeps_its_exact_text():
+    # Decimal(str(value)), never Decimal(value): Decimal(0.1) is the full
+    # binary expansion, 0.1000000000000000055511151231257827.
+    assert ml("print(0.1)\n") == "trace 0.1\n"
+
+
+def test_division_translates_now():
+    assert ml("print(7 / 2)\n") == "trace 7 / 2\n"
+
+
+def test_remainder_translates_now():
+    assert ml("print(7 % 2)\n") == "trace 7 % 2\n"
