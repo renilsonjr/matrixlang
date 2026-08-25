@@ -69,7 +69,7 @@ def test_a_nested_list_compares_by_value():
 
 def test_an_incomparable_element_is_skipped_not_raised():
     # THE decision. `["a"] oracle 1` asks "does this list contain the
-    # integer 1?", which has a truthful answer -- no, it holds a string.
+    # number 1?", which has a truthful answer -- no, it holds a string.
     # `1 == "a"` genuinely has no answer and raises; membership is a
     # different question. This is the one place in the language where a
     # type mismatch declines to raise where `==` would.
@@ -186,11 +186,11 @@ def test_a_non_string_against_a_string_is_an_error():
     # a dictionary, got string"), so a substring check can't tell which
     # error actually fired.
     error = fails('trace "matrix" oracle 1\n')
-    assert error.message == "'oracle' on a string looks for a string, got integer"
+    assert error.message == "'oracle' on a string looks for a string, got number"
 
 
 def test_a_list_against_a_string_is_also_an_error():
-    # A second wrong type on the right, distinct from the integer above --
+    # A second wrong type on the right, distinct from the number above --
     # this is the assertion that stands between a reader and a raw Python
     # TypeError escaping `right in left` when `right` is unhashable/
     # uncomparable to a string, not just the wrong scalar type.
@@ -213,7 +213,7 @@ def test_the_empty_string_contains_nothing_else():
 
 @pytest.mark.parametrize(
     "left,name",
-    [("1", "integer"), ("true", "boolean")],
+    [("1", "number"), ("true", "boolean")],
 )
 def test_oracle_refuses_a_non_container(left, name):
     error = fails(f"trace {left} oracle 1\n")

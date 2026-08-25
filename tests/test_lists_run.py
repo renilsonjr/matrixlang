@@ -95,7 +95,7 @@ def test_lists_compare_structurally_at_runtime():
 def test_a_bool_never_equals_an_int_inside_a_list_at_runtime():
     # The end-to-end form of Task 8's central case.
     error = fails("trace [1] == [true]\n")
-    assert "cannot compare integer with boolean" in error.message
+    assert "cannot compare number with boolean" in error.message
     assert error.line == 1
 
 
@@ -152,14 +152,14 @@ def test_a_negative_index_suggests_the_idiom():
     assert "length xs - 1" in error.message
 
 
-def test_a_non_integer_index_is_an_error():
+def test_a_non_number_index_is_an_error():
     error = fails('construct xs = [1]\ntrace xs["a"]\n')
-    assert "must be an integer" in error.message
+    assert "must be a whole number" in error.message
 
 
 def test_indexing_a_non_list_is_an_error():
     error = fails("construct n = 1\ntrace n[0]\n")
-    assert "cannot index integer" in error.message
+    assert "cannot index number" in error.message
 
 
 def test_indexing_an_empty_list_is_an_error():
@@ -167,22 +167,22 @@ def test_indexing_an_empty_list_is_an_error():
     assert "length 0" in error.message
 
 
-def test_adding_a_list_to_an_integer_is_an_error():
+def test_adding_a_list_to_a_number_is_an_error():
     # Asserting the exact message, not just that both words appear
-    # somewhere in it: "left operand must be an integer, got list" (the
+    # somewhere in it: "left operand must be a number, got list" (the
     # arithmetic fallback this test exists to rule out) also contains both
-    # "list" and "integer", so a substring check cannot tell the correct
+    # "list" and "number", so a substring check cannot tell the correct
     # message from the wrong one. Only the exact string can.
     error = fails("trace [1] + 2\n")
-    assert error.message == "cannot add list and integer"
+    assert error.message == "cannot add list and number"
 
 
-def test_adding_an_integer_to_a_list_is_an_error():
+def test_adding_a_number_to_a_list_is_an_error():
     error = fails("trace 2 + [1]\n")
-    assert error.message == "cannot add integer and list"
+    assert error.message == "cannot add number and list"
 
 
-def test_length_of_an_integer_is_an_error():
+def test_length_of_a_number_is_an_error():
     error = fails("trace length 5\n")
     assert "'length' takes a list, a string or a dictionary" in error.message
 

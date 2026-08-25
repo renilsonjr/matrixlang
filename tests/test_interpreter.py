@@ -27,7 +27,7 @@ def env(source: str) -> dict:
     return interpreter.globals.values
 
 
-def test_trace_prints_an_integer_with_a_newline():
+def test_trace_prints_a_number_with_a_newline():
     assert output("trace 7\n") == "7\n"
 
 
@@ -100,7 +100,7 @@ def test_a_name_may_hold_a_different_type_after_assignment():
     assert output('construct x = 1\nx = "now a string"\ntrace x\n') == "now a string\n"
 
 
-def test_integer_arithmetic():
+def test_number_arithmetic():
     assert output("trace 2 + 3 * 4\n") == "14\n"
     assert output("trace (2 + 3) * 4\n") == "20\n"
     assert output("trace 10 - 3 - 2\n") == "5\n"
@@ -137,11 +137,11 @@ def test_string_concatenation():
     assert output('trace "wake up, " + "Neo"\n') == "wake up, Neo\n"
 
 
-def test_mixing_a_string_and_an_integer_is_an_error():
+def test_mixing_a_string_and_a_number_is_an_error():
     with pytest.raises(RuntimeErrorML) as excinfo:
         output('trace "count: " + 1\n')
     assert "string" in str(excinfo.value)
-    assert "integer" in str(excinfo.value)
+    assert "number" in str(excinfo.value)
 
 
 def test_booleans_are_not_integers_in_arithmetic():
@@ -166,7 +166,7 @@ def test_ordering_type_errors_point_at_the_operator():
     assert excinfo.value.column == 12
 
 
-def test_integer_equality_and_ordering():
+def test_number_equality_and_ordering():
     assert output("trace 1 == 1\ntrace 1 != 1\n") == "true\nfalse\n"
     assert output("trace 1 < 2\ntrace 2 <= 2\ntrace 3 > 4\ntrace 4 >= 4\n") == (
         "true\ntrue\nfalse\ntrue\n"
@@ -181,7 +181,7 @@ def test_string_and_boolean_equality():
 def test_comparing_across_types_is_an_error():
     with pytest.raises(RuntimeErrorML) as excinfo:
         output('trace 1 == "1"\n')
-    assert "integer" in str(excinfo.value)
+    assert "number" in str(excinfo.value)
     assert "string" in str(excinfo.value)
 
 
@@ -229,7 +229,7 @@ def test_a_non_boolean_condition_is_an_error():
     with pytest.raises(RuntimeErrorML) as excinfo:
         output("redpill 1\n  trace 1\nflatline\n")
     assert "must be a boolean" in str(excinfo.value)
-    assert "integer" in str(excinfo.value)
+    assert "number" in str(excinfo.value)
 
 
 def test_a_string_condition_is_an_error():
@@ -388,13 +388,13 @@ def test_decode_rejects_text_that_is_not_a_number():
     assert "decode" in caught.value.message
 
 
-def test_decode_rejects_a_float_spelling():
-    # The language has integers only.
-    from matrixlang.errors import MatrixLangError
-
-    with pytest.raises(MatrixLangError) as caught:
-        _run_with_input("trace decode jackin\n", ["5.5"])
-    assert "decode" in caught.value.message
+def test_decode_reads_a_float_spelling():
+    # `decode` now accepts a decimal point, matching the lexer's own
+    # literal grammar -- one type, one rule. Was "rejects": the language
+    # had integers only when this test was written; it has one number
+    # type now. See tests/test_numbers_run.py for the fuller decimal
+    # decode coverage.
+    assert _run_with_input("trace decode jackin\n", ["5.5"]) == ["5.5"]
 
 
 def test_decode_rejects_an_underscore_grouped_number():
@@ -426,7 +426,7 @@ def test_decode_rejects_mathematical_digits():
 
 
 def test_decode_rejects_a_value_that_is_already_a_number():
-    # Strict like `splice`, which refuses an integer rather than coercing.
+    # Strict like `splice`, which refuses a number rather than coercing.
     # A decode that passed numbers through would hide a double decode.
     from matrixlang.errors import MatrixLangError
 
@@ -459,12 +459,15 @@ def test_decode_rejects_non_ascii_spacing_around_a_number():
     assert "decode" in caught.value.message
 
 
-def test_decode_reports_an_over_long_digit_string_rather_than_raising():
-    # CPython refuses int(str) past sys.int_info.default_max_str_digits
-    # (4300). Every character is an ASCII digit, so the check above passes
-    # it straight to int(), which raises ValueError -- a raw Python
-    # exception escaping the interpreter, out through site/glue.py's
-    # run() ("Never raises"), the operator's dry run and the CLI.
+def test_decode_reads_an_over_long_digit_string_display_reports_it_instead():
+    # Was "decode reports...": CPython refuses int(str) past
+    # sys.int_info.default_max_str_digits (4300), and decode used to pass
+    # every-digit input straight to int(), raising ValueError there.
+    # Decimal does not raise for long inputs -- the digit cap moved to
+    # display (values.TooManyDigits), reached through `trace`/`encode`
+    # rather than `decode` itself. `decode` alone succeeds; it is the
+    # attempt to SHOW the result that reports the cap, and the message
+    # names displaying rather than decoding.
     import sys
 
     from matrixlang.errors import MatrixLangError
@@ -472,7 +475,7 @@ def test_decode_reports_an_over_long_digit_string_rather_than_raising():
     too_long = "9" * (sys.int_info.default_max_str_digits + 1)
     with pytest.raises(MatrixLangError) as caught:
         _run_with_input("trace decode jackin\n", [too_long])
-    assert "decode" in caught.value.message
+    assert "cannot display a number longer than" in caught.value.message
     assert caught.value.line == 1
 
 
@@ -581,7 +584,7 @@ def test_encode_accepts_a_string():
 
 def test_encode_accepts_a_boolean():
     # Was test_encode_rejects_a_boolean. The language's own spelling, not
-    # Python's: values._display checks is_bool before is_int.
+    # Python's: values._display checks is_bool before is_number.
     assert _run("trace encode true\n") == ["true"]
 
 

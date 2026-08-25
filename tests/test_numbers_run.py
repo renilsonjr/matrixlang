@@ -155,3 +155,51 @@ def test_division_by_zero_is_still_an_error():
 
 def test_dividing_money_in_half():
     assert run("trace 49.90 / 2\n") == "24.95\n"
+
+
+def test_an_index_must_be_whole():
+    # The honest cost of true division: `length xs / 2` no longer gives a
+    # usable index. It errors rather than silently truncating. Three
+    # elements, not two -- length 2 divided by 2 is 1, whole either way
+    # true division and truncating division agree, and the case this
+    # test exists to catch never fires. Length 3 divided by 2 is 1.5,
+    # where true division and truncating division (which gave the old,
+    # silently-wrong index 1) actually disagree.
+    error = fails('construct xs = ["a", "b", "c"]\ntrace xs[length xs / 2]\n')
+    assert "whole number" in error.message
+
+
+def test_a_whole_decimal_is_a_valid_index():
+    # 1.0 IS whole, so it indexes. One type, one value.
+    assert run('construct xs = ["a", "b"]\ntrace xs[1.0]\n') == "b\n"
+
+
+def test_length_gives_a_whole_number():
+    assert run('trace length ["a", "b"]\n') == "2\n"
+
+
+def test_length_can_be_used_in_arithmetic():
+    assert run('trace length ["a", "b"] + 1\n') == "3\n"
+
+
+def test_decode_reads_a_decimal():
+    assert run('trace decode "2.5"\n') == "2.5\n"
+
+
+def test_decode_still_refuses_nonsense():
+    error = fails('trace decode "abc"\n')
+    assert "decode" in error.message
+
+
+def test_encode_writes_a_decimal():
+    assert run("trace encode 2.5\n") == "2.5\n"
+
+
+def test_a_decimal_can_be_a_dictionary_key():
+    assert run('trace {1.5: "a"} oracle 1.5\n') == "true\n"
+
+
+def test_a_whole_and_its_decimal_spelling_are_one_key():
+    # Decimal("1") and Decimal("1.0") hash equal, so these collapse --
+    # exactly as {1: "a", 1.0: "b"} does in Python.
+    assert run('trace length {1: "a", 1.0: "b"}\n') == "1\n"

@@ -371,11 +371,17 @@ def _display(value: object, nested: bool, seen: frozenset) -> str:
             # every zero -- not chased at every call site that might
             # produce one.
             value = value.copy_abs()
-        elif abs(value.adjusted()) > sys.get_int_max_str_digits():
+        elif abs(value.adjusted()) >= sys.get_int_max_str_digits():
             # The positional form would be enormous. Same cap and same
             # reasoning as the old str(int) guard: report the limit the
             # running interpreter actually enforces rather than a
             # constant copied into this file.
+            #
+            # >=, not >: adjusted() is digit-count-minus-one for a value
+            # with no fractional part, so a 4301-digit value (one past
+            # CPython's str(int) cap of 4300) has adjusted() == 4300. `>`
+            # let that value through -- the guard would not fire until
+            # 4302 digits, one later than the cap it claims to enforce.
             raise TooManyDigits(sys.get_int_max_str_digits())
         return format(value, "f")
     try:

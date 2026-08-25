@@ -1,4 +1,5 @@
 import sys
+from decimal import Decimal
 
 import pytest
 
@@ -19,7 +20,7 @@ def test_string_predicate():
 
 
 def test_type_names_are_the_language_s_words():
-    assert type_name(7) == "integer"
+    assert type_name(Decimal(7)) == "number"
     assert type_name(True) == "boolean"
     assert type_name("Neo") == "string"
 
@@ -34,9 +35,9 @@ def test_display_prints_booleans_in_the_language_s_spelling():
     assert to_display(False) == "false"
 
 
-def test_display_prints_integers():
-    assert to_display(0) == "0"
-    assert to_display(-7) == "-7"
+def test_display_prints_numbers():
+    assert to_display(Decimal(0)) == "0"
+    assert to_display(Decimal(-7)) == "-7"
 
 
 def test_a_list_is_recognised_by_identity_of_type_not_isinstance():
@@ -160,8 +161,8 @@ def test_incomparable_carries_both_type_names():
     from matrixlang.values import Incomparable, equal
 
     with pytest.raises(Incomparable) as caught:
-        equal([1], [True])
-    assert caught.value.left == "integer"
+        equal([Decimal(1)], [True])
+    assert caught.value.left == "number"
     assert caught.value.right == "boolean"
 
 
@@ -301,8 +302,8 @@ def test_a_dictionary_displays_with_quoted_string_keys():
     assert to_display({"a": 1, "b": "x"}) == '{"a": 1, "b": "x"}'
 
 
-def test_a_dictionary_displays_integer_keys_unquoted():
-    assert to_display({1: "x"}) == '{1: "x"}'
+def test_a_dictionary_displays_number_keys_unquoted():
+    assert to_display({Decimal(1): "x"}) == '{1: "x"}'
 
 
 def test_an_empty_dictionary_displays_as_empty_braces():

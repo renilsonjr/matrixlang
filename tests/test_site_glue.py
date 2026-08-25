@@ -132,15 +132,18 @@ def test_run_without_input_reports_the_shortfall_rather_than_raising():
     assert "no input left to read" in events[-1]["message"]
 
 
-def test_run_reports_an_over_long_decode_rather_than_raising():
-    # `run` promises never to raise and the JS caller has no error path,
-    # so a raw ValueError out of int() breaks the playground rather than
-    # showing a diagnostic. Reachable with no input at all, straight from
-    # the editor -- CPython refuses int(str) past 4300 digits.
+def test_run_reports_an_over_long_decode_display_rather_than_raising():
+    # `run` promises never to raise and the JS caller has no error path.
+    # Was a raw ValueError out of int() -- now Decimal(stripped) never
+    # raises for a long digit string, so `decode` itself succeeds; it is
+    # `trace` trying to SHOW the huge result that reaches values.py's
+    # digit cap. Still reachable with no input at all, straight from the
+    # editor, and still an error event rather than a raised exception --
+    # just from displaying, not decoding.
     too_long = "9" * (sys.int_info.default_max_str_digits + 1)
     events = glue.run(f'trace decode "{too_long}"\n')
     assert events[-1]["kind"] == "error"
-    assert "decode" in events[-1]["message"]
+    assert "cannot display a number longer than" in events[-1]["message"]
 
 
 def test_run_reports_an_over_long_number_rather_than_raising():
@@ -164,13 +167,18 @@ def test_run_reports_an_over_long_number_rather_than_raising():
 def test_run_reports_an_over_long_number_literal_rather_than_raising():
     # The third door to the same CPython ceiling, and the one that needs
     # no arithmetic at all: a long enough run of digits typed -- or
-    # pasted -- straight into the editor. `run` catches MatrixLangError
-    # and nothing else, so the bare ValueError out of the lexer's int()
-    # left the playground with an unhandled exception rather than an
-    # error event, exactly as the two above did.
+    # pasted -- straight into the editor. The digit cap moved out of the
+    # lexer (#135): lexing and parsing a literal this long now succeed,
+    # and it is `trace` trying to display the result that reaches
+    # values.py's cap -- see
+    # tests/test_numbers_lex.py::test_an_oversized_literal_fails_at_trace_not_at_lex_or_parse
+    # for the same chain pinned closer to the source. `run` catches
+    # MatrixLangError and nothing else, so a bare exception anywhere in
+    # that chain would leave the playground with an unhandled exception
+    # rather than an error event.
     events = glue.run("trace " + "1" * (sys.int_info.default_max_str_digits + 1) + "\n")
     assert events[-1]["kind"] == "error"
-    assert "number too long to read" in events[-1]["message"]
+    assert "cannot display a number longer than" in events[-1]["message"]
 
 
 def test_an_empty_input_box_is_named_when_a_program_runs_out_of_input():

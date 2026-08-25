@@ -63,7 +63,7 @@ def test_unplug_is_a_unary_over_the_whole_comparison():
     # THE precedence test for unplug. `unplug n == 1` must be
     # unplug (n == 1). The C reading, (unplug n) == 1, is an error for
     # every possible n — either n is not boolean and unplug fails, or it
-    # is and a boolean is compared to an integer.
+    # is and a boolean is compared to a number.
     from matrixlang.nodes import Binary, Unary
 
     parsed = first("construct b = unplug n == 1\n").value

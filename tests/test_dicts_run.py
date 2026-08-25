@@ -108,7 +108,7 @@ def test_oracle_on_a_non_container_is_an_error():
     # so the example moved to something that genuinely holds nothing.
     error = fails('trace 1 oracle "a"\n')
     assert (
-        "'oracle' takes a list, a string or a dictionary, got integer"
+        "'oracle' takes a list, a string or a dictionary, got number"
         in error.message
     )
 

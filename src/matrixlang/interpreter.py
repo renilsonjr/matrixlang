@@ -12,6 +12,7 @@ either source face.
 import dataclasses
 import string
 import sys
+from decimal import Decimal
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
@@ -365,8 +366,8 @@ class Interpreter:
                     stmt.index.line,
                     stmt.index.column,
                 )
-            self._check_index(target, index, stmt.index)
-            target[index] = value
+            position = self._check_index(target, index, stmt.index)
+            target[position] = value
         elif isinstance(stmt, FunctionDef):
             agent = Function(stmt.name, stmt.params, stmt.body, self._env)
             if not self._env.declare(stmt.name, agent):
@@ -480,7 +481,11 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     )
-                return len(operand)
+                # A number, not a plain int: everything in the language is
+                # one type now, and `length xs + 1` must add like any other
+                # number rather than colliding with `cannot order number
+                # with int`.
+                return Decimal(len(operand))
             if expr.op is TokenType.KEYMAKER:
                 if not is_dict(operand):
                     raise RuntimeErrorML(
@@ -529,37 +534,38 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     )
-                # Explicit check, not bare int(): int() accepts far more
-                # than the lexer's own number grammar ever produces --
-                # "1_000", Arabic-Indic digits, other Unicode decimal
-                # digits -- because decode reads external input that
-                # nothing upstream has filtered. See _DECODE_DIGITS.
+                # Explicit check, not bare int()/Decimal(): both accept far
+                # more than the lexer's own number grammar ever produces --
+                # "1_000", Arabic-Indic digits, "1E+3", other Unicode
+                # decimal digits or exponent forms -- because decode reads
+                # external input that nothing upstream has filtered. See
+                # _DECODE_DIGITS. Widened to allow at most one point, so
+                # `decode` accepts exactly what the lexer's own literal
+                # grammar accepts -- one point, digits required on both
+                # sides of it -- rather than inventing a second rule.
                 stripped = operand.strip(_DECODE_SPACE)
                 digits = stripped[1:] if stripped.startswith("-") else stripped
-                if not digits or not all(c in _DECODE_DIGITS for c in digits):
+                if digits.count(".") > 1:
+                    ok = False
+                elif "." in digits:
+                    whole, _, fraction = digits.partition(".")
+                    ok = bool(whole) and bool(fraction) and all(
+                        c in _DECODE_DIGITS for c in whole + fraction
+                    )
+                else:
+                    ok = bool(digits) and all(c in _DECODE_DIGITS for c in digits)
+                if not ok:
                     raise RuntimeErrorML(
-                        f"'decode' needs a whole number, got \"{operand}\"",
+                        f"'decode' needs a number, got \"{operand}\"",
                         expr.line,
                         expr.column,
                     )
-                try:
-                    return int(stripped)
-                except ValueError as error:
-                    # All digits and still refused: CPython caps
-                    # int(str) at sys.int_info.default_max_str_digits
-                    # (4300), so a long enough run of digits passes the
-                    # check above and then raises. `decode` reads
-                    # external input, so a caller can hand us one --
-                    # and everything downstream (site/glue.py's run(),
-                    # which promises never to raise; the operator's dry
-                    # run; the CLI's diagnostic) expects nothing but
-                    # MatrixLangError out of here.
-                    raise RuntimeErrorML(
-                        f"'decode' got a number too long to read — "
-                        f"{len(digits)} digits",
-                        expr.line,
-                        expr.column,
-                    ) from error
+                # Decimal does not raise for long inputs the way int() did
+                # -- the old try/except ValueError around int(stripped) is
+                # gone. The digit cap now lives in display (values.py's
+                # TooManyDigits), reached through `trace`/`encode` rather
+                # than here.
+                return Decimal(stripped)
             if expr.op is TokenType.ENCODE:
                 # Any value, deliberately. This was numbers-only, guarded by
                 # is_int, until a reader's f-string interpolating a string
@@ -703,17 +709,35 @@ class Interpreter:
             raise RuntimeErrorML(
                 f"cannot index {type_name(target)}", node.line, node.column
             )
-        self._check_index(target, index, node)
-        return target[index]
+        position = self._check_index(target, index, node)
+        return target[position]
 
-    def _check_index(self, target: list | str, index: object, node) -> None:
-        if not is_int(index):
+    def _check_index(self, target: list | str, index: object, node) -> int:
+        """Validate `index` and return it as a Python `int` subscript.
+
+        Two branches, not one: a non-number and a fractional number are
+        different mistakes and deserve different messages. `int(index)`
+        for the final conversion is safe — it does not round, it
+        truncates a value already checked whole by `is_whole` above.
+        """
+        if not is_number(index):
             raise RuntimeErrorML(
-                f"an index must be an integer, got {type_name(index)}",
+                f"an index must be a whole number, got {type_name(index)}",
                 node.line,
                 node.column,
             )
-        if index < 0:
+        if not is_whole(index):
+            # Reachable now that `/` is true division: `xs[length xs / 2]`
+            # lands here rather than silently truncating. Showing the
+            # value, not the type, because the type is right and the
+            # value is not.
+            raise RuntimeErrorML(
+                f"an index must be a whole number, got {to_display(index)}",
+                node.line,
+                node.column,
+            )
+        position = int(index)
+        if position < 0:
             # The placeholder name mirrors the bounds message's noun below:
             # a list example says `xs`, a string example says `s`, so
             # neither reader is told to fix a string with list vocabulary.
@@ -723,16 +747,17 @@ class Interpreter:
                 node.line,
                 node.column,
             )
-        if index >= len(target):
+        if position >= len(target):
             # type_name rather than a hardcoded "list": one message serves
             # both, so the two can never drift into disagreeing about the
             # same rule.
             raise RuntimeErrorML(
-                f"index {index} is past the end of a {type_name(target)} "
+                f"index {position} is past the end of a {type_name(target)} "
                 f"of length {len(target)}",
                 node.line,
                 node.column,
             )
+        return position
 
     def _call(self, expr: Call) -> object:
         callee = self._value_of(expr.callee, expr)
