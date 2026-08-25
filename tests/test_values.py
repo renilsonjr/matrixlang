@@ -270,27 +270,45 @@ def test_a_cyclic_pair_terminates_by_assuming_equality_on_re_entry():
 
 
 def test_a_number_too_long_to_render_raises_a_named_signal():
-    # CPython refuses str(int) past sys.get_int_max_str_digits(), raising
-    # a bare ValueError. Left alone that escapes the interpreter as a
-    # Python exception -- past every `except MatrixLangError` the CLI,
-    # the operator's dry run and site/glue.py's run() rely on. Named here
-    # for the same reason as CyclicValue: values.py knows the value
-    # cannot be rendered, the interpreter knows where it was written.
+    # Was `10 ** (...)`, a bare Python int. `is_number` is `type(value)
+    # is Decimal` exactly, so a bare int never reaches the number branch
+    # in `_display` at all -- it falls through to the generic `str()`
+    # fallback at the bottom, which raises its own ValueError-turned-
+    # TooManyDigits *unconditionally* past CPython's cap. That fallback
+    # path made this test pass even with the real guard -- the `elif
+    # abs(value.adjusted()) >= sys.get_int_max_str_digits()` check a few
+    # lines up in `_display`'s number branch -- deleted outright, since
+    # nothing here ever reached it. A `Decimal` this long exercises the
+    # actual guard: CPython refuses `str(int)` past
+    # sys.get_int_max_str_digits(), and `format(Decimal, "f")` hits the
+    # same wall for a value this long, raising a bare ValueError. Left
+    # alone that escapes the interpreter as a Python exception -- past
+    # every `except MatrixLangError` the CLI, the operator's dry run and
+    # site/glue.py's run() rely on. Named here for the same reason as
+    # CyclicValue: values.py knows the value cannot be rendered, the
+    # interpreter knows where it was written.
+    from decimal import Decimal
+
     from matrixlang.values import TooManyDigits, to_display
 
     with pytest.raises(TooManyDigits) as caught:
-        to_display(10 ** (sys.get_int_max_str_digits() + 1))
+        to_display(Decimal("9" * (sys.get_int_max_str_digits() + 1)))
     assert caught.value.limit == sys.get_int_max_str_digits()
 
 
 def test_a_number_just_under_the_ceiling_still_renders():
     # The boundary in the other direction. A guard that reported every
     # long number as unrenderable would pass the test above and break
-    # arithmetic nobody thinks of as extreme.
+    # arithmetic nobody thinks of as extreme. `Decimal`, not a bare
+    # Python int, for the same reason as the test above -- a bare int
+    # never reaches this guard at all, so it cannot pin the boundary of
+    # something it never exercises.
+    from decimal import Decimal
+
     from matrixlang.values import to_display
 
     limit = sys.get_int_max_str_digits()
-    rendered = to_display(10 ** (limit - 2))
+    rendered = to_display(Decimal("9" * (limit - 1)))
     assert len(rendered) == limit - 1
 
 

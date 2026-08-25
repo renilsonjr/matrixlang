@@ -719,6 +719,20 @@ class Interpreter:
         different mistakes and deserve different messages. `int(index)`
         for the final conversion is safe — it does not round, it
         truncates a value already checked whole by `is_whole` above.
+
+        Neither diagnostic below interpolates `index` or `position`
+        directly. `decode` no longer caps digit count (Task 5 removed its
+        `try/except ValueError` around `int()`, since `Decimal` does not
+        raise for a long digit string), so an index reaching this method
+        can carry thousands of digits with nothing upstream to have
+        stopped it — from a literal (the lexer's own cap moved to display,
+        #135) or from `xs[decode "<huge digit string>"]` alike. `str(a
+        4301-digit Python int)` raises a bare ValueError under CPython's
+        own conversion cap, same as `str()` on the equivalent `Decimal`
+        does — so both branches route the value through `_display_index`,
+        which is the one place that cap is caught and turned into a
+        RuntimeErrorML, instead of ever formatting `position` or `index`
+        straight into an f-string.
         """
         if not is_number(index):
             raise RuntimeErrorML(
@@ -732,7 +746,8 @@ class Interpreter:
             # value, not the type, because the type is right and the
             # value is not.
             raise RuntimeErrorML(
-                f"an index must be a whole number, got {to_display(index)}",
+                f"an index must be a whole number, got "
+                f"{self._display_index(index, node)}",
                 node.line,
                 node.column,
             )
@@ -750,14 +765,38 @@ class Interpreter:
         if position >= len(target):
             # type_name rather than a hardcoded "list": one message serves
             # both, so the two can never drift into disagreeing about the
-            # same rule.
+            # same rule. `_display_index`, not bare `position`: see this
+            # method's docstring -- `position` can be a Python int with
+            # thousands of digits, and formatting one of those directly
+            # into an f-string raises a bare ValueError.
             raise RuntimeErrorML(
-                f"index {position} is past the end of a {type_name(target)} "
-                f"of length {len(target)}",
+                f"index {self._display_index(index, node)} is past the end "
+                f"of a {type_name(target)} of length {len(target)}",
                 node.line,
                 node.column,
             )
         return position
+
+    def _display_index(self, index: object, node) -> str:
+        """`to_display(index)` for an index diagnostic, guarded the same
+        way `trace` guards it at the top of `_execute` (and `encode`
+        guards it in `_evaluate`): `TooManyDigits` is not a
+        MatrixLangError on purpose (see its docstring in values.py) so
+        that every caller is forced to convert it, and this is the one
+        call site `_check_index` has for it. Without this, a whole
+        number past the digit cap -- reachable from a literal or from
+        `decode`, since neither caps digit count anymore -- would raise
+        a bare TooManyDigits (not even a Python built-in) straight out
+        of the interpreter.
+        """
+        try:
+            return to_display(index)
+        except TooManyDigits as size:
+            raise RuntimeErrorML(
+                f"cannot display a number longer than {size.limit} digits",
+                node.line,
+                node.column,
+            ) from None
 
     def _call(self, expr: Call) -> object:
         callee = self._value_of(expr.callee, expr)

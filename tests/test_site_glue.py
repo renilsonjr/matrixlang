@@ -181,6 +181,77 @@ def test_run_reports_an_over_long_number_literal_rather_than_raising():
     assert "cannot display a number longer than" in events[-1]["message"]
 
 
+# --- Fix-review regression: an over-long INDEX, not just an over-long
+# number, escaping run() as a bare Python exception. -------------------
+#
+# Review on this task's first pass found two Criticals sitting in the
+# same eight lines of interpreter.py's _check_index: `position` -- a
+# full-size Python int by the time the "past the end" message was built
+# -- was interpolated straight into an f-string, and the "not is_whole"
+# branch's own to_display(index) call was unguarded, unlike every other
+# to_display call site in that file. Both are the same class of bug as
+# test_run_reports_an_over_long_number_literal_rather_than_raising
+# above, and the same class Task 2's
+# test_an_oversized_literal_fails_at_trace_not_at_lex_or_parse exists to
+# catch for `trace` -- proven here for indexing instead, end to end
+# through glue.run() exactly as that promise requires, and through both
+# routes that can hand `_check_index` an oversized value: a literal
+# typed straight into the editor, and `decode` reading external input
+# (this task removed decode's own digit cap, so nothing upstream stops
+# either route from reaching the index check with a huge value).
+
+
+def test_run_reports_an_over_long_literal_index_rather_than_raising():
+    # Critical 1, the literal route. No input needed -- reachable by
+    # pasting straight into the editor.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct xs = ["a", "b"]\ntrace xs[{too_long}]\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_decoded_index_rather_than_raising():
+    # Critical 1, the decode route -- reached differently from the
+    # literal case above: through external input rather than the lexer,
+    # with nothing but `_check_index` itself standing between a caller
+    # and a bare Python exception now that decode's own cap is gone.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(
+        f'construct xs = ["a", "b"]\ntrace xs[decode "{too_long}"]\n'
+    )
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_non_whole_index_rather_than_raising():
+    # Critical 2: the "not is_whole" branch's to_display(index) call,
+    # reached before position even exists -- a long, fractional index
+    # never gets as far as the "past the end" message Critical 1 covers.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct xs = ["a"]\ntrace xs[{too_long}.5]\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_index_on_assignment_rather_than_raising():
+    # _check_index is shared between the Index-read branch of _evaluate
+    # and the IndexAssign branch of _execute -- a fix in one and not the
+    # other would leave this route still raising bare.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct xs = ["a", "b"]\nxs[{too_long}] = "z"\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_string_index_rather_than_raising():
+    # _element serves strings and lists through the same _check_index,
+    # so the guard must hold for a string target too, not just a list.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct s = "ab"\ntrace s[{too_long}]\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
 def test_an_empty_input_box_is_named_when_a_program_runs_out_of_input():
     # "no input left to read" is correct and stays surface-neutral -- the CLI
     # and the REPL share it. But glue.py IS the browser, so it can say which
