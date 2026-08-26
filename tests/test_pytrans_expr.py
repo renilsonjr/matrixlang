@@ -294,3 +294,17 @@ def test_the_unsupported_comprehensions_still_refuse():
     # the condition check first, and MatrixLang has no truthiness. The
     # reader gets the better of the two messages.
     assert "truthiness" in refused("while [x for x in xs]:\n    print(1)\n")[0].reason
+
+
+def test_a_refusal_inside_a_loop_else_keeps_the_readers_position():
+    # `//` is refused permanently, which makes it a stable thing to aim
+    # at. It sits on line 5 of the reader's source; if the rewrite lost
+    # positions this would report line 1.
+    refusal = refused(
+        "xs = [1]\n"
+        "for x in xs:\n"
+        "    break\n"
+        "else:\n"
+        "    print(7 // 2)\n"
+    )[0]
+    assert (refusal.line, refusal.column) == (5, 10)

@@ -543,3 +543,62 @@ def test_a_comprehension_in_the_iterable_of_another_agrees():
         "out = [x for x in [y * 2 for y in xs]]\n"
         "for v in out:\n    print(v)\n"
     )
+
+
+def test_a_loop_else_that_breaks_agrees():
+    agree(
+        "xs = [1, 2, 3]\nt = 2\n"
+        "for x in xs:\n    if x == t:\n        print(100)\n        break\n"
+        "else:\n    print(999)\n"
+    )
+
+
+def test_a_loop_else_that_completes_agrees():
+    agree(
+        "xs = [1, 2, 3]\nt = 9\n"
+        "for x in xs:\n    if x == t:\n        print(100)\n        break\n"
+        "else:\n    print(999)\n"
+    )
+
+
+def test_a_loop_else_over_an_empty_list_agrees():
+    agree("xs = []\nfor x in xs:\n    break\nelse:\n    print(7)\n")
+
+
+def test_a_loop_else_with_no_break_agrees():
+    agree("xs = [1, 2]\nfor x in xs:\n    print(x)\nelse:\n    print(7)\n")
+
+
+def test_a_nested_loops_break_does_not_suppress_the_outer_else_agrees():
+    agree("A = [1, 2]\nB = [3]\nfor a in A:\n    for b in B:\n        break\nelse:\n    print(5)\n")
+
+
+def test_a_break_in_an_inner_loops_else_exits_the_outer_loop_agrees():
+    agree(
+        "A = [1, 2, 3]\nB = []\n"
+        "for a in A:\n    for b in B:\n        print(b)\n    else:\n        print(a)\n        break\n"
+        "else:\n    print(999)\n"
+    )
+
+
+def test_a_while_else_agrees():
+    agree("n = 0\nwhile n < 5:\n    if n == 2:\n        print(2)\n        break\n    n = n + 1\nelse:\n    print(99)\n")
+
+
+def test_a_while_else_that_completes_agrees():
+    agree("n = 0\nwhile n < 3:\n    n = n + 1\nelse:\n    print(42)\n")
+
+
+def test_a_loop_else_inside_a_loop_agrees():
+    # The flag lands inside the outer loop body, which is the
+    # `construct`-in-a-loop trap this project has hit before -- it only
+    # works because _hoist_declares lifts the declaration out.
+    agree(
+        "rows = [[1, 2], [3, 4]]\nt = 3\n"
+        "for r in rows:\n    for v in r:\n        if v == t:\n            break\n"
+        "    else:\n        print(r[0])\n"
+    )
+
+
+def test_a_loop_else_whose_flag_name_is_taken_agrees():
+    agree("broke = 5\nxs = [1]\nfor x in xs:\n    break\nelse:\n    print(1)\nprint(broke)\n")

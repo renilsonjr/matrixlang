@@ -25,6 +25,7 @@ from matrixlang.tokens import TokenType
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
 from matrixlang.pytrans.names import bound_names, free_name
 from matrixlang.pytrans.comprehensions import rewrite_comprehensions
+from matrixlang.pytrans.loop_else import rewrite_loop_else
 
 # `/` and `%` translate. MatrixLang's `/` is true division, rounded at
 # precision 28 (interpreter.py's DIVISION context) -- the same operation
@@ -142,9 +143,13 @@ def translate(source: str) -> Translated | Refusals:
     for statement in tree.body:
         try:
             with recursion_guard():
-                module = rewrite_comprehensions(
-                    ast.Module(body=[copy.deepcopy(statement)], type_ignores=[]), taken
-                )
+                # Control flow desugars before expressions do, so the
+                # comprehension pass only ever sees loops with no `else`
+                # left on them. Both passes share `taken` and both are
+                # covered by the guard and the deepcopy already here.
+                module = ast.Module(body=[copy.deepcopy(statement)], type_ignores=[])
+                module = rewrite_loop_else(module, taken)
+                module = rewrite_comprehensions(module, taken)
             rewritten.extend(module.body)
         except TooDeepError:
             rewritten.append(statement)

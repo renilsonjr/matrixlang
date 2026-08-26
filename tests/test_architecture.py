@@ -83,7 +83,7 @@ _ALLOWED: dict[str, set[str]] = {
     # something translate() can hand back as a Refusal instead of raising.
     "pytrans.translate": {
         "errors", "nodes", "tokens", "render", "pytrans.refuse", "pytrans.names",
-        "pytrans.comprehensions",
+        "pytrans.comprehensions", "pytrans.loop_else",
     },
 }
 
