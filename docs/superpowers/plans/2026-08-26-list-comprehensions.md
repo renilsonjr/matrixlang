@@ -213,8 +213,11 @@ and no translator involved: a failure here says the rewrite is wrong
 rather than that something downstream broke.
 
 Anything this pass declines to rewrite it leaves exactly as it found it,
-so the construct keeps the refusal it already had. Declining is the whole
-error-handling strategy; there is no failure mode of its own.
+so the construct keeps the refusal it already had. Declining is how the
+pass handles everything it will not do -- but it is not the whole story:
+the descent is recursive and unguarded, so `translate()` wraps each
+statement in `recursion_guard()` and declines the statement on
+`TooDeepError`. See Task 5.
 """
 
 import ast
