@@ -108,7 +108,7 @@ and the reader keeps every accurate message they had.
 All four must hold, within one module:
 
 1. A `FunctionDef` containing **both** a `return <expr>` where `expr` is
-   not `None`, **and** an explicit `return None` or a bare `return`.
+   not `None`, **and** an explicit `return None`.
 2. An `Assign` with a single plain `Name` target whose value is a `Call`
    to that function by name.
 3. An `If` whose test is exactly that `Name` — not a call on it, not an
@@ -124,6 +124,21 @@ Anything else falls through to today's two messages.
 but detecting it means proving no path returns — the inference that gets
 this wrong. The shape is also invisible in the source rather than written
 down, so a reader cannot see what the translator claims to have seen.
+
+**A bare `return`.** Measured, not assumed: a bare `return` produces only
+ONE refusal today, the truthiness one. There is no `None` constant node,
+so `_constant` never fires and nothing is reported at the return at all.
+Admitting it to the predicate would detect a shape the safety property
+then forbids acting on — dead code wearing the appearance of coverage.
+Narrowing to an explicit `return None` keeps the predicate's promise and
+the safety property identical.
+
+That leaves a real gap this design does not close: a reader who writes a
+bare `return` in a value-returning function is never told about the
+`None` at all, only about the truthiness. It is pre-existing, arguably
+wider than the gap fixed here, and deliberately out of scope — closing it
+means giving the bare `return` a refusal of its own, which is a different
+change with a different argument.
 
 **Rebinding between the assign and the test** is why requirement 4 exists.
 Without it, `result = find(x)` … `result = other()` … `if result:` pairs
@@ -173,6 +188,8 @@ naming both lines and carrying the rewrite.
 reader two accurate messages. Each must fall through to today's behaviour:
 
 - every path returns `None`, or every path returns a value
+- the None path is a bare `return` rather than an explicit `return None`
+  (this one asserts today's single truthiness refusal survives untouched)
 - `result` rebound between the assign and the `if`
 - the test is `if result.name:` or `if find(x):` rather than a bare `Name`
 - the `None` arrives by falling off the end
