@@ -134,12 +134,6 @@ def test_the_flag_stem_is_not_a_matrixlang_keyword():
     assert _FLAG_STEM not in tokens.KEYWORDS
 
 
-def test_a_while_else_is_left_alone_until_task_3():
-    # Scaffolding, and Task 3 deletes it. Until `while` is supported it
-    # must be left byte-identical so it keeps the refusal it already has,
-    # rather than being half-handled.
-    source = "while c:\n    break\nelse:\n    print(1)\n"
-    assert rewritten(source) == ast.unparse(ast.parse(source))
 
 
 def test_a_program_without_loop_else_is_untouched():
@@ -178,6 +172,41 @@ def test_only_a_nested_break_still_means_no_flag():
     ) == (
         "for a in A:\n"
         "    for b in B:\n"
+        "        break\n"
+        "print(1)"
+    )
+
+
+def test_a_while_else_becomes_a_flag_and_a_guard():
+    assert rewritten(
+        "while c:\n    if d:\n        break\nelse:\n    print(1)\n"
+    ) == (
+        "broke = False\n"
+        "while c:\n"
+        "    if d:\n"
+        "        broke = True\n"
+        "        break\n"
+        "if broke == False:\n"
+        "    print(1)"
+    )
+
+
+def test_a_while_that_cannot_break_gets_no_flag():
+    assert rewritten(
+        "while c:\n    n = n + 1\nelse:\n    print(1)\n"
+    ) == (
+        "while c:\n"
+        "    n = n + 1\n"
+        "print(1)"
+    )
+
+
+def test_a_break_in_a_nested_while_is_not_ours():
+    assert rewritten(
+        "for a in A:\n    while c:\n        break\nelse:\n    print(1)\n"
+    ) == (
+        "for a in A:\n"
+        "    while c:\n"
         "        break\n"
         "print(1)"
     )

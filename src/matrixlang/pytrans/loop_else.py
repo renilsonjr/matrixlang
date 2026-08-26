@@ -28,9 +28,7 @@ _FLAG_STEM = "broke"
 
 _BLOCK_FIELDS = ("body", "orelse", "finalbody")
 
-# Task 3 adds ast.While here. Until then a `while ... else` is left
-# untouched, which keeps the refusal it already has.
-_LOOPS = (ast.For,)
+_LOOPS = (ast.For, ast.While)
 
 
 def _suites(statement: ast.stmt):
