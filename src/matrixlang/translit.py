@@ -2,8 +2,9 @@
 
 This is NOT the language's glyph face. The distinction matters:
 
-  glyphs.GLYPHS   the LANGUAGE's face. 54 slots, bijective, round-trips
+  glyphs.GLYPHS   the LANGUAGE's face. 56 slots, bijective, round-trips
                   through the lexer. Governed by D-03 and spec section 4.3.
+                  56 used, 0 free -- the table is closed.
   this module     a DISPLAY dictionary. Its output is never lexed, so it
                   owes nothing to D-03 and may reuse glyphs the language
                   assigns -- no parser ever has to tell them apart.
@@ -66,7 +67,7 @@ _POOL = [chr(code) for code in range(0xFF61, 0xFF9E)]
 _LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 # The 22 punctuation marks that actually appear in MatrixLang output:
-# string contents, the minus sign on negative integers, the brackets and
+# string contents, the minus sign on negative numbers, the brackets and
 # braces of a traced collection, and ordinary prose.
 #
 # ORDER IS IDENTITY HERE. Glyphs are handed out by popping `_available` in

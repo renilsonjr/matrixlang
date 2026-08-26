@@ -50,22 +50,22 @@ def test_ordering_is_codepoint_order_not_alphabetical():
     assert run('trace "B" < "a"\n') == "true\n"
 
 
-def test_integers_still_order():
+def test_numbers_still_order():
     assert run("trace 3 < 5\n") == "true\n"
     assert run("trace 5 <= 5\n") == "true\n"
 
 
 def test_mixed_operands_report_the_pair_exactly():
     # Exact string, not a substring. The old message ("left operand must
-    # be an integer, got string") becomes FALSE once strings are
+    # be a number, got string") becomes FALSE once strings are
     # orderable, and a substring check like `"string" in message` would
     # pass against both. That exact failure shipped in Stage 7.
-    assert fails('trace "a" < 1\n').message == "cannot order string with integer"
-    assert fails('trace 1 < "a"\n').message == "cannot order integer with string"
+    assert fails('trace "a" < 1\n').message == "cannot order string with number"
+    assert fails('trace 1 < "a"\n').message == "cannot order number with string"
 
 
 def test_booleans_are_still_unorderable():
-    assert fails("trace true < 5\n").message == "cannot order boolean with integer"
+    assert fails("trace true < 5\n").message == "cannot order boolean with number"
     assert fails("trace true < false\n").message == "cannot order boolean with boolean"
 
 
@@ -82,13 +82,13 @@ def test_the_ordering_error_points_at_the_operator():
     assert (error.line, error.column) == (1, 11)
 
 
-def test_arithmetic_still_requires_integers():
-    # _require_int has three call sites (unary minus, and the two
+def test_arithmetic_still_requires_numbers():
+    # _require_number has three call sites (unary minus, and the two
     # arithmetic operands — ordering moved off it in this stage). These
     # must not have moved.
-    assert 'must be an integer' in fails('trace 1 - "a"\n').message
-    assert 'must be an integer' in fails('trace -"a"\n').message
-    assert 'must be an integer' in fails('trace "a" * 2\n').message
+    assert 'must be a number' in fails('trace 1 - "a"\n').message
+    assert 'must be a number' in fails('trace -"a"\n').message
+    assert 'must be a number' in fails('trace "a" * 2\n').message
 
 
 # --- Reading a character ------------------------------------------------
@@ -168,10 +168,10 @@ def test_a_negative_list_index_is_an_error():
     )
 
 
-def test_a_non_integer_string_index_is_an_error():
+def test_a_non_number_string_index_is_an_error():
     assert (
         fails('trace "Neo"["a"]\n').message
-        == "an index must be an integer, got string"
+        == "an index must be a whole number, got string"
     )
 
 
@@ -237,7 +237,7 @@ def test_assigning_to_a_list_element_still_works():
 
 
 def test_assigning_to_a_non_indexable_still_says_cannot_index():
-    assert fails("construct n = 1\nn[0] = 2\n").message == "cannot index integer"
+    assert fails("construct n = 1\nn[0] = 2\n").message == "cannot index number"
 
 
 # --- Fold, trim, cleave ---------------------------------------------------
@@ -319,7 +319,7 @@ def test_cleave_with_an_empty_separator_is_an_error():
 @pytest.mark.parametrize(
     "operand,name",
     [
-        ("1", "integer"),
+        ("1", "number"),
         ("true", "boolean"),
         ('["a"]', "list"),
         ('{"a": 1}', "dictionary"),
@@ -333,7 +333,7 @@ def test_fold_refuses_every_non_string(operand, name):
 @pytest.mark.parametrize(
     "operand,name",
     [
-        ("1", "integer"),
+        ("1", "number"),
         ("true", "boolean"),
         ('["a"]', "list"),
         ('{"a": 1}', "dictionary"),
@@ -345,7 +345,7 @@ def test_trim_refuses_every_non_string(operand, name):
 
 
 @pytest.mark.parametrize(
-    "left,name", [("1", "integer"), ("true", "boolean"), ('["a"]', "list")]
+    "left,name", [("1", "number"), ("true", "boolean"), ('["a"]', "list")]
 )
 def test_cleave_refuses_a_non_string_on_the_left(left, name):
     error = fails(f'trace {left} cleave ","\n')
@@ -353,7 +353,7 @@ def test_cleave_refuses_a_non_string_on_the_left(left, name):
 
 
 @pytest.mark.parametrize(
-    "right,name", [("1", "integer"), ("true", "boolean"), ('["a"]', "list")]
+    "right,name", [("1", "number"), ("true", "boolean"), ('["a"]', "list")]
 )
 def test_cleave_refuses_a_non_string_separator(right, name):
     error = fails(f'trace "a,b" cleave {right}\n')

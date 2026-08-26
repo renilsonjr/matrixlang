@@ -39,6 +39,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
     TokenType.SLASH: "/",
+    TokenType.PERCENT: "%",
     TokenType.EQ: "==",
     TokenType.NEQ: "!=",
     TokenType.LT: "<",

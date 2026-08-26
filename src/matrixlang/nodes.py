@@ -10,6 +10,7 @@ different line/column numbers, so positions carry compare=False.
 """
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from matrixlang.tokens import TokenType
 
@@ -30,7 +31,36 @@ class Expr(Node):
 
 @dataclass
 class NumberLiteral(Expr):
-    value: int
+    # Must be a Decimal, not a bare int -- this is load-bearing, not a
+    # hint. render.py's _number walks format(value, "f") character by
+    # character; handed a plain int, format(5, "f") silently succeeds as
+    # "5.000000" instead of raising, so a stray int here renders wrong
+    # (`trace 5.000000`) with no error anywhere, and the interpreter
+    # only catches the mistake later, at arithmetic.
+    value: Decimal
+
+    def __post_init__(self) -> None:
+        # The guard goes on the OBJECT, not at the construction sites --
+        # the same argument values._GuardedContext's docstring makes about
+        # putting the Overflow guard on the context rather than at every
+        # call. There are thirteen `NumberLiteral(` sites across scribe,
+        # translate and the parser, and the last sweep of them was done by
+        # grep, which is a check that runs once rather than every time.
+        #
+        # `==` cannot police this and never will: `Decimal(42) == 42` is
+        # True, so all ~45 bare-int `NumberLiteral(N)` comparison targets
+        # in the test suite would go on passing if the parser started
+        # producing bare ints. A type check is the only thing that sees it.
+        #
+        # `type(...) is not Decimal`, not isinstance, matching values.py:
+        # a bool is an int in Python, and this file should not be where a
+        # future numeric subclass sneaks in.
+        if type(self.value) is not Decimal:
+            raise TypeError(
+                "NumberLiteral.value must be a Decimal, not "
+                f"{type(self.value).__name__} -- format({self.value!r}, 'f') "
+                "would render wrong instead of raising"
+            )
 
 
 @dataclass

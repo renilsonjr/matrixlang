@@ -15,7 +15,7 @@ real programs outranks one that has blocked none, whatever either looks like on
 paper.
 
 **Where the truth lives:** `src/matrixlang/pytrans/translate.py`'s `_DESCRIBE`
-catalogue is what the translator can actually refuse — 49 entries at the time of
+catalogue is what the translator can actually refuse — 47 entries at the time of
 writing. This document is a reading of that catalogue plus judgement about
 order. If the two ever disagree, the catalogue is right.
 
@@ -23,26 +23,29 @@ order. If the two ever disagree, the catalogue is right.
 
 ## What MatrixLang has today
 
-**Types (5)** — integer, string, boolean, list, dictionary — plus agents
+**Types (5)** — number, string, boolean, list, dictionary — plus agents
 (functions) with closures, which the rest of this repo counts separately
-from the value types
+from the value types. One number type, exact decimal: `3` and `3.0` are the
+same value.
 
-**Operators** — `+ - * /`, `== != < > <= >=`
+**Operators** — `+ - * / %`, `== != < > <= >=`
 
 **Keywords (24)** — `construct` `trace` `redpill` `bluepill` `dejavu`
 `flatline` `true` `false` `agent` `jackout` `length` `splice` `fork` `unplug`
 `jackin` `decode` `encode` `keymaker` `oracle` `fold` `trim` `cleave` `wake`
 `glitch`
 
-**Glyph budget** — 54 slots used, 2 free.
+**Glyph budget** — 56 slots used, 0 free. The table is closed.
 
 ### One oddity worth knowing
 
-**The language has `/`, and Python cannot reach it.** MatrixLang's `/` truncates
-toward zero; Python's `/` is true division and its `//` floors. Neither matches,
-so the translator refuses both rather than translate a silent difference.
-Division exists in the language and is unreachable from the translator — which
-is the strongest single argument for taking on numbers properly.
+**The language has `/`, and Python can reach it, but not all the way.**
+MatrixLang's `/` is true division, translating cleanly from Python's `/`
+(#135). `//` is a different story: MatrixLang has no floor operator, and
+the glyph table that would carry one is full — 56 used, 0 free — so there
+is no slot left to buy one. The translator refuses `//` permanently, not
+provisionally; closing this gap the way item 4 closed `/` and `%` is not
+on the table without a larger glyph block.
 
 ---
 
@@ -109,22 +112,35 @@ type inference the translator's governing rule forbids. This is
 deliberate and must not be "fixed" by making `oracle` treat `true` and
 `1` as the same element — that would collapse dictionary keys instead.
 
-### 4. Numbers — decimals and `%` — #135 — *next*
+### 4. Numbers — decimals and `%` — #135 — **done**
 
-The biggest unlock and the biggest decision.
+The biggest unlock and the biggest decision. The integer type is gone; the
+language has one number type, `number`, and it is exact decimal, not
+binary float. `3` and `3.0` are the same value, and `0.1 + 0.2` is `0.3` —
+the decision landed on decimals precisely to avoid the float answer to
+that question in a teaching language. Floats translate from Python
+through `Decimal(str(value))`, never `Decimal(<float>)`, so the binary
+expansion never enters — `Decimal(0.1)` and `Decimal(str(0.1))` are not
+the same value, and only the second is what the translator emits.
 
-- **No decimal type.** Prices, averages, anything with a fraction. Blocked the
-  products search.
-- **No `%`.** Even/odd, cycling, every "every Nth" pattern.
-- **Division unreachable**, per the oddity above.
+- **Decimal type, shipped.** Prices, averages, anything with a fraction —
+  the products search's decimal prices now translate.
+- **`%`, shipped.** Even/odd, cycling, every "every Nth" pattern. Follows
+  Python's sign rule, not Decimal's native one: `-7 % 2` is `1` in both
+  languages now.
+- **`/` reachable.** MatrixLang's `/` is true division, the same operation
+  Python's `/` performs, so it translates — the old truncating `/` that
+  made division unreachable (per the oddity above) is gone. The *operation*
+  matches; the *result* is another instance of the divergence above, and
+  deliberately so: `1 / 3` is `0.3333333333333333` in Python and
+  `0.3333333333333333333333333333` here, because MatrixLang divides at 28
+  exact decimal digits where Python rounds to a binary float.
 
-The decision inside it: **binary floats or exact decimals.** Floats bring
-`0.1 + 0.2 != 0.3` into a teaching language. Decimals suit money, suit this
-project's temperament, and sidestep that entirely — at the cost of being less
-familiar to someone arriving from Python. Worth brainstorming rather than
-defaulting.
+`.` and `%` took the last two glyph slots: 56 used, 0 free. `//` is not
+part of this — see the oddity above — and stays refused permanently, not
+provisionally: there is no slot left to give it one.
 
-### 5. The `None` pattern — #136
+### 5. The `None` pattern — #136 — *next*
 
 `return None` plus `if result:` — a function that might not find anything, and a
 test of whether it did. **This shape has blocked two real programs**, more than
@@ -174,19 +190,24 @@ the pull request.
 
 Two constraints bind every one of them:
 
-- **The glyph budget is finite** — 2 slots left, hand-tracked in
-  `tests/test_glyphs.py` on purpose so that spending one is a decision somebody
-  wrote down.
+- **The glyph budget is full** — 56 used, 0 free, hand-tracked in
+  `tests/test_glyphs.py` on purpose so that spending the last slot was a
+  decision somebody wrote down.
 
-  **Item 2 is spent: `wake` and `glitch` took the two slots budgeted for it.
-  Item 3 is spent too, and took none: it widened `oracle` rather than adding
-  a sibling.** Item 4 takes what remains — the last two, for `.` and `%`.
-  Item 5 is translator-side and takes none. There is no margin, and
-  that is the point: the table stays inside its 56-slot block, and the ceiling
-  keeps the vocabulary small enough to hold in your head, which is the whole
-  reason this language is worth reading. If item 4 turns out to need a third
-  slot, that is a decision to take deliberately — not a shortfall to route
-  around by enlarging the block.
+  **Item 2 spent two: `wake` and `glitch` took the two slots budgeted for
+  it. Item 3 spent none: it widened `oracle` rather than adding a
+  sibling. Item 4 spent the last two, for `.` and `%`.** There is nothing
+  left to spend. Item 5 is translator-side and needs none — the pattern
+  it addresses is a rewrite of existing syntax, not a new keyword or
+  operator. Every future addition to this register now has exactly three
+  routes, not four: **reuse an existing word** the way item 3 widened
+  `oracle`, **live entirely in the translator** the way item 5 is
+  planned to, or **argue for a larger glyph block** — which is a real
+  design decision against D-03, not a formality, since it changes what
+  "the table" means everywhere this document and the source both call it
+  finite. Nothing in this queue currently needs that argument; `//`
+  stays refused rather than being the occasion for it (see the oddity
+  above).
 - **D-03**: both textual faces must round-trip, `parse(lex(render_X(t))) == t`,
   and any new node type must enter `tests/treegen.py` in the same change that
   adds it. A diff that adds a node without touching treegen is incomplete —

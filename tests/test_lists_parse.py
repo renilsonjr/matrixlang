@@ -1,5 +1,7 @@
 """Stage 7 — parsing lists, indexing, length and element assignment."""
 
+from decimal import Decimal
+
 import pytest
 
 from matrixlang.errors import ParseError
@@ -26,7 +28,7 @@ def test_an_empty_list_parses():
 
 def test_a_list_of_numbers_parses():
     assert first("construct xs = [1, 2]\n").value == ListLiteral(
-        [NumberLiteral(1), NumberLiteral(2)]
+        [NumberLiteral(Decimal(1)), NumberLiteral(Decimal(2))]
     )
 
 
@@ -44,13 +46,13 @@ def test_an_unclosed_list_reports_the_bracket():
 
 def test_elements_may_be_arbitrary_expressions():
     assert first("construct xs = [1 + 2]\n").value == ListLiteral(
-        [Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2))]
+        [Binary(NumberLiteral(Decimal(1)), TokenType.PLUS, NumberLiteral(Decimal(2)))]
     )
 
 
 def test_lists_nest():
     assert first("construct xs = [[1]]\n").value == ListLiteral(
-        [ListLiteral([NumberLiteral(1)])]
+        [ListLiteral([NumberLiteral(Decimal(1))])]
     )
 
 
@@ -62,14 +64,14 @@ def test_elements_may_be_mixed_types():
 
 def test_indexing_a_name_parses():
     assert first("construct a = xs[0]\n").value == Index(
-        Name("xs"), NumberLiteral(0)
+        Name("xs"), NumberLiteral(Decimal(0))
     )
 
 
 def test_indexing_chains():
     # Nested lists are legal, so xs[0][1] must be too.
     assert first("construct a = xs[0][1]\n").value == Index(
-        Index(Name("xs"), NumberLiteral(0)), NumberLiteral(1)
+        Index(Name("xs"), NumberLiteral(Decimal(0))), NumberLiteral(Decimal(1))
     )
 
 
@@ -81,7 +83,7 @@ def test_a_call_result_can_be_indexed():
 
 def test_indexing_a_list_literal_parses():
     assert first("construct a = [1, 2][0]\n").value == Index(
-        ListLiteral([NumberLiteral(1), NumberLiteral(2)]), NumberLiteral(0)
+        ListLiteral([NumberLiteral(Decimal(1)), NumberLiteral(Decimal(2))]), NumberLiteral(Decimal(0))
     )
 
 
@@ -134,7 +136,7 @@ def test_element_assignment_parses():
     from matrixlang.nodes import IndexAssign
 
     stmt = first("xs[0] = 9\n")
-    assert stmt == IndexAssign(Name("xs"), NumberLiteral(0), NumberLiteral(9))
+    assert stmt == IndexAssign(Name("xs"), NumberLiteral(Decimal(0)), NumberLiteral(Decimal(9)))
 
 
 def test_nested_element_assignment_parses():
@@ -142,8 +144,8 @@ def test_nested_element_assignment_parses():
 
     stmt = first("xs[0][1] = 9\n")
     assert isinstance(stmt, IndexAssign)
-    assert stmt.target == Index(Name("xs"), NumberLiteral(0))
-    assert stmt.index == NumberLiteral(1)
+    assert stmt.target == Index(Name("xs"), NumberLiteral(Decimal(0)))
+    assert stmt.index == NumberLiteral(Decimal(1))
 
 
 def test_assigning_to_a_call_result_is_a_parse_error():

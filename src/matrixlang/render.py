@@ -1,7 +1,7 @@
 """Canonical source rendering: syntax tree in, source text out.
 
 One emitter serves both faces (design S4-5). The walk is identical; a
-face table maps the 54 glyph slots at emission time, so identifiers,
+face table maps the 56 glyph slots at emission time, so identifiers,
 string contents, and comment text bypass the table BY CONSTRUCTION —
 the reason this is not textual substitution, which would corrupt the
 digit in `x2` and the keyword inside "trace".
@@ -14,6 +14,8 @@ Whitespace is canonical, not preserved (design S4-1): 2-space indent
 per block depth, one statement per line, single spaces around binary
 operators, no blank lines, trailing comments after two spaces.
 """
+
+from decimal import Decimal
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.nodes import (
@@ -55,6 +57,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
     TokenType.SLASH: "/",
+    TokenType.PERCENT: "%",
     TokenType.EQ: "==",
     TokenType.NEQ: "!=",
     TokenType.LT: "<",
@@ -102,6 +105,9 @@ _LEVEL: dict[TokenType, int] = {
     TokenType.MINUS: 7,
     TokenType.STAR: 8,
     TokenType.SLASH: 8,
+    # Same rung as `*` and `/` -- parser._FACTOR_OPS puts all three
+    # together, as Python does.
+    TokenType.PERCENT: 8,
 }
 # `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
 # unlike `-` and `length` it binds LOOSER than every binary operator
@@ -342,10 +348,17 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
     raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
 
-def _number(value: int, face: Face) -> str:
-    # §6.2: digits map per-digit, positionally. NumberLiteral values are
-    # non-negative — a minus sign is a Unary node, never part of a number.
-    return "".join(_map(face, digit) for digit in str(value))
+def _number(value: Decimal, face: Face) -> str:
+    # §6.2: digits map per-digit, positionally, and the point is one more
+    # slot in the same table. format(value, "f") rather than str(): str
+    # emits scientific notation past certain exponents, which would not
+    # re-lex. NumberLiteral values are non-negative — a minus sign is a
+    # Unary node, never part of a number.
+    #
+    # The text is what matters, not the value: Decimal("2.50") equals
+    # Decimal("2.5"), so dropping a trailing zero here would still satisfy
+    # the round-trip property while changing what the program means.
+    return "".join(_map(face, ch) for ch in format(value, "f"))
 
 
 def _string(value: str) -> str:

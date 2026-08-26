@@ -86,27 +86,27 @@ anything about the language, which is the whole point of the split.
 
 | Module | Lines | Responsibility |
 | --- | --- | --- |
-| `tokens.py` | 113 | Token vocabulary. Pure data |
-| `nodes.py` | 213 | AST node definitions. Pure data |
+| `tokens.py` | 114 | Token vocabulary. Pure data |
+| `nodes.py` | 220 | AST node definitions. Pure data |
 | `errors.py` | 75 | Error hierarchy; every error carries line and column |
-| `values.py` | 317 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
-| `glyphs.py` | 113 | The 54-slot bijective glyph table. 2 slots left of the block |
-| `lexer.py` | 271 | Source text → token list. Handles both faces |
+| `values.py` | 475 | Runtime value type rules, and `Function` — a runtime value type belongs where the rules describing them live |
+| `glyphs.py` | 123 | The 56-slot bijective glyph table. The block is full |
+| `lexer.py` | 268 | Source text → token list. Handles both faces |
 | `parser.py` | 579 | Tokens → AST. Recursive descent |
-| `interpreter.py` | 986 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
-| `render.py` | 353 | AST → source text, in either face |
-| `treeview.py` | 182 | AST → indented text, for teaching |
+| `interpreter.py` | 1185 | Tree walker. Executes the AST. Owns the environment chain and the step limit |
+| `render.py` | 366 | AST → source text, in either face |
+| `treeview.py` | 183 | AST → indented text, for teaching |
 | `repl.py` | 138 | Interactive session with multi-line block buffering |
 | `events.py` | 78 | The execution event vocabulary. Pure data |
 | `input.py` | 124 | Where a running program's input comes from. The mirror of `events.py`, and pure like it |
-| `translit.py` | 173 | The reversible display table. Pure |
+| `translit.py` | 174 | The reversible display table. Pure |
 | `display.py` | 96 | The display protocol and backend selection. Pure |
 | `cascade.py` | 271 | The content-carrying field simulation. Pure |
 | `window.py` | 217 | The Tk backend. The only impure module in the package |
 | `ansi.py` | 100 | Terminal escapes and colour capability. **No longer used by the package** — kept for the terminal experiments under `experiments/` |
 | `cli.py` | 244 | Command-line entry point |
-| `scribe.py` | 632 | Plain language → AST, by pattern. Pure, keyless, and imports no `operator` |
-| `operator/prompt.py` | 149 | The system prompt. The language's rules, as text |
+| `scribe.py` | 633 | Plain language → AST, by pattern. Pure, keyless, and imports no `operator` |
+| `operator/prompt.py` | 173 | The system prompt. The language's rules, as text |
 | `operator/validate.py` | 96 | Parse and dry-run a candidate program. The gate |
 | `operator/client.py` | 96 | The Anthropic call. The SDK is imported inside the function that uses it |
 | `operator/loop.py` | 124 | Ask, validate, feed the diagnostic back, retry — at most three times |
@@ -173,9 +173,10 @@ flatline
 
 **Semantics worth knowing:**
 
-- **Types:** integer, boolean, string, list. No floats — they buy nothing
-  pedagogically and cost `.` disambiguation, a second numeric type, and a
-  division-semantics tangent.
+- **Types:** number, boolean, string, list, dictionary. One exact-decimal
+  number type — `3` and `3.0` are the same value, trailing zeros are
+  significant in how a value renders, and there is no separate integer
+  type to disambiguate against (#135 superseded D-04's "no floats").
 - **Lists are the one reference type.** `construct ys = xs` and passing `xs`
   to an agent both share the same underlying list — mutating through one
   name is visible through the other. `+` is the exception: it always builds
@@ -205,7 +206,7 @@ flatline
 - **`construct` declares; `=` requires a prior declaration.** Re-declaring is an
   error; assigning to an undeclared name is an error. This is what makes
   `construct` carry meaning rather than being decoration.
-- **Conditions must be boolean.** No truthy integers or strings.
+- **Conditions must be boolean.** No truthy numbers or strings.
 - **`splice` and `fork` short-circuit, and that creates a real asymmetry.**
   `a splice b` never evaluates `b` once `a` is `false`; `a fork b` never
   evaluates `b` once `a` is `true`. An operand that is never evaluated is
@@ -214,9 +215,11 @@ flatline
   only in whether the left side decided the right side was worth looking
   at. This is what makes the bounded-search idiom (§5.8) safe rather than
   an accident of the operators happening to short-circuit.
-- **Integer division truncates toward zero**, not floor. Python's `//` floors:
-  `-7 // 2 == -4`, but the spec requires `-3`.
-- **`+` is overloaded** for integer addition and string concatenation; mixed
+- **`/` is true division** (#135; this reversed the original spec, which had
+  `/` truncate toward zero). `7 / 2` is `3.5`. `%` follows Python's sign
+  rule, not the mathematical one some other languages use: it takes the
+  sign of the right operand, so `-7 % 2` is `1`, not `-1`.
+- **`+` is overloaded** for number addition and string concatenation; mixed
   operands are an error, with no implicit stringification.
 
 ## 5. The eight problems worth talking about
@@ -261,7 +264,7 @@ parse(render_glyph(t)) == parse(render_ascii(t)) == t
 
 Property-tested, not example-tested: a hand-rolled seeded tree generator produces
 300 random ASTs, and each is rendered and re-parsed in three faces — ASCII, glyph,
-and a **per-seed randomly mixed** face where each of the 54 slots is
+and a **per-seed randomly mixed** face where each of the 56 slots is
 independently one or the other. That third case turns "mixed-face source is
 legal" from a claim into a tested property, and it costs nothing because the
 emitter is already table-parameterized.
@@ -302,7 +305,7 @@ string content. Two consequences fall out for free:
 2. **Mixed-face source is valid** — a file can contain glyph keywords and ASCII
    operators in any combination and still lex correctly.
 
-The lexer reads the same 54-entry table the renderer writes through, just
+The lexer reads the same 56-entry table the renderer writes through, just
 backwards. Digit runs may even mix faces within one number (`1ｦｦ` is 100),
 because otherwise `1ｲ` would lex as two adjacent numbers and produce a baffling
 parse error two stages from the actual cause.
@@ -313,10 +316,16 @@ parse error two stages from the actual cause.
 coercion, so `true + 1` must be a runtime error — and with `isinstance` that
 error never fires and the interpreter silently returns `2`.
 
-Every value type check therefore uses `type(v) is int`, centralized in
+Every value type check therefore uses `type(v) is X`, centralized in
 `values.py` so the rule is auditable in one place rather than scattered across
 twenty branches where a reflexive `isinstance` could creep back in. (`isinstance`
 on *AST node* types is correct and used freely — the ban is on value checks.)
+Numbers were plain `int` when this rule was written; #135 moved them to
+`Decimal`, so `bool`'s subclass relationship to `int` no longer applies to
+the number type at all — but the module keeps `type(v) is Decimal` rather
+than loosening back to `isinstance`, because nothing rules out a future
+value type where the same shape of bug returns, and the exact check costs
+nothing to keep everywhere.
 
 **Stage 7 reintroduced the same trap one level down.** The interpreter's
 equality guard checked `type_name(left) != type_name(right)` before ever
@@ -324,7 +333,7 @@ touching the values, so `true + 1` and `1 == true` both raised correctly.
 But comparing lists meant comparing their elements, and the first
 implementation did that by delegating to Python's own list `==` — which
 uses `isinstance` internally, where `1 == True` is `True`. Net effect:
-`1 == true` correctly raised `cannot compare integer with boolean`, while
+`1 == true` correctly raised `cannot compare number with boolean`, while
 `[1] == [true]` silently returned `True`. The type-name guard was real and
 it was in the wrong place; auditing `values.py` for a stray `isinstance`
 proves nothing about a comparison that recurses through `list.__eq__`
@@ -791,7 +800,7 @@ testing, where Hypothesis would have given shrinking; a hand-rolled seeded
 generator was ~130 lines and reproduces failures by seed instead.
 
 **"Is it actually Turing-complete?"**
-Yes — variables, conditionals, and unbounded loops with unbounded integer
+Yes — variables, conditionals, and unbounded loops with unbounded number
 storage. Turing completeness follows from semantics, not from how the characters
 look. Brainfuck manages it with eight punctuation marks.
 

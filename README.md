@@ -51,7 +51,7 @@ lists, cannot be written to — **logical operators** — `splice` (and),
 `fork` (or) and `unplug` (not), boolean operands only, with `splice` and
 `fork` short-circuiting so a bounded search like `n < length xs splice
 xs[n] != target` never reads past the end of `xs` — **dictionaries** —
-`{"a": 1}` literals keyed by strings or integers, `d["a"]` to read and
+`{"a": 1}` literals keyed by strings or numbers, `d["a"]` to read and
 `d["a"] = v` to write or insert, `length` for the entry count, `keymaker`
 for the keys in insertion order, and the infix `oracle` to ask any
 container whether it holds something — a dictionary for a key, a list for

@@ -115,10 +115,8 @@ _REFUSALS = [
     ("with open('f') as f:\n    pass\n", "`with`"),
     ("assert x == 1\n", "`assert`"),
     ("pass\n", "`pass`"),
-    ("print(1 % 2)\n", "`%`"),
     ("print(2 ** 3)\n", "`**`"),
     ("print(7 // 2)\n", "`//`"),
-    ("print(7 / 2)\n", "`/`"),
     ("print(1 << 2)\n", "`<<`"),
     ("print(~1)\n", "`~`"),
     ("print(1j)\n", "complex"),
@@ -178,6 +176,15 @@ def test_upper_is_refused_with_an_idiom():
     assert "`.upper()`" in refusal.reason
     assert refusal.idiom is not None
     assert "lower" in refusal.idiom
+
+
+def test_floor_division_is_still_refused():
+    # MatrixLang has no floor operator now that `/` is true division, so
+    # `//` would be a silent difference on exactly the negative operands
+    # `%` was made careful about.
+    result = translate("print(7 // 2)\n")
+    assert isinstance(result, Refusals)
+    assert "//" in result.items[0].reason or "//" in (result.items[0].idiom or "")
 
 
 def test_a_bare_split_is_refused_rather_than_guessed():

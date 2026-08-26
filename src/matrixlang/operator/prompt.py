@@ -67,8 +67,9 @@ Rules that differ from most languages:
   branch. There is no truthiness. `redpill` may be followed by an
   optional `bluepill` block, which runs when the condition is false —
   MatrixLang's else.
-- Types are integer, boolean, string, list and dictionary. No floats, no
-  null.
+- Types are number, boolean, string, list and dictionary. A number is
+  exact decimal, not floating point -- `2.5`, `-7`, and `0.001` are all
+  the same type, with no separate integer type. No null.
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
   with `xs[i] = v`, and measure one with `length xs` (also works on a
   string, and on a dictionary, where it gives the number of entries).
@@ -94,11 +95,16 @@ Rules that differ from most languages:
   simply not a match, so `["a"] oracle 1` is false rather than an error —
   but the right side of a string `oracle` must itself be a string;
   `"matrix" oracle 1` is an error, not false.
-- `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
+- `<`, `>`, `<=`, `>=` order two numbers or two strings — never a mix,
   and never any other type.
-- `+` adds integers, joins strings, or concatenates lists — never a mix
+- `+` adds numbers, joins strings, or concatenates lists — never a mix
   of different types.
-- Integer division truncates toward zero.
+- `/` is true division: `7 / 2` is `3.5`, not `3`. `%` is the remainder:
+  `7 % 2` is 1. It follows the sign of the right operand, as Python does,
+  so `-7 % 2` is 1 rather than -1. Even and odd are `n % 2 == 0` and
+  `n % 2 != 0`.
+- An index (`xs[i]`) must be a whole number — `2` and `2.0` both work,
+  `2.5` is an error — even though `/` can produce one.
 - `agent` defines; `jackout` returns. An agent that never jacks out
   produces nothing, and using that nothing as a value is an error.
 - The only way to produce output is `trace`. To read input, use `jackin`,

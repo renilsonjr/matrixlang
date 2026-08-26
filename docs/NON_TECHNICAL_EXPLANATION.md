@@ -56,7 +56,7 @@ programming language:
 - Repeat work with loops.
 - Define reusable functions, called agents in this language.
 - Return values from those agents.
-- Work with integers, booleans, strings, and lists.
+- Work with numbers, booleans, strings, and lists.
 - Compare values.
 - Use logical operators similar to and, or, and not.
 - Convert the same program between normal text and Matrix-style glyphs.

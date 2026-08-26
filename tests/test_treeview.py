@@ -1,6 +1,7 @@
 import dataclasses
 import types
 import typing
+from decimal import Decimal
 
 import pytest
 
@@ -200,6 +201,11 @@ def _minimal(annotation):
         return True
     if annotation is int:
         return 1
+    if annotation is Decimal:
+        # NumberLiteral.value -- must be a Decimal, not a bare int; see
+        # nodes.py. A plain int would slip past this generic helper the
+        # same way it slipped past render.py before that was caught.
+        return Decimal(1)
     if annotation is str:
         return "x"
     if annotation is TokenType:
@@ -207,9 +213,9 @@ def _minimal(annotation):
         # above is what covers the rows individually.
         return TokenType.MINUS
     if isinstance(annotation, type) and issubclass(annotation, Expr):
-        return NumberLiteral(1)
+        return NumberLiteral(Decimal(1))
     if isinstance(annotation, type) and issubclass(annotation, Stmt):
-        return Trace(NumberLiteral(1))
+        return Trace(NumberLiteral(Decimal(1)))
     raise AssertionError(
         f"no minimal value for field type {annotation!r} -- teach _minimal "
         f"about it rather than skipping the node that uses it"

@@ -119,11 +119,13 @@ def test_a_unary_index_target_keeps_its_parens():
     # for exactly this reason (see render.py). Without the parens,
     # `fold f[0]` would re-parse as `fold (f[0])` rather than
     # `(fold f)[0]`.
+    from decimal import Decimal
+
     from matrixlang.nodes import Index, Name, NumberLiteral, Program, Trace, Unary
     from matrixlang.tokens import TokenType
 
     tree = Program(
-        [Trace(Index(Unary(TokenType.FOLD, Name("f")), NumberLiteral(0)))]
+        [Trace(Index(Unary(TokenType.FOLD, Name("f")), NumberLiteral(Decimal(0))))]
     )
     assert render_ascii(tree) == "trace (fold f)[0]\n"
 

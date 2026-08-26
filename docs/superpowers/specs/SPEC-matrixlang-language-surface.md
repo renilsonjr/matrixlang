@@ -30,6 +30,13 @@ set. This document defines it.
 | D-05 | Booleans are `true` / `false`, not in-universe | `construct x = awake` reads badly as a literal. Keeps one familiar anchor in every condition. |
 | D-06 | Comments are preserved as AST trivia, not discarded | Required for §4.3 of the parent spec to be honest. See §6.1 below. |
 
+> **D-04 superseded (#135).** The `numbers` branch replaced the integer type with
+> a single exact-decimal `number` type, made `/` true division, and added `%`.
+> The row above is left as originally written — it records what Stage 1 decided
+> and why, and its "division-semantics tangent" is exactly what #135 spent nine
+> tasks working through. See `docs/superpowers/specs/2026-08-24-numbers-design.md`
+> for the decision that superseded it.
+
 ## 2. Vocabulary
 
 | Concept | Keyword | Source |
