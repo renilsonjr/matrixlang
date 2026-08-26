@@ -1221,6 +1221,187 @@ def _refuse_function_in_loop(body: list[ast.stmt]) -> None:
     )
 
 
+def _returns_of(func: ast.FunctionDef) -> list[ast.Return]:
+    """Every `return` belonging to THIS function.
+
+    Not to a `def` or `lambda` nested inside it, whose returns are its
+    own -- counting those would invent a mixed shape where the outer
+    function has only one kind of return.
+    """
+    found: list[ast.Return] = []
+    stack: list[ast.AST] = list(func.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        if isinstance(node, ast.Return):
+            found.append(node)
+        stack.extend(ast.iter_child_nodes(node))
+    return found
+
+
+def _mixed_return_none(func: ast.FunctionDef) -> ast.Constant | None:
+    """The `None` of an explicit `return None`, when this function also
+    returns a value somewhere. None if it is not that shape.
+
+    A bare `return` (`node.value is None`) is deliberately not counted:
+    it produces no refusal of its own, so pairing on it would detect a
+    shape that can never be acted on.
+    """
+    returns_value = False
+    none_node: ast.Constant | None = None
+    for node in _returns_of(func):
+        if node.value is None:
+            continue
+        if isinstance(node.value, ast.Constant) and node.value.value is None:
+            if none_node is None:
+                none_node = node.value
+        else:
+            returns_value = True
+    return none_node if returns_value else None
+
+
+def _call_binding(
+    stmt: ast.stmt, functions: dict[str, ast.FunctionDef]
+) -> tuple[str, ast.FunctionDef] | None:
+    """`name = f(...)` where `f` is a def in this module -> (name, def)."""
+    if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+        return None
+    target = stmt.targets[0]
+    if not isinstance(target, ast.Name):
+        return None
+    call = stmt.value
+    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+        return None
+    func = functions.get(call.func.id)
+    return None if func is None else (target.id, func)
+
+
+def _rebinds_in_stmt(stmt: ast.stmt, name: str) -> bool:
+    """Does this statement bind `name` again?
+
+    Named apart from the existing `_rebinds` (which takes a *list* of
+    statements and is already used by `_for`'s translation, above) --
+    this one takes a single statement. Reusing the name would have the
+    later definition silently replace the earlier one at module load,
+    breaking every existing caller that passes a list.
+    """
+    for node in ast.walk(stmt):
+        if (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Store)
+            and node.id == name
+        ):
+            return True
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == name
+        ):
+            return True
+    return False
+
+
+def _bare_name_test_after(rest: list[ast.stmt], name: str) -> ast.Name | None:
+    """The first `if <name>:` in `rest`, before anything rebinds `name`.
+
+    The `if` is checked before the rebinding check on the same statement:
+    a condition is evaluated before its own body runs.
+    """
+    for stmt in rest:
+        if (
+            isinstance(stmt, ast.If)
+            and isinstance(stmt.test, ast.Name)
+            and stmt.test.id == name
+        ):
+            return stmt.test
+        if _rebinds_in_stmt(stmt, name):
+            return None
+    return None
+
+
+def _scope_bodies(tree: ast.Module) -> list[list[ast.stmt]]:
+    """Every statement list that is a scope body: the module's, and each
+    function's. The binding and its test must share one of these."""
+    bodies = [tree.body]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            bodies.append(node.body)
+    return bodies
+
+
+def _none_then_truth_test(
+    tree: ast.Module,
+) -> tuple[Refusal, frozenset[tuple[int, int]]] | None:
+    """The `return None` + `if result:` shape, recognised to EXPLAIN it.
+
+    Never to translate it. MatrixLang has neither null nor truthiness,
+    both by design, and this shape stays refused -- what changes is that
+    one message describes the whole rewrite instead of two describing
+    half of it each.
+
+    Returns the paired refusal and the two positions it stands in for,
+    or None. The positions are the ones the existing raise sites report:
+    `_constant` reports the `None` constant node, `condition` reports the
+    `If` test node.
+    """
+    functions = {
+        stmt.name: stmt for stmt in tree.body if isinstance(stmt, ast.FunctionDef)
+    }
+    if not functions:
+        return None
+    for body in _scope_bodies(tree):
+        for index, stmt in enumerate(body):
+            binding = _call_binding(stmt, functions)
+            if binding is None:
+                continue
+            name, func = binding
+            none_node = _mixed_return_none(func)
+            if none_node is None:
+                continue
+            test = _bare_name_test_after(body[index + 1 :], name)
+            if test is None:
+                continue
+            return (
+                _none_pattern_refusal(func, name, none_node, test),
+                frozenset(
+                    {
+                        (none_node.lineno, none_node.col_offset),
+                        (test.lineno, test.col_offset),
+                    }
+                ),
+            )
+    return None
+
+
+def _none_pattern_refusal(
+    func: ast.FunctionDef, name: str, none_node: ast.Constant, test: ast.Name
+) -> Refusal:
+    """One message for both halves, anchored at the line that must change.
+
+    Names both ends of the rewrite deliberately: the function's contract
+    has to change for either half to make sense, and the value has to be
+    unwrapped afterwards. A reader told only one hits a fresh error on
+    the next run.
+    """
+    return Refusal(
+        f"`{func.name}` returns None on one path and its result is used as "
+        f"a condition on line {test.lineno}. MatrixLang has neither null "
+        f"nor truthiness.",
+        none_node.lineno,
+        none_node.col_offset,
+        'Return a list instead — empty for "not found", one element for '
+        "found:\n"
+        "\n"
+        "    return [value]        instead of   return value\n"
+        "    return []             instead of   return None\n"
+        "\n"
+        "then test its length, and read the value out of it:\n"
+        "\n"
+        f"    if len({name}) > 0:  instead of   if {name}:\n"
+        f"        {name}[0]                     {name}",
+    )
+
+
 # What a reader calls each construct, keyed by its ast class name. Without
 # this a refusal says "ImportFrom", which is Python's word, not theirs --
 # and the fallback below is deliberately anonymous for the same reason:

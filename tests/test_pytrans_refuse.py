@@ -1,5 +1,6 @@
 """The translator's refusal machinery, and its promise never to raise."""
 
+import ast
 import io
 
 import pytest
@@ -9,6 +10,7 @@ from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
 from matrixlang.pytrans import Refusals, Translated, translate
+from matrixlang.pytrans.translate import _none_then_truth_test
 
 
 def test_invalid_python_is_a_refusal_not_an_exception():
@@ -357,3 +359,125 @@ def test_loop_else_is_still_refused():
     result = translate("for x in xs:\n    break\nelse:\n    print(1)\n")
     assert isinstance(result, Refusals)
     assert "for ... else" in result.items[0].idiom
+
+
+FIND_BOOK = """def find_book(books, term):
+    for book in books:
+        if book["name"] == term:
+            return book
+    return None
+
+result = find_book(library, user_input)
+if result:
+    print(result["name"])
+"""
+
+
+def _detect(source):
+    return _none_then_truth_test(ast.parse(source))
+
+
+def test_the_none_then_truth_test_shape_is_detected():
+    found = _detect(FIND_BOOK)
+    assert found is not None
+    refusal, positions = found
+    # Anchored at the `return None`, naming the condition's line.
+    assert refusal.line == 5
+    assert "find_book" in refusal.reason
+    assert "line 8" in refusal.reason
+    # The two positions it stands in for: the None constant and the If test,
+    # exactly as _constant and condition() report them.
+    assert positions == frozenset({(5, 11), (8, 3)})
+
+
+def test_the_idiom_shows_both_ends_of_the_rewrite():
+    refusal, _ = _detect(FIND_BOOK)
+    # The function's contract has to change, and the value has to be
+    # unwrapped afterwards. A reader who is told neither hits a fresh
+    # error on the next run.
+    assert "return []" in refusal.idiom
+    assert "len(result) > 0" in refusal.idiom
+    assert "result[0]" in refusal.idiom
+
+
+def test_a_function_whose_every_path_returns_none_is_not_the_shape():
+    assert _detect(
+        "def f(x):\n"
+        "    return None\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_function_whose_every_path_returns_a_value_is_not_the_shape():
+    assert _detect(
+        "def f(x):\n"
+        "    return x\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_bare_return_is_not_the_shape():
+    # Measured, not assumed: a bare `return` produces only ONE refusal
+    # today, so admitting it here would detect a shape the safety property
+    # in Task 2 then forbids acting on.
+    assert _detect(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_rebound_name_is_not_the_shape():
+    # Without this, the condition gets paired with the wrong function and
+    # the refusal explains a shape the reader did not write.
+    assert _detect(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = f(1)\n"
+        "result = other()\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_test_that_is_not_a_bare_name_is_not_the_shape():
+    assert _detect(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = f(1)\n"
+        "if result.name:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_nested_defs_returns_do_not_count_as_the_outer_functions():
+    # The inner def supplies the `return None`; the outer only ever returns
+    # a value. Treating the inner's returns as the outer's would invent a
+    # mixed shape that is not there.
+    assert _detect(
+        "def f(x):\n"
+        "    def inner():\n"
+        "        return None\n"
+        "    return inner\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
