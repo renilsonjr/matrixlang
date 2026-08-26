@@ -565,3 +565,87 @@ def test_a_call_from_an_unshadowed_nested_function_still_fires():
     assert found is not None
     refusal, _ = found
     assert "find_book" in refusal.reason
+
+
+# Fix round 2: round 1's guard only inspected the call's OWN scope. A
+# shadow one level further out -- an intermediate enclosing function's
+# local, or a module-level rebind anywhere in the module body -- still
+# resolves at the call site, and blaming the matched module-level def
+# for it is the same confident, wrong claim round 1 closed for the
+# immediate scope only.
+
+
+def test_a_shadow_in_an_intermediate_enclosing_function_is_not_the_shape():
+    # `g` itself binds nothing, so an immediate-scope-only guard would
+    # miss this: `find` actually resolves to `outer`'s local lambda.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    find = lambda y: y\n"
+        "    def g():\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    ) is None
+
+
+def test_a_module_level_rebind_after_the_def_is_not_the_shape():
+    # No closures needed at all: `find` is rebound at module scope,
+    # after both the def and the nested call site that uses it.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    r = find(1)\n"
+        "    if r:\n"
+        "        print(r)\n"
+        "\n"
+        "find = lambda y: y\n"
+    ) is None
+
+
+def test_a_nonlocal_naming_an_enclosing_local_shadow_is_not_the_shape():
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    find = lambda y: y\n"
+        "    def g():\n"
+        "        nonlocal find\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    ) is None
+
+
+def test_an_unshadowed_call_two_scopes_deep_still_fires():
+    # A fix that declines whenever ANY enclosing scope exists at all
+    # would pass every negative test above and quietly kill the
+    # feature for every nested call -- the same trap round 1 avoided
+    # for one level of nesting. Two levels deep, still unshadowed, must
+    # still fire.
+    found = _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    def g():\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "find" in refusal.reason

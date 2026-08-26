@@ -1329,6 +1329,62 @@ def _scope_bodies(tree: ast.Module) -> list[list[ast.stmt]]:
     return bodies
 
 
+def _direct_child_functions(
+    stmt: ast.stmt,
+) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """`def`s lexically written directly in this statement's own scope --
+    inside `if`/`for`/`while`/`with`/`try` blocks at this level, or `stmt`
+    itself when it is a `def`. Not inside ANOTHER nested `def`'s body,
+    whose own children belong to that def's own scope and are found when
+    the walk that builds the parent chain reaches it, not here.
+    """
+    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    stack: list[ast.AST] = [stmt]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            found.append(node)
+            continue
+        if isinstance(node, ast.Lambda):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return found
+
+
+def _scope_parents(tree: ast.Module) -> dict[int, list[ast.stmt]]:
+    """Map each function's body (by `id`) to its immediately enclosing
+    scope's body -- the module's body for a top-level `def`, or the body
+    of the function it is lexically written inside otherwise. The chain
+    from any scope up through `_scope_parents` to the module is exactly
+    the lexical scopes Python would search, closest first.
+    """
+    parents: dict[int, list[ast.stmt]] = {}
+
+    def scan(body: list[ast.stmt]) -> None:
+        for stmt in body:
+            for func in _direct_child_functions(stmt):
+                parents[id(func.body)] = body
+                scan(func.body)
+
+    scan(tree.body)
+    return parents
+
+
+def _lexical_chain(
+    body: list[ast.stmt], parents: dict[int, list[ast.stmt]]
+) -> list[list[ast.stmt]]:
+    """This scope's body, then each enclosing scope's body outward, in
+    order, ending with the module's -- which has no parent and stops the
+    chain. What LEGB name resolution would search from this scope.
+    """
+    chain = [body]
+    current = body
+    while id(current) in parents:
+        current = parents[id(current)]
+        chain.append(current)
+    return chain
+
+
 def _scope_params(tree: ast.Module) -> dict[int, list[str]]:
     """Every function scope's parameter names, keyed by `id(body)` so a
     scan over `_scope_bodies` can look up "does my own signature bind
@@ -1413,13 +1469,17 @@ def _none_then_truth_test(
     `If` test node.
 
     `functions` is built from module-level defs only, and reused while
-    scanning every scope body -- including nested ones. A scope that
-    shadows the called name (a nested `def` of the same name, a local
-    assignment, a parameter of the enclosing function, an import, a
-    `for` target, a `with ... as`, anything) is skipped via
-    `_shadowed_in_scope`: without that check, the module-level def
-    would get blamed for a call that actually resolves to whatever
-    shadows it locally -- a confident, wrong claim about a shape the
+    scanning every scope body -- including nested ones. A scope ANYWHERE
+    in the call's lexical chain -- its own scope, every enclosing
+    function scope, or the module scope -- can shadow the called name (a
+    nested `def` of the same name, a local assignment, a parameter, an
+    import, a `for` target, a `with ... as`, a later module-level
+    rebind, anything): `_shadowed_in_scope` is checked across the whole
+    chain from `_lexical_chain`, not just the call's own scope. Checking
+    only the immediate scope would miss a shadow one level further out
+    -- a closure variable, an intermediate function's local -- and still
+    blame the matched module-level def for a call that actually
+    resolves elsewhere: a confident, wrong claim about a shape the
     reader did not write.
     """
     functions = {
@@ -1428,14 +1488,20 @@ def _none_then_truth_test(
     if not functions:
         return None
     params_by_scope = _scope_params(tree)
+    parents = _scope_parents(tree)
     for body in _scope_bodies(tree):
-        params = params_by_scope.get(id(body), [])
+        chain = _lexical_chain(body, parents)
         for index, stmt in enumerate(body):
             binding = _call_binding(stmt, functions)
             if binding is None:
                 continue
             name, func = binding
-            if _shadowed_in_scope(body, params, func.name, func):
+            if any(
+                _shadowed_in_scope(
+                    scope, params_by_scope.get(id(scope), []), func.name, func
+                )
+                for scope in chain
+            ):
                 continue
             none_node = _mixed_return_none(func)
             if none_node is None:
