@@ -33,6 +33,24 @@ _BLOCK_FIELDS = ("body", "orelse", "finalbody")
 _LOOPS = (ast.For,)
 
 
+def _suites(statement: ast.stmt):
+    """Every statement list this statement carries directly.
+
+    The single place that knows where suites live. `ast.Match` keeps its
+    under `cases` and `ast.Try` under `handlers`, neither of which is a
+    plain field -- which is exactly the kind of omission that is easy to
+    make in one copy of a walk and not another.
+    """
+    for field in _BLOCK_FIELDS:
+        block = getattr(statement, field, None)
+        if isinstance(block, list) and all(isinstance(s, ast.stmt) for s in block):
+            yield block
+    for handler in getattr(statement, "handlers", []):
+        yield handler.body
+    for case in getattr(statement, "cases", []):
+        yield case.body
+
+
 def rewrite_loop_else(tree: ast.Module, taken: set[str]) -> ast.Module:
     """Replace each loop-else with the flag pattern it means.
 
@@ -58,17 +76,8 @@ def _rewrite_nested_blocks(statement: ast.stmt, taken: set[str]) -> None:
     Doing this first is what makes nesting work without a rule of its own
     -- see `_expand`.
     """
-    for field in _BLOCK_FIELDS:
-        block = getattr(statement, field, None)
-        if isinstance(block, list) and all(isinstance(s, ast.stmt) for s in block):
-            setattr(statement, field, _block(block, taken))
-    for handler in getattr(statement, "handlers", []):
-        handler.body = _block(handler.body, taken)
-    # `ast.Match` keeps its suites under `cases`, not `body` -- the same
-    # shape as `handlers`, and missed by the field list for the same
-    # reason.
-    for case in getattr(statement, "cases", []):
-        case.body = _block(case.body, taken)
+    for block in _suites(statement):
+        block[:] = _block(block, taken)
 
 
 def _expand(statement: ast.stmt, taken: set[str]) -> list[ast.stmt]:
@@ -131,39 +140,28 @@ def _mark(statements: list[ast.stmt], flag: str) -> list[ast.stmt]:
             out.append(statement)
             continue
         if not isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
-            for field in _BLOCK_FIELDS:
-                block = getattr(statement, field, None)
-                if isinstance(block, list) and all(isinstance(s, ast.stmt) for s in block):
-                    setattr(statement, field, _mark(block, flag))
-            for handler in getattr(statement, "handlers", []):
-                handler.body = _mark(handler.body, flag)
-            for case in getattr(statement, "cases", []):
-                case.body = _mark(case.body, flag)
+            for block in _suites(statement):
+                block[:] = _mark(block, flag)
         out.append(statement)
     return out
 
 
-def _has_own_break(statements: list[ast.stmt]) -> bool:
-    """Whether a `break` belonging to THIS loop can be reached.
+def _own_breaks(statements: list[ast.stmt]):
+    """Every `break` belonging to THIS loop, in source order.
 
-    Same one rule as `_mark`, and it has to stay the same rule: a
-    disagreement between them would either emit a flag nothing sets, or
-    set a flag nothing tests.
+    One rule: do not descend into a nested loop's body, because those
+    breaks are that loop's. Everything else is entered.
     """
     for statement in statements:
         if isinstance(statement, ast.Break):
-            return True
+            yield statement
+            continue
         if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
             continue
-        for field in _BLOCK_FIELDS:
-            block = getattr(statement, field, None)
-            if isinstance(block, list) and all(isinstance(s, ast.stmt) for s in block):
-                if _has_own_break(block):
-                    return True
-        for handler in getattr(statement, "handlers", []):
-            if _has_own_break(handler.body):
-                return True
-        for case in getattr(statement, "cases", []):
-            if _has_own_break(case.body):
-                return True
-    return False
+        for block in _suites(statement):
+            yield from _own_breaks(block)
+
+
+def _has_own_break(statements: list[ast.stmt]) -> bool:
+    """Whether a `break` belonging to THIS loop can be reached."""
+    return next(_own_breaks(statements), None) is not None
