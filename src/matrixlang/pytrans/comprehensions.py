@@ -116,12 +116,29 @@ class _Hoister(ast.NodeTransformer):
         if not isinstance(clause.target, ast.Name):
             return node
 
+        # The iterable is evaluated once, out here -- so a comprehension
+        # inside it hoists beside this loop, not into it.
+        iterable = self.visit(clause.iter)
+
         result = self._invent(_RESULT_STEM)
         item = self._invent(_ITEM_STEM)
-        element = _renamed(node.elt, clause.target.id, item)
-        conditions = [
-            _renamed(test, clause.target.id, item) for test in clause.ifs
-        ]
+
+        # Everything below is evaluated per iteration, so each piece
+        # collects into the part of the loop body where it belongs: a
+        # comprehension in the element must not run when a guard rejects
+        # the item, and one in a condition must not run when an earlier
+        # condition already failed.
+        element_hoists: list[ast.stmt] = []
+        element = _Hoister(self.taken, element_hoists).visit(
+            _renamed(node.elt, clause.target.id, item)
+        )
+        conditions: list[tuple[ast.expr, list[ast.stmt]]] = []
+        for test in clause.ifs:
+            hoists: list[ast.stmt] = []
+            rewritten_test = _Hoister(self.taken, hoists).visit(
+                _renamed(test, clause.target.id, item)
+            )
+            conditions.append((rewritten_test, hoists))
 
         append = ast.Assign(
             targets=[ast.Name(id=result, ctx=ast.Store())],
@@ -131,12 +148,12 @@ class _Hoister(ast.NodeTransformer):
                 right=ast.List(elts=[element], ctx=ast.Load()),
             ),
         )
-        body: list[ast.stmt] = [append]
-        for test in reversed(conditions):
-            body = [ast.If(test=test, body=body, orelse=[])]
+        body: list[ast.stmt] = element_hoists + [append]
+        for test, hoists in reversed(conditions):
+            body = hoists + [ast.If(test=test, body=body, orelse=[])]
         loop = ast.For(
             target=ast.Name(id=item, ctx=ast.Store()),
-            iter=clause.iter,
+            iter=iterable,
             body=body,
             orelse=[],
         )
@@ -168,3 +185,20 @@ class _Rename(ast.NodeTransformer):
         if node.id != self.old:
             return node
         return ast.copy_location(ast.Name(id=self.new, ctx=node.ctx), node)
+
+    def visit_ListComp(self, node: ast.ListComp) -> ast.ListComp:
+        # A nested comprehension that binds the same name has its own
+        # scope: its element and conditions see ITS variable, not ours, so
+        # the rename must not reach them. Its first iterable is evaluated
+        # out here, so that one must.
+        binds = any(
+            isinstance(clause.target, ast.Name) and clause.target.id == self.old
+            for clause in node.generators
+        )
+        if not binds:
+            return self.generic_visit(node)
+        # Only the first iterable: the later ones in a multi-generator
+        # comprehension see earlier targets, and such a comprehension is
+        # left un-rewritten and refuses anyway.
+        node.generators[0].iter = self.visit(node.generators[0].iter)
+        return node

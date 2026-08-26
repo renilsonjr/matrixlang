@@ -191,3 +191,57 @@ def test_other_comprehension_kinds_are_left_alone():
         "print(sum(x for x in xs))\n",
     ):
         assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
+def test_a_nested_comprehension_is_rewritten_inside_the_outer_loop():
+    assert rewritten("print([[y for y in row] for row in rows])\n") == (
+        "out = []\n"
+        "for item in rows:\n"
+        "    out1 = []\n"
+        "    for item1 in item:\n"
+        "        out1 = out1 + [item1]\n"
+        "    out = out + [out1]\n"
+        "print(out)"
+    )
+
+
+def test_a_comprehension_in_the_iterable_hoists_beside_the_outer_loop():
+    # `xs` in `for x in [...]` is evaluated once, in the ENCLOSING scope --
+    # so its loop belongs before the outer loop, not inside it.
+    assert rewritten("print([f(x) for x in [g(y) for y in ys]])\n") == (
+        "out = []\n"
+        "for item in ys:\n"
+        "    out = out + [g(item)]\n"
+        "out1 = []\n"
+        "for item1 in out:\n"
+        "    out1 = out1 + [f(item1)]\n"
+        "print(out1)"
+    )
+
+
+def test_a_comprehension_in_a_condition_runs_inside_the_loop():
+    assert rewritten("print([x for x in xs if [y for y in x]])\n") == (
+        "out = []\n"
+        "for item in xs:\n"
+        "    out1 = []\n"
+        "    for item1 in item:\n"
+        "        out1 = out1 + [item1]\n"
+        "    if out1:\n"
+        "        out = out + [item]\n"
+        "print(out)"
+    )
+
+
+def test_an_inner_comprehension_rebinding_the_name_keeps_its_own():
+    # `[[x for x in row] for x in rows]`: the inner `x` is the inner
+    # comprehension's, not the outer one's. Renaming through it would
+    # produce a different program.
+    assert rewritten("print([[x for x in row] for x in rows])\n") == (
+        "out = []\n"
+        "for item in rows:\n"
+        "    out1 = []\n"
+        "    for item1 in row:\n"
+        "        out1 = out1 + [item1]\n"
+        "    out = out + [out1]\n"
+        "print(out)"
+    )
