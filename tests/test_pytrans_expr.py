@@ -214,3 +214,70 @@ def test_division_translates_now():
 
 def test_remainder_translates_now():
     assert ml("print(7 % 2)\n") == "trace 7 % 2\n"
+
+
+def test_a_list_comprehension_translates():
+    assert ml("print([x * 2 for x in xs])\n") == (
+        "construct out = []\n"
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  out = out + [xs[n] * 2]\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace out\n"
+    )
+
+
+def test_a_filtered_list_comprehension_translates():
+    assert ml("print([x for x in xs if x > 2])\n") == (
+        "construct out = []\n"
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  redpill xs[n] > 2\n"
+        "    out = out + [xs[n]]\n"
+        "  flatline\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace out\n"
+    )
+
+
+def test_the_translators_own_counter_avoids_the_invented_names():
+    # `out` and `item` go into the same `taken` set the counter draws
+    # from, so nothing here can collide.
+    source = ml("out = 1\nprint([x for x in xs])\n")
+    assert "construct out1 = []" in source
+    assert "construct out = 1" in source
+
+
+def test_a_comprehension_in_a_boolean_operand_is_hoisted():
+    # The one accepted silent difference: Python skips the comprehension
+    # when `c` is false, the translation runs it either way. Pinned so it
+    # stays a known quantity rather than being "fixed" into an
+    # inconsistency later. An `and` operand is the only position with no
+    # statement boundary to emit at.
+    source = ml("print(c and [x for x in xs])\n")
+    assert source.startswith("construct out = []\n")
+    assert source.endswith("trace c splice out\n")
+
+
+def test_a_refusal_inside_a_comprehension_keeps_the_readers_position():
+    # The spec requires generated nodes carry positions, so a refusal
+    # raised inside a comprehension points at the reader's line rather
+    # than at invented code. `//` is refused permanently, which makes it
+    # a stable thing to aim at.
+    refusal = refused("a = 1\nb = 2\nprint([x // 2 for x in xs])\n")[0]
+    assert (refusal.line, refusal.column) == (3, 7)
+
+
+def test_the_unsupported_comprehensions_still_refuse():
+    assert "a set comprehension" in refused("print({x for x in xs})\n")[0].reason
+    assert "a dict comprehension" in refused("print({k: 1 for k in xs})\n")[0].reason
+    assert "a generator expression" in refused("print(sum(x for x in xs))\n")[0].reason
+    assert "a list comprehension" in refused(
+        "print([f(x, y) for x in xs for y in ys])\n"
+    )[0].reason
+    # Not "a list comprehension": left in place, the comprehension reaches
+    # the condition check first, and MatrixLang has no truthiness. The
+    # reader gets the better of the two messages.
+    assert "truthiness" in refused("while [x for x in xs]:\n    print(1)\n")[0].reason

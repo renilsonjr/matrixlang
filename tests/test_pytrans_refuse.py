@@ -44,7 +44,11 @@ def test_refusals_are_in_line_order():
 
 
 def test_a_refusal_names_an_idiom_when_one_exists():
-    refusal = translate("xs = [f(x) for x in ys]\n").items[0]
+    # A single-generator, filter-free comprehension now translates (Task 5
+    # of the list-comprehensions plan), so this reaches for a shape that
+    # still refuses -- multiple `for` clauses -- to keep testing the
+    # idiom mechanism rather than comprehension support itself.
+    refusal = translate("xs = [f(x, y) for x in a for y in b]\n").items[0]
     assert refusal.idiom is not None
     assert "dejavu" in refusal.idiom
 

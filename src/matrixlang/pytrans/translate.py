@@ -23,6 +23,7 @@ from matrixlang.tokens import TokenType
 
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
 from matrixlang.pytrans.names import bound_names, free_name
+from matrixlang.pytrans.comprehensions import rewrite_comprehensions
 
 # `/` and `%` translate. MatrixLang's `/` is true division, rounded at
 # precision 28 (interpreter.py's DIVISION context) -- the same operation
@@ -99,7 +100,36 @@ def translate(source: str) -> Translated | Refusals:
         # read straight off the exception, the way error.offset is above.
         return Refusals([Refusal(str(error), *_position(source, getattr(error, "start", 0)))])
 
-    walker = _Translator(bound_names(tree))
+    # Comprehensions become the loops they mean before the walk starts, so
+    # _Translator only ever sees constructs it already handles. `taken` is
+    # shared rather than recomputed: the rewrite adds the names it invents
+    # to it, so the counters the walker invents cannot collide with them.
+    #
+    # Rewritten one top-level statement at a time, each under its own
+    # recursion_guard, rather than once for the whole tree: the rewrite's
+    # own recursive descent (comprehensions.py's NodeTransformer) has no
+    # depth guard of its own and can exhaust the stack on a deeply nested
+    # expression that contains no comprehension at all -- the same
+    # `1 + 1 + ...` input the walk and render guards already exist for.
+    # Declining per statement, rather than letting the exception escape
+    # the whole call, keeps that statement exactly as it was, which is
+    # this pass's own error-handling strategy: whatever refusal it would
+    # otherwise have earned from the walk or from render is unaffected,
+    # and one deeply nested statement cannot cost every sibling statement
+    # its already-successful rewrite.
+    taken = bound_names(tree)
+    rewritten: list[ast.stmt] = []
+    for statement in tree.body:
+        try:
+            with recursion_guard():
+                module = rewrite_comprehensions(
+                    ast.Module(body=[statement], type_ignores=[]), taken
+                )
+                rewritten.extend(module.body)
+        except TooDeepError:
+            rewritten.append(statement)
+    tree.body = rewritten
+    walker = _Translator(taken)
     statements = walker.body(tree.body)
     if walker.refusals:
         # Only computed here, not unconditionally above: its only consumer
