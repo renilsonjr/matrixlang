@@ -162,13 +162,20 @@ class _Jackout(Exception):
 
     Deliberately not a MatrixLangError. A jackout is not a diagnostic, and
     a stray `except MatrixLangError` must never swallow a return.
+
+    Carries the position for the same reason _LoopSignal does: the
+    "outside an agent" error is raised where the signal escapes rather
+    than where it was written, so without this it reports the enclosing
+    top-level statement instead of the keyword the reader typed.
     """
 
-    __slots__ = ("value",)
+    __slots__ = ("value", "line", "column")
 
-    def __init__(self, value: object) -> None:
+    def __init__(self, value: object, line: int, column: int) -> None:
         super().__init__()
         self.value = value
+        self.line = line
+        self.column = column
 
 
 class _LoopSignal(Exception):
@@ -244,11 +251,11 @@ class Interpreter:
         for statement in program.statements:
             try:
                 self._execute(statement)
-            except _Jackout:
+            except _Jackout as jackout:
                 raise RuntimeErrorML(
                     "'jackout' outside an agent",
-                    statement.line,
-                    statement.column,
+                    jackout.line,
+                    jackout.column,
                 ) from None
             except _LoopSignal as signal:
                 raise RuntimeErrorML(
@@ -377,7 +384,7 @@ class Interpreter:
                 )
         elif isinstance(stmt, Return):
             value = NOTHING if stmt.value is None else self._evaluate(stmt.value)
-            raise _Jackout(value)
+            raise _Jackout(value, stmt.line, stmt.column)
         elif isinstance(stmt, ExprStmt):
             # NOTHING is legal here and nowhere else: this is the position
             # that makes a procedure a legal thing to write.
