@@ -46,7 +46,12 @@ def _block(statements: list[ast.stmt], taken: set[str]) -> list[ast.stmt]:
     for statement in statements:
         _rewrite_nested_blocks(statement, taken)
         emitted: list[ast.stmt] = []
-        _rewrite_own_expressions(statement, taken, emitted)
+        # A `while` test is re-evaluated every turn, and a hoisted loop
+        # runs once. Left in place, the comprehension keeps the refusal it
+        # already has -- which is the right answer and costs no code. The
+        # body was already handled above.
+        if not isinstance(statement, ast.While):
+            _rewrite_own_expressions(statement, taken, emitted)
         out.extend(emitted)
         out.append(statement)
     return out

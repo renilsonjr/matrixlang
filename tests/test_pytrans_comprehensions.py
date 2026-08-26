@@ -110,3 +110,84 @@ def test_the_rename_reaches_the_conditions():
         "        out = out + [1]\n"
         "print(out)"
     )
+
+
+def test_inside_a_loop_body_the_rewrite_stays_in_the_loop():
+    assert rewritten("for y in ys:\n    print([f(x) for x in y])\n") == (
+        "for y in ys:\n"
+        "    out = []\n"
+        "    for item in y:\n"
+        "        out = out + [f(item)]\n"
+        "    print(out)"
+    )
+
+
+def test_inside_a_conditional_the_rewrite_stays_in_the_branch():
+    # Hoisting above the `if` would call f() when c is false -- the same
+    # silent difference accepted for `and`/`or`, but here there is a
+    # statement boundary to emit at, so it costs nothing to be correct.
+    assert rewritten("if c:\n    print([f(x) for x in xs])\n") == (
+        "if c:\n"
+        "    out = []\n"
+        "    for item in xs:\n"
+        "        out = out + [f(item)]\n"
+        "    print(out)"
+    )
+
+
+def test_in_an_else_branch():
+    assert rewritten("if c:\n    pass\nelse:\n    print([x for x in xs])\n") == (
+        "if c:\n"
+        "    pass\n"
+        "else:\n"
+        "    out = []\n"
+        "    for item in xs:\n"
+        "        out = out + [item]\n"
+        "    print(out)"
+    )
+
+
+def test_a_while_test_is_left_alone():
+    # `while` re-evaluates its test every turn; a hoisted loop runs once.
+    # Left in place, the comprehension keeps the refusal it already has.
+    source = "while [x for x in xs]:\n    print(1)\n"
+    assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
+def test_a_comprehension_in_a_while_body_is_still_rewritten():
+    assert rewritten("while c:\n    print([x for x in xs])\n") == (
+        "while c:\n"
+        "    out = []\n"
+        "    for item in xs:\n"
+        "        out = out + [item]\n"
+        "    print(out)"
+    )
+
+
+def test_as_a_call_argument_and_in_a_return():
+    assert rewritten("def f():\n    return [x for x in xs]\n") == (
+        "def f():\n"
+        "    out = []\n"
+        "    for item in xs:\n"
+        "        out = out + [item]\n"
+        "    return out"
+    )
+
+
+def test_a_tuple_target_is_left_alone():
+    source = "print([k for k, v in items])\n"
+    assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
+def test_more_than_one_for_is_left_alone():
+    source = "print([f(x, y) for x in xs for y in ys])\n"
+    assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
+def test_other_comprehension_kinds_are_left_alone():
+    for source in (
+        "print({x for x in xs})\n",
+        "print({k: v for k in xs})\n",
+        "print(sum(x for x in xs))\n",
+    ):
+        assert rewritten(source) == ast.unparse(ast.parse(source))
