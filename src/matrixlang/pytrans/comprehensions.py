@@ -110,6 +110,14 @@ class _Hoister(ast.NodeTransformer):
             return node
         if not isinstance(clause.target, ast.Name):
             return node
+        if clause.ifs:
+            # Task 2 adds these. Until it does, a filter has to be
+            # DECLINED rather than ignored: ignoring it would rewrite
+            # `[x for x in xs if p(x)]` into a loop that keeps every
+            # element, which is a wrong answer where declining is merely
+            # the refusal the reader already had. Task 2 deletes this
+            # guard as it adds real support.
+            return node
 
         result = self._invent(_RESULT_STEM)
         item = self._invent(_ITEM_STEM)

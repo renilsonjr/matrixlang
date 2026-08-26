@@ -74,6 +74,14 @@ def test_the_invented_stems_are_not_matrixlang_keywords():
     assert _ITEM_STEM not in tokens.KEYWORDS
 
 
+def test_a_condition_is_declined_until_task_2_supports_it():
+    # Scaffolding, and Task 2 deletes it. Its job is to make the one
+    # commit between here and there correct: without the guard the filter
+    # is silently dropped rather than declined.
+    source = "print([x for x in xs if x > 0])\n"
+    assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
 def test_a_program_without_comprehensions_is_untouched():
     source = "x = 1\nfor y in ys:\n    print(y)\n"
     assert rewritten(source) == ast.unparse(ast.parse(source))
