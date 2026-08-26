@@ -73,6 +73,9 @@ _ALLOWED: dict[str, set[str]] = {
     # comprehensions.py rewrites simple list comprehensions into loops
     # using free_name from pytrans.names.
     "pytrans.comprehensions": {"pytrans.names"},
+    # loop_else.py rewrites for-else into the flag pattern using free_name
+    # from pytrans.names.
+    "pytrans.loop_else": {"pytrans.names"},
     # `errors` for the same reason lexer/parser/interpreter/repl already
     # reach it: recursion_guard()/TooDeepError turn a RecursionError from
     # arbitrarily deep Python source (a long flat expression chain, no
