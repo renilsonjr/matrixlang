@@ -59,13 +59,20 @@ an element, a string for text inside it
 — **string methods** — `fold` lower-cases, `trim` removes whitespace from
 both ends, and the infix `cleave` splits on a separator, so `"a,b" cleave
 ","` is `["a", "b"]`, which makes a case-insensitive comparison `fold a ==
-fold b` —
+fold b` — **loop control** — `wake` leaves a loop and `glitch` skips to its next
+turn, so a search can stop the moment it finds what it wanted; both are
+errors outside a loop rather than silent no-ops — **one number type** —
+every number is an exact decimal, so `0.1 + 0.2` is `0.3` rather than
+almost-`0.3`, and `2.50 * 2` is `5.00` because trailing zeros are
+significant, while whole numbers still print as `3`; `/` is true
+division, so `7 / 2` is `3.5`; and `%` is the remainder, following
+Python's rule rather than Decimal's, so `-7 % 2` is `1` —
 and **Operator**, an assistive companion that writes MatrixLang from
 plain language, in the terminal or in a browser, and **Scribe**, a
 keyless, deterministic companion that does the same without a key, an
 SDK, or the network.
 
-1,627 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
+2,106 tests pass on Python 3.11 through 3.14 in CI. Zero third-party
 runtime dependencies.
 
 ```
