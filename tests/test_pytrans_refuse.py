@@ -128,6 +128,26 @@ def test_a_deep_statement_does_not_cost_its_siblings_their_rewrite():
     assert result.items[0].line == 1
 
 
+def test_the_rewrite_runs_against_a_copy_not_the_statement_itself():
+    # `_Hoister` is a NodeTransformer: it replaces `BinOp.left` in place as
+    # soon as it is visited, before `BinOp.right` -- the 700-deep chain
+    # below -- has a chance to exhaust the stack. Without `copy.deepcopy`
+    # in translate()'s per-statement rewrite loop, a RecursionError from
+    # the right side unwinds past a statement that was already half
+    # rewritten (its left side swapped for a comprehension result name
+    # with no loop ever emitted for it), and the decline that reaches the
+    # walker is for THAT mutated statement, not the reader's original one
+    # -- so the refusal names the wrong construct and points at (1, 1)
+    # instead of the reader's line. 700 dashes is comfortably past what a
+    # unary chain needs to blow CPython's default recursion limit while
+    # still being small enough to keep this test fast.
+    source = "xs = [1, 2]\nprint([x for x in xs] + " + "-" * 700 + "1)\n"
+    result = translate(source)
+    assert isinstance(result, Refusals)
+    assert result.items[0].reason == "a list comprehension cannot be translated"
+    assert result.items[0].line == 2
+
+
 def test_an_unsupported_statement_before_a_deep_one_is_still_collected():
     # If a statement refuses on its own terms, translate() never reaches the
     # render step at all -- the deep statement after it walks clean and

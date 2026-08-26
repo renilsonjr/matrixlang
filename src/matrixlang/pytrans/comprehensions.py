@@ -12,7 +12,13 @@ rather than that something downstream broke.
 
 Anything this pass declines to rewrite it leaves exactly as it found it,
 so the construct keeps the refusal it already had. Declining is the whole
-error-handling strategy; there is no failure mode of its own.
+error-handling strategy for constructs it does not support -- but the pass
+does have an unguarded recursive descent of its own (`_Hoister` and
+`_Rename` are both plain `ast.NodeTransformer`s with no depth limit), and
+a deeply nested expression can exhaust the stack here whether or not it
+contains a comprehension. That is why `translate()` (translate.py) wraps
+each statement's rewrite in `recursion_guard()` rather than trusting this
+module never to raise.
 """
 
 import ast
@@ -103,6 +109,14 @@ class _Hoister(ast.NodeTransformer):
     whole scoping mechanism: the top-level instance writes before the
     containing statement, and instances made for a comprehension's element
     or conditions write inside the loop body being built.
+
+    As a NodeTransformer this descends into every sub-expression it meets,
+    including branches the translator would only conditionally evaluate --
+    `ast.IfExp`'s body/orelse, `ast.Lambda`'s body. Nothing goes wrong
+    today only because the translator refuses both outright, so a
+    comprehension hoisted out of one never reaches the walker. Whoever
+    implements `a if c else b` (docs/PYTHON-PARITY.md's Tier 2 queue) has
+    to decide what this pass does to a comprehension inside it first.
     """
 
     def __init__(self, taken: set[str], emitted: list[ast.stmt]) -> None:
@@ -186,11 +200,18 @@ class _Rename(ast.NodeTransformer):
             return node
         return ast.copy_location(ast.Name(id=self.new, ctx=node.ctx), node)
 
-    def visit_ListComp(self, node: ast.ListComp) -> ast.ListComp:
+    def _comprehension(
+        self, node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp
+    ) -> ast.expr:
         # A nested comprehension that binds the same name has its own
         # scope: its element and conditions see ITS variable, not ours, so
         # the rename must not reach them. Its first iterable is evaluated
-        # out here, so that one must.
+        # out here, so that one must. This guard has to cover all four
+        # comprehension node types, not just ast.ListComp -- a set, dict
+        # or generator comprehension binding the same name is exactly as
+        # much its own scope, and generic_visit would otherwise rename
+        # straight through its bound variable, corrupting a comprehension
+        # this pass declines and must leave byte-identical.
         binds = any(
             isinstance(name, ast.Name) and name.id == self.old
             for clause in node.generators
@@ -203,3 +224,8 @@ class _Rename(ast.NodeTransformer):
         # left un-rewritten and refuses anyway.
         node.generators[0].iter = self.visit(node.generators[0].iter)
         return node
+
+    visit_ListComp = _comprehension
+    visit_SetComp = _comprehension
+    visit_DictComp = _comprehension
+    visit_GeneratorExp = _comprehension

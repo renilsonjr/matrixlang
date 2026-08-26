@@ -266,3 +266,34 @@ def test_a_declined_tuple_target_comprehension_is_not_renamed_into():
     # multi-generator one.
     source = "print([[y for a, x in pairs] for x in rows])\n"
     assert "[y for a, x in pairs]" in rewritten(source)
+
+
+def test_a_declined_inner_set_comprehension_is_not_renamed_into():
+    # The scope guard used to exist only for ast.ListComp, so a set
+    # comprehension binding the outer variable had its own bound name
+    # renamed straight through by generic_visit -- corrupting a
+    # comprehension the pass declines and must leave byte-identical.
+    source = "print([1 for x in rows if {x for x in a}])\n"
+    assert "{x for x in a}" in rewritten(source)
+
+
+def test_a_declined_inner_dict_comprehension_is_not_renamed_into():
+    source = "print([1 for x in rows if {x: 1 for x in a}])\n"
+    assert "{x: 1 for x in a}" in rewritten(source)
+
+
+def test_a_declined_inner_generator_expression_is_not_renamed_into():
+    source = "print([1 for x in rows if sum(x for x in a)])\n"
+    assert "(x for x in a)" in rewritten(source)
+
+
+def test_a_comprehension_in_the_element_must_not_run_when_a_guard_rejects_the_item():
+    # The element's own hoisted loop has to land INSIDE the `if`, not
+    # before it -- otherwise it runs for every item, including the ones
+    # the guard would have rejected, which is exactly the hazard the
+    # element/condition split exists to avoid (see the comment above
+    # `element_hoists` in _Hoister.visit_ListComp).
+    result = rewritten("out = [[y for y in r] for r in rows if len(r) > 1]\n")
+    if_index = result.index("if len(item) > 1:")
+    inner_loop_index = result.index("for item1 in item:")
+    assert if_index < inner_loop_index, result

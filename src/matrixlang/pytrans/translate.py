@@ -107,7 +107,13 @@ def translate(source: str) -> Translated | Refusals:
         # playground at roughly 6000 levels (`not not not ...`, unary
         # minus, elif chains). No position of its own, hence (1, 1), the
         # same choice the whole-program recursion refusal below makes.
-        return Refusals([Refusal("this is nested too deeply to translate", 1, 1)])
+        # The message says "too large or too deeply nested" rather than
+        # just "too deeply nested": MemoryError is also what a genuine
+        # out-of-memory on a large but shallow program raises, and the
+        # narrower wording would be actively wrong for that case.
+        return Refusals([
+            Refusal("this is too large or too deeply nested to translate", 1, 1)
+        ])
 
     # Comprehensions become the loops they mean before the walk starts, so
     # _Translator only ever sees constructs it already handles. `taken` is

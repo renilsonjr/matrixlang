@@ -261,6 +261,19 @@ def test_a_comprehension_in_a_boolean_operand_is_hoisted():
     assert source.endswith("trace c splice out\n")
 
 
+def test_a_comprehension_reorders_side_effects_in_the_same_statement():
+    # A second accepted silent difference, alongside the and/or one above:
+    # hoisting emits the comprehension's loop before the statement that
+    # contains it, so anything evaluated earlier in that same statement
+    # now runs after the comprehension instead of before it. Python
+    # evaluates left to right -- `g(0)` before the comprehension calls
+    # `f` -- but the translation's loop is emitted first, so `f` is
+    # called before `g`. Pinned here as a known quantity, not a claim
+    # that the order is correct.
+    source = ml("xs = [1]\nprint(g(0) + len([f(x) for x in xs]))\n")
+    assert source.index("f(xs[n])") < source.index("g(0)")
+
+
 def test_a_refusal_inside_a_comprehension_keeps_the_readers_position():
     # The spec requires generated nodes carry positions, so a refusal
     # raised inside a comprehension points at the reader's line rather

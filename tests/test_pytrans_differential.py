@@ -472,3 +472,74 @@ def test_remainder_agrees():
 
 def test_an_even_odd_loop_agrees():
     agree("for n in range(6):\n    if n % 2 == 0:\n        print(n)\n")
+
+
+# List comprehensions, run end to end rather than compared as text. Every
+# other comprehension test in this repo compares `ast.unparse` output
+# (test_pytrans_comprehensions.py) or a MatrixLang source string
+# (test_pytrans_expr.py, test_pytrans_refuse.py) -- both catch a rewrite
+# that produces the wrong text, neither catches one that produces text
+# which parses, runs, and does the wrong thing. Integer-valued programs
+# only: a boolean result can never agree() (Python prints True/False,
+# MatrixLang prints true/false -- see this file's own docstring), and a
+# comprehension result used directly as a condition refuses outright
+# (MatrixLang has no truthiness), so neither shape belongs here.
+
+
+def test_a_plain_comprehension_agrees():
+    agree("xs = [1, 2, 3]\nout = [x * 2 for x in xs]\nfor v in out:\n    print(v)\n")
+
+
+def test_a_filtered_comprehension_agrees():
+    agree(
+        "xs = [1, 2, 3, 4, 5]\n"
+        "out = [x for x in xs if x > 2]\n"
+        "for v in out:\n    print(v)\n"
+    )
+
+
+def test_a_comprehension_whose_loop_variable_shadows_an_outer_name_agrees():
+    # Python 3 gives the comprehension its own scope, so `x` is untouched
+    # outside it -- the same hazard test_the_loop_variable_does_not_leak
+    # pins as text, run here end to end instead.
+    agree(
+        "x = 99\n"
+        "xs = [1, 2, 3]\n"
+        "out = [x for x in xs]\n"
+        "for v in out:\n    print(v)\n"
+        "print(x)\n"
+    )
+
+
+def test_a_comprehension_nested_inside_another_agrees():
+    agree(
+        "rows = [[1, 2], [3, 4]]\n"
+        "out = [[y * 2 for y in row] for row in rows]\n"
+        "for r in out:\n"
+        "    for v in r:\n        print(v)\n"
+    )
+
+
+def test_a_comprehension_inside_a_for_body_agrees():
+    agree(
+        "for i in range(3):\n"
+        "    doubled = [x * i for x in [1, 2]]\n"
+        "    for v in doubled:\n        print(v)\n"
+    )
+
+
+def test_a_comprehension_inside_an_if_body_agrees():
+    agree(
+        "c = 1\n"
+        "if c > 0:\n"
+        "    out = [x for x in [1, 2, 3]]\n"
+        "    for v in out:\n        print(v)\n"
+    )
+
+
+def test_a_comprehension_in_the_iterable_of_another_agrees():
+    agree(
+        "xs = [1, 2, 3]\n"
+        "out = [x for x in [y * 2 for y in xs]]\n"
+        "for v in out:\n    print(v)\n"
+    )
