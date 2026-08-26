@@ -99,10 +99,14 @@ def translate(source: str) -> Translated | Refusals:
         # read straight off the exception, the way error.offset is above.
         return Refusals([Refusal(str(error), *_position(source, getattr(error, "start", 0)))])
 
-    paired = _none_then_truth_test(tree)
     walker = _Translator(bound_names(tree))
     statements = walker.body(tree.body)
     if walker.refusals:
+        # Only computed here, not unconditionally above: its only consumer
+        # is this branch, and it is an analysis pass over the whole module
+        # -- so every program that translates cleanly would otherwise pay
+        # for a pairing that has nothing to collapse.
+        paired = _none_then_truth_test(tree)
         collapsed = _collapse_none_pattern(walker.refusals, paired)
         return Refusals(sorted(collapsed, key=lambda r: (r.line, r.column)))
     try:
@@ -1279,6 +1283,48 @@ def _call_binding(
     return None if func is None else (target.id, func)
 
 
+def _binds(node: ast.AST, name: str) -> bool:
+    """Does this ONE node, by itself, bind `name`?
+
+    The single answer to "does this node bind that name", shared by
+    `_rebinds_in_stmt` (walks one statement, for the RESULT name) and
+    `_shadowed_in_scope` (walks a whole scope body, for the CALLED
+    name). The two guards used to answer this question separately and
+    drifted: `_rebinds_in_stmt` recognised fewer bind forms than
+    `_shadowed_in_scope` already had, so `class result:` or
+    `import result` between the assign and the `if` was not seen as a
+    rebind of the result name, and the paired refusal fired blaming the
+    wrong thing. Factoring the predicate out means that class of
+    divergence cannot recur -- both callers walk differently, but
+    neither can disagree with the other about what counts as a bind.
+
+    Recognises: a plain assignment target (`Name`/Store); a `def`,
+    `async def`, or `class` whose name matches; an import or
+    `import ... as` (`ast.alias`, whose bound name is the dotted path's
+    head, or the alias when there is one); and an `except ... as`
+    handler (`ast.ExceptHandler`, whose bound name is a plain string on
+    `.name`, not a `Name` node, so it needs its own check here).
+    """
+    if (
+        isinstance(node, ast.Name)
+        and isinstance(node.ctx, ast.Store)
+        and node.id == name
+    ):
+        return True
+    if (
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        and node.name == name
+    ):
+        return True
+    if isinstance(node, ast.alias):
+        bound = (node.asname or node.name).split(".")[0]
+        if bound == name:
+            return True
+    if isinstance(node, ast.ExceptHandler) and node.name == name:
+        return True
+    return False
+
+
 def _rebinds_in_stmt(stmt: ast.stmt, name: str) -> bool:
     """Does this statement bind `name` again?
 
@@ -1288,19 +1334,7 @@ def _rebinds_in_stmt(stmt: ast.stmt, name: str) -> bool:
     later definition silently replace the earlier one at module load,
     breaking every existing caller that passes a list.
     """
-    for node in ast.walk(stmt):
-        if (
-            isinstance(node, ast.Name)
-            and isinstance(node.ctx, ast.Store)
-            and node.id == name
-        ):
-            return True
-        if (
-            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == name
-        ):
-            return True
-    return False
+    return any(_binds(node, name) for node in ast.walk(stmt))
 
 
 def _bare_name_test_after(rest: list[ast.stmt], name: str) -> ast.Name | None:
@@ -1435,23 +1469,8 @@ def _shadowed_in_scope(
         if stmt is own_def:
             continue
         for node in ast.walk(stmt):
-            if (
-                isinstance(node, ast.Name)
-                and isinstance(node.ctx, ast.Store)
-                and node.id == name
-            ):
+            if _binds(node, name):
                 return True
-            if (
-                isinstance(
-                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-                )
-                and node.name == name
-            ):
-                return True
-            if isinstance(node, ast.alias):
-                bound = (node.asname or node.name).split(".")[0]
-                if bound == name:
-                    return True
     return False
 
 
@@ -1547,6 +1566,12 @@ def _none_pattern_refusal(
         "\n"
         "then test its length, and read the value out of it:\n"
         "\n"
+        # The two `instead of` columns below stay aligned for any `name`,
+        # not just this example's: the left column's own text grows by
+        # `len(name)` (inside `len(...)`) exactly as the line before the
+        # `instead of` does, and the right column shifts by `len(name)` on
+        # both lines the same way -- so the hand-placed spacing is not
+        # tuned to one name length and does not need re-tuning for another.
         f"    if len({name}) > 0:  instead of   if {name}:\n"
         f"        {name}[0]                     {name}",
     )

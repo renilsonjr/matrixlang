@@ -733,3 +733,156 @@ def test_nothing_is_replaced_when_only_one_of_the_two_fired():
     reasons = " ".join(item.reason for item in result.items)
     assert "truthiness" in reasons
     assert "returns None on one path" not in reasons
+
+
+# Final review, Important #1: `_rebinds_in_stmt` (the guard on the RESULT
+# name) recognised fewer bind forms than `_shadowed_in_scope` (the guard
+# on the CALLED name) -- Name/Store and def only, missing `class` and
+# `import`, which `_shadowed_in_scope` already had, and missing
+# `except ... as`, which neither guard had. All three are runnable
+# programs where `result` is rebound between the assign and the `if`, so
+# the paired refusal fires and blames `find` for a condition that is
+# actually testing the class/module/exception, not find's return value.
+
+
+def test_a_class_binding_the_result_name_is_not_the_shape():
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "class result:\n"
+        "    pass\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_an_import_binding_the_result_name_is_not_the_shape():
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "import result\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_an_except_handler_binding_the_result_name_is_not_the_shape():
+    # `except Exception as result:` leaves `result` holding find's value
+    # when the handler does not run, so -- unlike the same gap on the
+    # CALLED name -- this is not merely theoretical: the program below
+    # runs, and pairs the refusal on a name the handler clause rebinds.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "try:\n"
+        "    pass\n"
+        "except Exception as result:\n"
+        "    pass\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_the_ordinary_case_still_fires_after_unifying_the_bind_check():
+    # Positive guard for this round: a fix that closes the class/import
+    # gap by declining more broadly -- rather than by recognising exactly
+    # those bind forms -- would pass every negative test above and still
+    # silently kill the ordinary case. That trap has already appeared
+    # twice on this branch.
+    found = _detect(FIND_BOOK)
+    assert found is not None
+
+
+def test_an_unshadowed_call_two_scopes_deep_still_fires_after_unifying_the_bind_check():
+    # Same guard, for the nested-scope path through `_shadowed_in_scope`,
+    # which now shares the unified bind check too.
+    found = _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    def g():\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "find" in refusal.reason
+
+
+# Final review, Important #2: the plan dropped two of the design's six
+# mandated negative cases, and half of a third. All three behaviours
+# below are already correct -- these tests exist to pin them, not to fix
+# anything.
+
+
+def test_none_arriving_by_falling_off_the_end_is_not_the_shape():
+    # No explicit `return None` at all -- the function just runs out of
+    # statements. `_mixed_return_none` needs a `Constant` node to anchor
+    # the refusal on, so this must decline rather than guess at one.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "\n"
+        "result = find(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_two_matching_functions_in_one_module_blame_the_right_one():
+    # `a`'s result and `b`'s result are crossed: the `if` that is actually
+    # reachable through the shape only follows `b`'s call, so the paired
+    # refusal must name `b`, not `a`.
+    found = _detect(
+        "def a(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def b(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "ra = a(1)\n"
+        "rb = b(1)\n"
+        "if rb:\n"
+        "    print(rb)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "`b`" in refusal.reason
+    assert "`a`" not in refusal.reason
+
+
+def test_a_call_as_the_test_is_not_the_shape():
+    # `if find(x):` -- a call, not a bare Name. `_bare_name_test_after`
+    # requires `isinstance(stmt.test, ast.Name)`, so a call re-invoking
+    # the function must decline rather than pair on it.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "if find(x):\n"
+        "    print(result)\n"
+    ) is None
