@@ -481,3 +481,87 @@ def test_a_nested_defs_returns_do_not_count_as_the_outer_functions():
         "if result:\n"
         "    print(result)\n"
     ) is None
+
+
+# Fix round 1: the `functions` dict is built from module-level defs only,
+# then reused while scanning every scope body -- including nested ones --
+# without checking whether the call site's own scope shadows that name.
+# These are the reviewer's repro and its variants.
+
+
+def test_a_called_name_shadowed_by_a_nested_def_is_not_the_shape():
+    # The reviewer's repro: the inner `find_book` shadows the outer one,
+    # so the call resolves to a function that never returns None. Blaming
+    # the outer function's `return None` for it is a wrong, confident
+    # claim about a shape the reader did not write.
+    assert _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    def find_book(y):\n"
+        "        return y\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    ) is None
+
+
+def test_a_called_name_shadowed_by_a_local_assignment_is_not_the_shape():
+    assert _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    find_book = lambda y: y\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    ) is None
+
+
+def test_a_called_name_shadowed_by_an_enclosing_parameter_is_not_the_shape():
+    assert _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g(find_book):\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    ) is None
+
+
+def test_the_ordinary_module_level_case_still_fires():
+    # Regression guard for this round: the shadow check must not swallow
+    # the base case just because the call and its def share one scope --
+    # the def statement itself is not a shadow of itself.
+    found = _detect(FIND_BOOK)
+    assert found is not None
+
+
+def test_a_call_from_an_unshadowed_nested_function_still_fires():
+    # A fix that closes the shadowing hole by never firing from a nested
+    # scope at all would pass the negative tests above and break the
+    # feature. This call is nested but not shadowed, so it must still
+    # fire.
+    found = _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "find_book" in refusal.reason

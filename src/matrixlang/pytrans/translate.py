@@ -1329,6 +1329,74 @@ def _scope_bodies(tree: ast.Module) -> list[list[ast.stmt]]:
     return bodies
 
 
+def _scope_params(tree: ast.Module) -> dict[int, list[str]]:
+    """Every function scope's parameter names, keyed by `id(body)` so a
+    scan over `_scope_bodies` can look up "does my own signature bind
+    this name" without re-deriving it from the tree. The module scope
+    has no entry -- it binds no names through a signature.
+    """
+    scopes: dict[int, list[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            names = [
+                a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)
+            ]
+            if args.vararg is not None:
+                names.append(args.vararg.arg)
+            if args.kwarg is not None:
+                names.append(args.kwarg.arg)
+            scopes[id(node.body)] = names
+    return scopes
+
+
+def _shadowed_in_scope(
+    body: list[ast.stmt], params: list[str], name: str, own_def: ast.stmt
+) -> bool:
+    """Does this scope bind `name` to something OTHER than `own_def` --
+    a parameter, a nested `def`/`class`, an assignment, an import, a
+    `for` target, a `with ... as`, or anything else?
+
+    `own_def` is excluded from the walk: it is the very definition the
+    call resolves to when nothing shadows it, not a shadow of itself --
+    without the exclusion, the ordinary module-level case (where the
+    call and its `def` share one scope) would flag itself as shadowed
+    and never fire at all.
+
+    Deliberately over-broad otherwise: it walks the WHOLE scope, not
+    just what precedes or follows the call, because Python resolves a
+    name assigned anywhere in a function as local to that function for
+    its entire body -- shadowing does not require the assignment to
+    come first. Whenever this cannot be sure the module-level function
+    is what actually gets called, it must not fire: a missed detection
+    costs a worse message; a wrong one costs a confident, false claim.
+    """
+    if name in params:
+        return True
+    for stmt in body:
+        if stmt is own_def:
+            continue
+        for node in ast.walk(stmt):
+            if (
+                isinstance(node, ast.Name)
+                and isinstance(node.ctx, ast.Store)
+                and node.id == name
+            ):
+                return True
+            if (
+                isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                )
+                and node.name == name
+            ):
+                return True
+            if isinstance(node, ast.alias):
+                bound = (node.asname or node.name).split(".")[0]
+                if bound == name:
+                    return True
+    return False
+
+
 def _none_then_truth_test(
     tree: ast.Module,
 ) -> tuple[Refusal, frozenset[tuple[int, int]]] | None:
@@ -1343,18 +1411,32 @@ def _none_then_truth_test(
     or None. The positions are the ones the existing raise sites report:
     `_constant` reports the `None` constant node, `condition` reports the
     `If` test node.
+
+    `functions` is built from module-level defs only, and reused while
+    scanning every scope body -- including nested ones. A scope that
+    shadows the called name (a nested `def` of the same name, a local
+    assignment, a parameter of the enclosing function, an import, a
+    `for` target, a `with ... as`, anything) is skipped via
+    `_shadowed_in_scope`: without that check, the module-level def
+    would get blamed for a call that actually resolves to whatever
+    shadows it locally -- a confident, wrong claim about a shape the
+    reader did not write.
     """
     functions = {
         stmt.name: stmt for stmt in tree.body if isinstance(stmt, ast.FunctionDef)
     }
     if not functions:
         return None
+    params_by_scope = _scope_params(tree)
     for body in _scope_bodies(tree):
+        params = params_by_scope.get(id(body), [])
         for index, stmt in enumerate(body):
             binding = _call_binding(stmt, functions)
             if binding is None:
                 continue
             name, func = binding
+            if _shadowed_in_scope(body, params, func.name, func):
+                continue
             none_node = _mixed_return_none(func)
             if none_node is None:
                 continue
