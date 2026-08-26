@@ -659,6 +659,24 @@ def test_a_nested_comprehension_is_rewritten_inside_the_outer_loop():
     )
 
 
+def test_a_declined_inner_comprehension_is_not_renamed_into():
+    # The case that actually falsifies a missing scope guard: the inner
+    # comprehension has two `for` clauses, so the pass DECLINES it -- and
+    # a declined comprehension has to come back byte-identical, or it
+    # stops matching the refusal it is supposed to keep. Renaming into it
+    # corrupts its own bound variable.
+    source = "print([[x for x in a for z in b] for x in rows])\n"
+    assert "[x for x in a for z in b]" in rewritten(source)
+
+
+def test_a_declined_tuple_target_comprehension_is_not_renamed_into():
+    # The same hole reached through the tuple-target path rather than the
+    # multi-generator one. This is why `binds` walks the target instead of
+    # testing it for `ast.Name`.
+    source = "print([[y for a, x in pairs] for x in rows])\n"
+    assert "[y for a, x in pairs]" in rewritten(source)
+
+
 def test_a_comprehension_in_the_iterable_hoists_beside_the_outer_loop():
     # `xs` in `for x in [...]` is evaluated once, in the ENCLOSING scope --
     # so its loop belongs before the outer loop, not inside it.
@@ -687,9 +705,11 @@ def test_a_comprehension_in_a_condition_runs_inside_the_loop():
 
 
 def test_an_inner_comprehension_rebinding_the_name_keeps_its_own():
-    # `[[x for x in row] for x in rows]`: the inner `x` is the inner
-    # comprehension's, not the outer one's. Renaming through it would
-    # produce a different program.
+    # Pins the nesting output shape only. It does NOT exercise the scope
+    # guard: the inner comprehension here is single-generator, so it gets
+    # re-hoisted with its own fresh names either way and the output is the
+    # same with or without `_Rename.visit_ListComp`. The two tests below
+    # are the ones that falsify a missing guard.
     assert rewritten("print([[x for x in row] for x in rows])\n") == (
         "out = []\n"
         "for item in rows:\n"
@@ -766,8 +786,9 @@ Second, teach `_Rename` about comprehension scope. Add to `_Rename`:
         # the rename must not reach them. Its first iterable is evaluated
         # out here, so that one must.
         binds = any(
-            isinstance(clause.target, ast.Name) and clause.target.id == self.old
+            isinstance(name, ast.Name) and name.id == self.old
             for clause in node.generators
+            for name in ast.walk(clause.target)
         )
         if not binds:
             return self.generic_visit(node)
@@ -781,7 +802,11 @@ Second, teach `_Rename` about comprehension scope. Add to `_Rename`:
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_comprehensions.py -v`
-Expected: 22 passed.
+Expected: 24 passed.
+
+Then confirm the two `declined` tests are real: rename `_Rename.visit_ListComp`
+so it stops being dispatched, re-run them, and see both FAIL. Restore the
+file. A scope guard whose absence no test notices is not a guard.
 
 - [ ] **Step 5: Commit**
 
