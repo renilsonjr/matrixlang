@@ -84,6 +84,10 @@ def _expand(statement: ast.stmt, taken: set[str]) -> list[ast.stmt]:
 
     else_body = statement.orelse
     statement.orelse = []
+    if not _has_own_break(statement.body):
+        # The loop cannot break, so the else always runs. No flag, no
+        # guard -- just the else body after the loop.
+        return [statement, *else_body]
     flag = free_name(taken, _FLAG_STEM)
     taken.add(flag)
     statement.body = _mark(statement.body, flag)
@@ -137,3 +141,29 @@ def _mark(statements: list[ast.stmt], flag: str) -> list[ast.stmt]:
                 case.body = _mark(case.body, flag)
         out.append(statement)
     return out
+
+
+def _has_own_break(statements: list[ast.stmt]) -> bool:
+    """Whether a `break` belonging to THIS loop can be reached.
+
+    Same one rule as `_mark`, and it has to stay the same rule: a
+    disagreement between them would either emit a flag nothing sets, or
+    set a flag nothing tests.
+    """
+    for statement in statements:
+        if isinstance(statement, ast.Break):
+            return True
+        if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
+            continue
+        for field in _BLOCK_FIELDS:
+            block = getattr(statement, field, None)
+            if isinstance(block, list) and all(isinstance(s, ast.stmt) for s in block):
+                if _has_own_break(block):
+                    return True
+        for handler in getattr(statement, "handlers", []):
+            if _has_own_break(handler.body):
+                return True
+        for case in getattr(statement, "cases", []):
+            if _has_own_break(case.body):
+                return True
+    return False

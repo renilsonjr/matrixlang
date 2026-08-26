@@ -145,3 +145,39 @@ def test_a_while_else_is_left_alone_until_task_3():
 def test_a_program_without_loop_else_is_untouched():
     source = "for x in xs:\n    break\n"
     assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
+def test_a_loop_that_cannot_break_gets_no_flag():
+    assert rewritten(
+        "for x in xs:\n    print(x)\nelse:\n    print(1)\n"
+    ) == (
+        "for x in xs:\n"
+        "    print(x)\n"
+        "print(1)"
+    )
+
+
+def test_continue_is_not_a_break():
+    # `continue` does not skip the else, so it must not suppress the flag
+    # shortcut either.
+    assert rewritten(
+        "for x in xs:\n    if c:\n        continue\nelse:\n    print(1)\n"
+    ) == (
+        "for x in xs:\n"
+        "    if c:\n"
+        "        continue\n"
+        "print(1)"
+    )
+
+
+def test_only_a_nested_break_still_means_no_flag():
+    # The inner break is the inner loop's, so OUR loop cannot break --
+    # the else always runs and needs no guard.
+    assert rewritten(
+        "for a in A:\n    for b in B:\n        break\nelse:\n    print(1)\n"
+    ) == (
+        "for a in A:\n"
+        "    for b in B:\n"
+        "        break\n"
+        "print(1)"
+    )
