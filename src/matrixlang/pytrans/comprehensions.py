@@ -192,8 +192,9 @@ class _Rename(ast.NodeTransformer):
         # the rename must not reach them. Its first iterable is evaluated
         # out here, so that one must.
         binds = any(
-            isinstance(clause.target, ast.Name) and clause.target.id == self.old
+            isinstance(name, ast.Name) and name.id == self.old
             for clause in node.generators
+            for name in ast.walk(clause.target)
         )
         if not binds:
             return self.generic_visit(node)

@@ -236,6 +236,11 @@ def test_an_inner_comprehension_rebinding_the_name_keeps_its_own():
     # `[[x for x in row] for x in rows]`: the inner `x` is the inner
     # comprehension's, not the outer one's. Renaming through it would
     # produce a different program.
+    #
+    # This pins the nesting output shape only -- the inner comprehension
+    # here is single-generator, so it gets re-hoisted by its own fresh
+    # _Hoister regardless of whether the scope guard runs. It does not
+    # exercise the scope guard itself; see the two tests below for that.
     assert rewritten("print([[x for x in row] for x in rows])\n") == (
         "out = []\n"
         "for item in rows:\n"
@@ -245,3 +250,19 @@ def test_an_inner_comprehension_rebinding_the_name_keeps_its_own():
         "    out = out + [out1]\n"
         "print(out)"
     )
+
+
+def test_a_declined_inner_comprehension_is_not_renamed_into():
+    # The one that actually falsifies a missing scope guard: the inner
+    # comprehension has two `for` clauses, so the pass DECLINES it -- and
+    # a declined comprehension has to come back byte-identical. Renaming
+    # into it would corrupt its own bound variable.
+    source = "print([[x for x in a for z in b] for x in rows])\n"
+    assert "[x for x in a for z in b]" in rewritten(source)
+
+
+def test_a_declined_tuple_target_comprehension_is_not_renamed_into():
+    # Same hole reached through the tuple-target path rather than the
+    # multi-generator one.
+    source = "print([[y for a, x in pairs] for x in rows])\n"
+    assert "[y for a, x in pairs]" in rewritten(source)
