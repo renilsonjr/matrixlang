@@ -110,18 +110,13 @@ class _Hoister(ast.NodeTransformer):
             return node
         if not isinstance(clause.target, ast.Name):
             return node
-        if clause.ifs:
-            # Task 2 adds these. Until it does, a filter has to be
-            # DECLINED rather than ignored: ignoring it would rewrite
-            # `[x for x in xs if p(x)]` into a loop that keeps every
-            # element, which is a wrong answer where declining is merely
-            # the refusal the reader already had. Task 2 deletes this
-            # guard as it adds real support.
-            return node
 
         result = self._invent(_RESULT_STEM)
         item = self._invent(_ITEM_STEM)
         element = _renamed(node.elt, clause.target.id, item)
+        conditions = [
+            _renamed(test, clause.target.id, item) for test in clause.ifs
+        ]
 
         append = ast.Assign(
             targets=[ast.Name(id=result, ctx=ast.Store())],
@@ -131,10 +126,13 @@ class _Hoister(ast.NodeTransformer):
                 right=ast.List(elts=[element], ctx=ast.Load()),
             ),
         )
+        body: list[ast.stmt] = [append]
+        for test in reversed(conditions):
+            body = [ast.If(test=test, body=body, orelse=[])]
         loop = ast.For(
             target=ast.Name(id=item, ctx=ast.Store()),
             iter=clause.iter,
-            body=[append],
+            body=body,
             orelse=[],
         )
         start = ast.Assign(
