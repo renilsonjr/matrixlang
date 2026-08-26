@@ -103,6 +103,31 @@ def test_the_flag_avoids_the_readers_names():
     )
 
 
+def test_a_break_inside_a_match_case_is_still_ours():
+    # `ast.Match` holds its suites under `cases`, so a field-list walk
+    # misses them and leaves the `break` unmarked -- the loop would break
+    # without setting the flag and the else would wrongly run. `match` is
+    # refused by the translator today, which makes this unreachable rather
+    # than harmless; `try` is refused too and is walked all the same.
+    assert rewritten(
+        "for x in xs:\n"
+        "    match x:\n"
+        "        case 1:\n"
+        "            break\n"
+        "else:\n"
+        "    print(1)\n"
+    ) == (
+        "broke = False\n"
+        "for x in xs:\n"
+        "    match x:\n"
+        "        case 1:\n"
+        "            broke = True\n"
+        "            break\n"
+        "if broke == False:\n"
+        "    print(1)"
+    )
+
+
 def test_the_flag_stem_is_not_a_matrixlang_keyword():
     from matrixlang.pytrans.loop_else import _FLAG_STEM
 

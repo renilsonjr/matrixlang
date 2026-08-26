@@ -64,6 +64,11 @@ def _rewrite_nested_blocks(statement: ast.stmt, taken: set[str]) -> None:
             setattr(statement, field, _block(block, taken))
     for handler in getattr(statement, "handlers", []):
         handler.body = _block(handler.body, taken)
+    # `ast.Match` keeps its suites under `cases`, not `body` -- the same
+    # shape as `handlers`, and missed by the field list for the same
+    # reason.
+    for case in getattr(statement, "cases", []):
+        case.body = _block(case.body, taken)
 
 
 def _expand(statement: ast.stmt, taken: set[str]) -> list[ast.stmt]:
@@ -128,5 +133,7 @@ def _mark(statements: list[ast.stmt], flag: str) -> list[ast.stmt]:
                     setattr(statement, field, _mark(block, flag))
             for handler in getattr(statement, "handlers", []):
                 handler.body = _mark(handler.body, flag)
+            for case in getattr(statement, "cases", []):
+                case.body = _mark(case.body, flag)
         out.append(statement)
     return out
