@@ -173,6 +173,14 @@ def test_the_invented_stems_are_not_matrixlang_keywords():
     assert _ITEM_STEM not in tokens.KEYWORDS
 
 
+def test_a_condition_is_declined_until_task_2_supports_it():
+    # Scaffolding, and Task 2 deletes it. Its job is to make the one
+    # commit between here and there correct: without the guard the filter
+    # is silently dropped rather than declined.
+    source = "print([x for x in xs if x > 0])\n"
+    assert rewritten(source) == ast.unparse(ast.parse(source))
+
+
 def test_a_program_without_comprehensions_is_untouched():
     source = "x = 1\nfor y in ys:\n    print(y)\n"
     assert rewritten(source) == ast.unparse(ast.parse(source))
@@ -304,6 +312,14 @@ class _Hoister(ast.NodeTransformer):
             return node
         if not isinstance(clause.target, ast.Name):
             return node
+        if clause.ifs:
+            # Task 2 adds these. Until it does, a filter has to be
+            # DECLINED rather than ignored: ignoring it would rewrite
+            # `[x for x in xs if p(x)]` into a loop that keeps every
+            # element, which is a wrong answer where declining is merely
+            # the refusal the reader already had. Task 2 deletes this
+            # guard as it adds real support.
+            return node
 
         result = self._invent(_RESULT_STEM)
         item = self._invent(_ITEM_STEM)
@@ -356,7 +372,7 @@ class _Rename(ast.NodeTransformer):
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_comprehensions.py -v`
-Expected: 6 passed.
+Expected: 7 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
@@ -426,15 +442,21 @@ def test_the_rename_reaches_the_conditions():
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pytest tests/test_pytrans_comprehensions.py -k condition -v`
-Expected: FAIL — the produced source has no `if` at all, because
-`clause.ifs` is currently ignored. Confirm the failure output shows the
-loop body without a guard; a failure for any other reason means the test
-is wrong, not the code.
+Expected: FAIL — the comprehension is left exactly as written, because
+Task 1's guard declines any comprehension carrying an `if`. Confirm the
+failure output still contains `[f(x) for x in xs if x > 2]` unrewritten; a
+failure for any other reason means the test is wrong, not the code.
 
 - [ ] **Step 3: Implement**
 
-In `visit_ListComp`, after the `element` line, add the conditions, and
-replace the `body=[append]` argument to `ast.For`:
+First delete the two things Task 1 put in as scaffolding, which this task
+replaces: the `if clause.ifs: return node` guard in `visit_ListComp`, and
+`test_a_condition_is_declined_until_task_2_supports_it` in the test file.
+Both were there to keep Task 1's commit correct, and both become false the
+moment conditions are supported.
+
+Then, in `visit_ListComp`, after the `element` line, add the conditions,
+and replace the `body=[append]` argument to `ast.For`:
 
 ```python
         element = _renamed(node.elt, clause.target.id, item)
