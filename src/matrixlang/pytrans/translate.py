@@ -9,6 +9,7 @@ construction -- it came from the same classes the parser produces.
 """
 
 import ast
+import copy
 from decimal import Decimal
 
 from matrixlang.errors import TooDeepError, recursion_guard
@@ -23,6 +24,7 @@ from matrixlang.tokens import TokenType
 
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
 from matrixlang.pytrans.names import bound_names, free_name
+from matrixlang.pytrans.comprehensions import rewrite_comprehensions
 
 # `/` and `%` translate. MatrixLang's `/` is true division, rounded at
 # precision 28 (interpreter.py's DIVISION context) -- the same operation
@@ -98,8 +100,56 @@ def translate(source: str) -> Translated | Refusals:
         # index into `source` -- so the position is derived rather than
         # read straight off the exception, the way error.offset is above.
         return Refusals([Refusal(str(error), *_position(source, getattr(error, "start", 0)))])
+    except MemoryError:
+        # CPython's parser reports stack overflow as MemoryError, not
+        # SyntaxError -- so neither clause above catches it and it escapes
+        # a function documented never to raise. Reachable by paste in the
+        # playground at roughly 6000 levels (`not not not ...`, unary
+        # minus, elif chains). No position of its own, hence (1, 1), the
+        # same choice the whole-program recursion refusal below makes.
+        # The message says "too large or too deeply nested" rather than
+        # just "too deeply nested": MemoryError is also what a genuine
+        # out-of-memory on a large but shallow program raises, and the
+        # narrower wording would be actively wrong for that case.
+        return Refusals([
+            Refusal("this is too large or too deeply nested to translate", 1, 1)
+        ])
 
-    walker = _Translator(bound_names(tree))
+    # Comprehensions become the loops they mean before the walk starts, so
+    # _Translator only ever sees constructs it already handles. `taken` is
+    # shared rather than recomputed: the rewrite adds the names it invents
+    # to it, so the counters the walker invents cannot collide with them.
+    #
+    # Rewritten one top-level statement at a time, each under its own
+    # recursion_guard, rather than once for the whole tree: the rewrite's
+    # own recursive descent (comprehensions.py's NodeTransformer) has no
+    # depth guard of its own and can exhaust the stack on a deeply nested
+    # expression that contains no comprehension at all -- the same
+    # `1 + 1 + ...` input the walk and render guards already exist for.
+    # Declining per statement, rather than letting the exception escape
+    # the whole call, means one deeply nested statement cannot cost every
+    # sibling statement its already-successful rewrite. The rewrite runs
+    # against a deepcopy of the statement, not the statement itself: the
+    # rewrite is a NodeTransformer, so a non-list field (e.g. one operand
+    # of a BinOp) is replaced in place as soon as it is visited, before a
+    # RecursionError from a later, deeper field has a chance to unwind the
+    # call -- rewriting a copy is what keeps the original statement (and
+    # hence whatever refusal it would otherwise have earned from the walk
+    # or from render) genuinely untouched on decline, rather than left
+    # half rewritten and referencing a loop that was never emitted.
+    taken = bound_names(tree)
+    rewritten: list[ast.stmt] = []
+    for statement in tree.body:
+        try:
+            with recursion_guard():
+                module = rewrite_comprehensions(
+                    ast.Module(body=[copy.deepcopy(statement)], type_ignores=[]), taken
+                )
+            rewritten.extend(module.body)
+        except TooDeepError:
+            rewritten.append(statement)
+    tree.body = rewritten
+    walker = _Translator(taken)
     statements = walker.body(tree.body)
     if walker.refusals:
         # Only computed here, not unconditionally above: its only consumer

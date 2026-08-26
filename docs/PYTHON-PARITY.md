@@ -166,16 +166,60 @@ halves of the shape are not both independently refused (because translation
 never reached one of them), nothing is collapsed and the reader keeps every
 accurate message they had.
 
+### 6. List comprehensions — **done**
+
+`[f(x) for x in xs if c]` translates. Not by teaching the translator a new
+construct: a pass rewrites the comprehension into the accumulator loop the
+`for` desugaring already emits, before translation starts, so the walker
+never sees a comprehension at all.
+
+Unlike items 1–5 this one came from a blocked program rather than from the
+queue above, which is the register working as intended.
+
+Still refused, and each for a reason rather than for lack of time: more
+than one `for` clause, a tuple target (the translator has no tuples), set
+and dict comprehensions and generator expressions (no set type, and the
+rest is scope), and a comprehension in a `while` test — that one because
+`while` re-evaluates its test every turn and a hoisted loop runs once, so
+rewriting it would produce a program that silently loops wrong.
+
+Two accepted differences, both from the same mechanism. The first is the
+exception that proves the governing rule: hoisting out of an `and`/`or`
+operand runs a comprehension Python would have skipped. It is the only
+expression position with no statement boundary to emit at.
+
+The second is that hoisting also reorders side effects within a
+statement. The loop is emitted immediately before the statement that
+contains it, so anything else that statement evaluates — a call before
+the comprehension in source order, say — now runs after it instead of
+before. `print(g(0) + len([f(x) for x in xs]))` calls `g` then `f` in
+Python and `f` then `g` in the translation. Narrowing this would mean
+refusing any comprehension sharing a statement with another
+side-effecting call, which is most of them, so it is accepted rather
+than closed. Both differences are pinned by tests so they stay known
+quantities.
+
 ---
 
 ## Tier 2 — real, workaroundable, unscheduled
 
-Slicing · tuples · `a if c else b` · comprehensions · number formatting
+Slicing · tuples · `a if c else b` · set and dict comprehensions · number formatting
 (`{x:.2f}`) · chained comparison (`a < b < c`) · multiple assignment · `del` ·
 `**`
 
 Each has a working substitute today. They move up if a program you actually
 wanted to run gets blocked by one — that is what the register is for.
+
+`a if c else b` is not independent of the comprehension pass: `_Hoister`
+(comprehensions.py) descends into every sub-expression, including an
+`ast.IfExp`'s branches, so a comprehension inside one would be hoisted the
+same as anywhere else. Nothing goes wrong today only because the
+translator refuses `IfExp` outright before a hoisted comprehension there
+could matter. Implementing `a if c else b` means deciding what the
+comprehension pass does inside it — hoisting unconditionally would run a
+comprehension from a branch that was never taken, a third accepted
+difference alongside the two above, unless whoever implements it chooses
+to close it instead.
 
 ---
 

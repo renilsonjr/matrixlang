@@ -44,7 +44,11 @@ def test_refusals_are_in_line_order():
 
 
 def test_a_refusal_names_an_idiom_when_one_exists():
-    refusal = translate("xs = [f(x) for x in ys]\n").items[0]
+    # A single-generator, filter-free comprehension now translates (Task 5
+    # of the list-comprehensions plan), so this reaches for a shape that
+    # still refuses -- multiple `for` clauses -- to keep testing the
+    # idiom mechanism rather than comprehension support itself.
+    refusal = translate("xs = [f(x, y) for x in a for y in b]\n").items[0]
     assert refusal.idiom is not None
     assert "dejavu" in refusal.idiom
 
@@ -72,6 +76,18 @@ def test_a_lone_surrogate_is_a_refusal_not_an_exception():
     assert result.items[0].line == 1
 
 
+def test_a_parser_stack_overflow_is_a_refusal_not_an_exception():
+    # CPython's own parser reports its stack overflow as MemoryError, not
+    # SyntaxError -- neither existing except clause catches it, so it
+    # otherwise escapes a function documented never to raise. Reachable by
+    # pasting into the browser playground (deep unary chains, elif chains,
+    # ...); pre-existing, not caused by the comprehension rewrite.
+    source = "print(" + "-" * 6000 + "1)"
+    result = translate(source)
+    assert isinstance(result, Refusals)
+    assert result.items[0].line == 1
+
+
 def test_a_deeply_nested_expression_is_a_refusal_not_a_stack_overflow():
     # 500 levels of `1 + 1 + ...` is well within what a reader could paste,
     # and the walker's recursive descent has no depth guard of its own.
@@ -92,6 +108,44 @@ def test_a_deeply_nested_expression_alongside_valid_statements_still_refuses_cle
     assert isinstance(result, Refusals)
     assert len(result.items) == 1
     assert "nested too deeply" in result.items[0].reason
+
+
+def test_a_deep_statement_does_not_cost_its_siblings_their_rewrite():
+    # A statement whose own rewrite gets declined for depth must not stop
+    # a sibling statement's comprehension from being rewritten and
+    # translated -- each top-level statement's rewrite is independent.
+    # `//` refuses permanently regardless of depth, so it is a stable
+    # thing to detect if the deep statement's decline ever leaked into
+    # the sibling: 600 terms is comfortably past the ~500 that trips the
+    # rewrite's own recursion guard (see the deeply-nested tests above),
+    # so the first statement is guaranteed to decline before the second
+    # is ever reached.
+    source = "y = " + "1 // " * 600 + "1\n" + "a = [x for x in xs]\nprint(a)\n"
+    result = translate(source)
+    assert isinstance(result, Refusals)
+    assert len(result.items) == 1
+    assert result.items[0].reason == "`//` cannot be translated"
+    assert result.items[0].line == 1
+
+
+def test_the_rewrite_runs_against_a_copy_not_the_statement_itself():
+    # `_Hoister` is a NodeTransformer: it replaces `BinOp.left` in place as
+    # soon as it is visited, before `BinOp.right` -- the 700-deep chain
+    # below -- has a chance to exhaust the stack. Without `copy.deepcopy`
+    # in translate()'s per-statement rewrite loop, a RecursionError from
+    # the right side unwinds past a statement that was already half
+    # rewritten (its left side swapped for a comprehension result name
+    # with no loop ever emitted for it), and the decline that reaches the
+    # walker is for THAT mutated statement, not the reader's original one
+    # -- so the refusal names the wrong construct and points at (1, 1)
+    # instead of the reader's line. 700 dashes is comfortably past what a
+    # unary chain needs to blow CPython's default recursion limit while
+    # still being small enough to keep this test fast.
+    source = "xs = [1, 2]\nprint([x for x in xs] + " + "-" * 700 + "1)\n"
+    result = translate(source)
+    assert isinstance(result, Refusals)
+    assert result.items[0].reason == "a list comprehension cannot be translated"
+    assert result.items[0].line == 2
 
 
 def test_an_unsupported_statement_before_a_deep_one_is_still_collected():
