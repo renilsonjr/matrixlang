@@ -12,7 +12,7 @@ either source face.
 import dataclasses
 import string
 import sys
-from decimal import ROUND_FLOOR, Decimal
+from decimal import Decimal
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
@@ -65,6 +65,7 @@ from matrixlang.values import (
     is_number,
     is_str,
     is_whole,
+    remainder_floor,
     to_display,
     type_name,
 )
@@ -1105,37 +1106,35 @@ class Interpreter:
                 raise RuntimeErrorML(
                     "cannot take the remainder by zero", node.line, node.column
                 )
-            # Python's rule, not Decimal's. Decimal's native % follows the
-            # DIVIDEND's sign: Decimal(-7) % Decimal(2) is -1, where
-            # Python's -7 % 2 is 1. The translator maps `a % b` straight
-            # through and cannot see signs, so taking Decimal's answer
-            # would disagree with Python silently on every negative
-            # operand -- exactly what the governing rule forbids.
+            # Python's rule, not Decimal's -- `left - floor(left / right)
+            # * right`. values.remainder_floor owns the whole of it,
+            # including why it must not compute the quotient: rounding
+            # `left / right` to EXACT's 1000 digits before flooring it
+            # rounds UP past 1000 digits, which returned a NEGATIVE
+            # remainder for a positive divisor. Read its docstring before
+            # touching this.
             #
-            # Every step goes through EXACT explicitly, never through a
-            # bare Python operator (`//`, `%`, unary `-`) on a Decimal --
-            # those round through the thread-local default context at
-            # precision 28, not through this language's own contexts.
-            # That exact mistake has cost this branch a Critical already
-            # (unary minus) and an escaping decimal.InvalidOperation
-            # since. `to_integral_value` is the one Decimal instance
-            # method that takes no context and cannot round or overflow,
-            # so it is safe to call bare.
+            # Every step of it goes through EXACT explicitly, never
+            # through a bare Python operator (`//`, `%`, unary `-`) on a
+            # Decimal -- those round through the thread-local default
+            # context at precision 28, not through this language's own
+            # contexts. That exact mistake has cost this branch a
+            # Critical already (unary minus) and an escaping
+            # decimal.InvalidOperation since.
             #
-            # EXACT.divide and EXACT.multiply are both _GuardedContext
-            # methods, so either can raise NumberOverflow rather than a
-            # bare decimal.Overflow -- but NumberOverflow is not itself a
-            # MatrixLangError, so it still needs converting here, the
-            # same as + - * and / above. Reachable even when NEITHER
-            # operand overflows on its own: 19 squarings of 10 and 19
-            # squarings of 0.1 each land comfortably inside EXACT's
-            # +-999999 exponent range individually, but their quotient's
-            # exponent is (roughly) the DIFFERENCE of the two, which
-            # overflows -- the same shape of surprise as DIVISION's
-            # comment above, one level up in precision.
+            # remainder_floor calls _GuardedContext methods, so it can
+            # raise NumberOverflow rather than a bare decimal.Overflow --
+            # and NumberOverflow is not itself a MatrixLangError, so it
+            # still needs converting here, the same as + - * and / above.
+            # No input is currently known to reach it: dropping the
+            # quotient dropped the one shape that did (a huge dividend
+            # over a tiny divisor overflowed EXACT.divide before the
+            # subtract). The guard stays anyway -- it costs nothing, it
+            # is the same guard the other three operators carry, and
+            # "nothing but MatrixLangError may escape" is not a promise
+            # to re-derive every time remainder_floor changes.
             try:
-                floor = EXACT.divide(left, right).to_integral_value(ROUND_FLOOR)
-                return EXACT.subtract(left, EXACT.multiply(floor, right))
+                return remainder_floor(left, right)
             except NumberOverflow:
                 raise RuntimeErrorML(
                     "arithmetic result is too large to represent",

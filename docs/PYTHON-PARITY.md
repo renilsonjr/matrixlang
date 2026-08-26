@@ -129,8 +129,12 @@ the same value, and only the second is what the translator emits.
   Python's sign rule, not Decimal's native one: `-7 % 2` is `1` in both
   languages now.
 - **`/` reachable.** MatrixLang's `/` is true division, the same operation
-  Python's `/` performs, so it translates cleanly — the old truncating `/`
-  that made division unreachable (per the oddity above) is gone.
+  Python's `/` performs, so it translates — the old truncating `/` that
+  made division unreachable (per the oddity above) is gone. The *operation*
+  matches; the *result* is another instance of the divergence above, and
+  deliberately so: `1 / 3` is `0.3333333333333333` in Python and
+  `0.3333333333333333333333333333` here, because MatrixLang divides at 28
+  exact decimal digits where Python rounds to a binary float.
 
 `.` and `%` took the last two glyph slots: 56 used, 0 free. `//` is not
 part of this — see the oddity above — and stays refused permanently, not

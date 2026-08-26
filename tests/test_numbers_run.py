@@ -240,23 +240,60 @@ def test_remainder_binds_like_multiplication():
     assert run("trace 1 + 7 % 2\n") == "2\n"
 
 
-def test_a_runaway_remainder_reports_a_positioned_matrixlang_error():
-    # Mirrors test_a_runaway_multiplication_reports_a_positioned_matrixlang_error
-    # above. `%`'s floor/multiply/subtract all go through EXACT, same as
-    # `+ - *`, but unlike every other arithmetic operator had no
-    # try/except NumberOverflow around it. Neither operand overflows on
-    # its own here -- 19 squarings of 10 lands `a`'s exponent around
-    # +524288, 19 squarings of 0.1 lands `b`'s around -524288, both well
-    # inside EXACT's +-999999 range individually -- but `a % b`'s
-    # quotient exponent is roughly their DIFFERENCE, ~1048576, past
-    # EXACT's Emax, and that overflow happens inside EXACT.divide itself,
-    # before either to_integral_value or the final subtract. Without a
-    # guard this raises a bare values.NumberOverflow straight out of the
-    # interpreter -- exactly the promise ("nothing but MatrixLangError
-    # may escape") that test above already exists to police for `*`.
-    # 40 statements, well inside the step limit.
+def test_a_runaway_remainder_answers_exactly_instead_of_overflowing():
+    # This used to assert `error.message` contained "too large", and it was
+    # right to at the time: `%` computed `EXACT.divide(left, right)` first,
+    # and neither operand overflows on its own here -- 19 squarings of 10
+    # lands `a`'s exponent around +524288, 19 squarings of 0.1 lands `b`'s
+    # around -524288, both well inside EXACT's +-999999 range -- while the
+    # QUOTIENT's exponent is roughly their DIFFERENCE, ~1048576, past
+    # EXACT's Emax. The quotient was also what made `%` return a negative
+    # remainder for a positive divisor past 1000 digits, so it is gone;
+    # with it gone this whole shape has an exact answer, and 0 is it.
+    #
+    # Kept, rather than deleted with the behaviour it pinned, because it is
+    # still the sharpest `%` shape in the suite. It is what fails if anyone
+    # replaces values.remainder_floor's loop with a single bare
+    # `EXACT.remainder(left, right)`: that raises decimal.InvalidOperation
+    # (DivisionImpossible) here -- not a MatrixLangError, straight out
+    # through every `except MatrixLangError` the CLI and site/glue.py rely
+    # on. 40 statements, well inside the step limit.
+    #
+    # `== 0` rather than tracing the remainder itself: the answer is
+    # Decimal("0E-524288"), and trailing zeros are significant here, so
+    # `trace a % b` correctly writes half a megabyte of them.
     lines = ["construct a = 10"] + ["a = a * a"] * 19
     lines += ["construct b = 0.1"] + ["b = b * b"] * 19
-    lines += ["trace a % b"]
-    error = fails("\n".join(lines) + "\n")
-    assert "too large" in error.message
+    lines += ["trace a % b == 0"]
+    assert run("\n".join(lines) + "\n") == "true\n"
+
+
+_HUGE = "9" * 1025  # 1025 significant digits: 25 past EXACT's precision
+
+
+@pytest.mark.parametrize(
+    "dividend,divisor",
+    [
+        (_HUGE, "2"),
+        ("-" + _HUGE, "2"),
+        (_HUGE, "-2"),
+        ("-" + _HUGE, "-2"),
+    ],
+    ids=["huge % 2", "-huge % 2", "huge % -2", "-huge % -2"],
+)
+def test_remainder_follows_pythons_rule_past_a_thousand_digits(dividend, divisor):
+    # The rule `%` promises -- `a - floor(a / b) * b` -- can never return a
+    # negative remainder for a positive divisor. It did. `%` used to floor
+    # `EXACT.divide(left, right)`, and EXACT rounds to 1000 significant
+    # digits BEFORE the floor is taken, so any quotient longer than that
+    # rounded UP, the floor came out one too high, and the remainder came
+    # back with the wrong sign: this gave -1 for `huge % 2` where Python
+    # gives 1, and 1 for `huge % -2` where Python gives -1. Both directions
+    # are pinned because a sign correction bolted onto the old shape would
+    # have fixed one and left the other.
+    #
+    # 1025 digits, not 1001: comfortably past the boundary, and the whole
+    # point is that no precision makes the old shape safe -- raising EXACT
+    # to 2000 would only move the failure to 2025 digits.
+    expected = int(dividend) % int(divisor)
+    assert run(f"trace {dividend} % {divisor}\n") == f"{expected}\n"

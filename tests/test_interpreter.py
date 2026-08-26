@@ -1,4 +1,5 @@
 import io
+from decimal import Decimal
 
 import pytest
 
@@ -301,7 +302,7 @@ def test_a_very_deep_expression_is_a_language_error_not_a_crash():
     from matrixlang.nodes import NumberLiteral, Program, Trace, Unary
     from matrixlang.tokens import TokenType
 
-    expr = NumberLiteral(1)
+    expr = NumberLiteral(Decimal(1))
     for _ in range(50_000):
         expr = Unary(TokenType.MINUS, expr)
     program = Program([Trace(expr, line=3, column=7)])

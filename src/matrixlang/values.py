@@ -236,6 +236,75 @@ EXACT = _GuardedContext(prec=1000, rounding=ROUND_HALF_EVEN)
 DIVISION = _GuardedContext(prec=28, rounding=ROUND_HALF_EVEN)
 
 
+def remainder_floor(left: Decimal, right: Decimal) -> Decimal:
+    """`left % right` under Python's rule: `left - floor(left / right) * right`.
+
+    The caller must have rejected a zero divisor already; this raises
+    NumberOverflow and nothing else.
+
+    **Never computes the quotient.** The obvious spelling --
+    `EXACT.divide(left, right).to_integral_value(ROUND_FLOOR)` and then
+    subtract -- is WRONG, and wrong silently. `EXACT.divide` rounds to
+    1000 significant digits BEFORE `to_integral_value` floors, so a
+    quotient needing more than 1000 digits rounds UP, the floor comes out
+    one too high, and the remainder comes back NEGATIVE for a positive
+    divisor: `Decimal("9" * 1025) % 2` gave -1 where Python gives 1.
+    Raising the precision only moves that boundary, so the quotient is
+    gone from this computation entirely. (Third instance on this branch of
+    "rounding before truncating can round UP" -- the first cost a
+    Critical on unary minus, the second was healed for `/`.)
+
+    `Context.remainder` is exact and quotient-free, but it raises
+    InvalidOperation (DivisionImpossible) the moment the integer quotient
+    would need more than `prec` digits -- which is exactly the case that
+    was broken. The loop below keeps every call inside that limit by
+    dividing by `right` scaled UP by a power of ten first, taking a bite
+    of at most `prec - 1` digits off the dividend at a time. Scaling by an
+    exponent is exact and context-free (rebuilding the Decimal from its
+    own `as_tuple`, like `to_integral_value`, cannot round or overflow),
+    and `EXACT.remainder(r, scaled)` always shrinks `r` to below `scaled`,
+    so `r.adjusted()` drops by at least `prec - 1` every pass and the loop
+    terminates -- at most ~2000 passes across EXACT's whole +-999999
+    exponent range, each one cheap.
+
+    Then the sign. Decimal's remainder follows the DIVIDEND's sign
+    (truncated division): `Decimal(-7).remainder(2)` is -1 where Python's
+    `-7 % 2` is 1. Python's follows the DIVISOR's, and one add converts
+    between them. The translator maps `a % b` straight through and cannot
+    see signs, so Decimal's rule would be a silent disagreement with
+    Python on every negative operand. The correction is unconditional, so
+    the result carries the divisor's sign (or is zero) for EVERY input,
+    whatever its size -- that is the rule `%` promises, and it is now a
+    property of the shape rather than something a precision has to be
+    large enough to preserve.
+
+    The exact ANSWER has a size limit the sign does not: a remainder step
+    still rounds its own result to `prec` digits, and each pass leaves a
+    value about `digits(left) - prec` long, so a dividend past 2 * prec
+    (2000) significant digits stops being exact. That is not specific to
+    `%` -- `EXACT.add` on a 2000-digit operand rounds too, and every
+    operand in circulation that long came from a literal or `decode`,
+    since no arithmetic here can manufacture more than 1000.
+    """
+    r = left
+    while True:
+        # How many digits the integer quotient would need, minus one.
+        bite = r.adjusted() - right.adjusted() - (EXACT.prec - 1)
+        if bite <= 0:
+            # <= prec digits of quotient: Context.remainder can do it in
+            # one exact step.
+            r = EXACT.remainder(r, right)
+            break
+        sign, digits, exponent = right.as_tuple()
+        r = EXACT.remainder(r, Decimal((sign, digits, exponent + bite)))
+    if r and (r < 0) != (right < 0):
+        # Truncated -> floored. |r| < |right| and the signs differ here,
+        # so |r + right| < |right|: this add can never overflow, however
+        # close to Emax the operands sit.
+        r = EXACT.add(r, right)
+    return r
+
+
 def is_number(value: object) -> bool:
     """The language's one numeric type.
 

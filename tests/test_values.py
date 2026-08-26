@@ -279,13 +279,18 @@ def test_a_number_too_long_to_render_raises_a_named_signal():
     # abs(value.adjusted()) >= sys.get_int_max_str_digits()` check a few
     # lines up in `_display`'s number branch -- deleted outright, since
     # nothing here ever reached it. A `Decimal` this long exercises the
-    # actual guard: CPython refuses `str(int)` past
-    # sys.get_int_max_str_digits(), and `format(Decimal, "f")` hits the
-    # same wall for a value this long, raising a bare ValueError. Left
-    # alone that escapes the interpreter as a Python exception -- past
-    # every `except MatrixLangError` the CLI, the operator's dry run and
-    # site/glue.py's run() rely on. Named here for the same reason as
-    # CyclicValue: values.py knows the value cannot be rendered, the
+    # actual guard, and it is the ONLY thing standing here: CPython
+    # refuses `str(int)` past sys.get_int_max_str_digits(), but
+    # `format(Decimal, "f")` does NOT -- it hands back 5001 characters for
+    # `Decimal("1" + "0" * 5000)` and raises nothing. There is no
+    # ValueError underneath this test to catch what the guard misses.
+    # (The comment here used to claim there was. It was written when this
+    # path still went through str(int), and shipped uncorrected.)
+    #
+    # So the guard is not a second line of defence, it IS the defence:
+    # delete it and a program prints a five-thousand-character number
+    # instead of a diagnostic. TooManyDigits is named for the same reason
+    # as CyclicValue: values.py knows the value cannot be rendered, the
     # interpreter knows where it was written.
     from decimal import Decimal
 
@@ -580,3 +585,79 @@ def test_a_decimal_too_long_to_render_still_raises_too_many_digits():
     with pytest.raises(TooManyDigits) as caught:
         to_display(Decimal("1E+5000"))
     assert caught.value.limit == sys.get_int_max_str_digits()
+
+
+def test_remainder_floor_agrees_with_python_across_a_random_spread():
+    # The algorithm's own pin, below the interpreter. Python's `%` on ints
+    # IS the rule remainder_floor implements, so the differential is the
+    # specification -- exponents up to 60 digits on both sides, both signs
+    # on both operands, and enough draws that any surviving sign or
+    # boundary case shows up.
+    import random
+    from decimal import Decimal
+
+    from matrixlang.values import remainder_floor
+
+    rng = random.Random(20260824)
+    for _ in range(2000):
+        a = rng.randint(-(10 ** rng.randint(1, 60)), 10 ** rng.randint(1, 60))
+        b = rng.choice([-1, 1]) * rng.randint(1, 10 ** rng.randint(1, 30))
+        assert remainder_floor(Decimal(a), Decimal(b)) == Decimal(a % b)
+
+
+@pytest.mark.parametrize("digits", [1001, 1025, 1999])
+def test_remainder_floor_stays_exact_past_exacts_precision(digits):
+    # The quotient here needs more than EXACT's 1000 significant digits.
+    # Flooring a ROUNDED quotient rounded UP and returned -1 for a positive
+    # divisor; asking Context.remainder for it in one step raises
+    # decimal.InvalidOperation (DivisionImpossible). Both wrong answers are
+    # pinned out here in one place.
+    #
+    # 1999 is the top of the exact range, not an arbitrary large number:
+    # each remainder step rounds its own result to prec digits and leaves
+    # about digits(left) - prec behind, so 2 * prec is where exactness
+    # stops. Past it the answer rounds -- the same way EXACT.add already
+    # rounds a 2000-digit operand -- but the SIGN still holds, which is
+    # the next test.
+    from decimal import Decimal
+
+    from matrixlang.values import remainder_floor
+
+    a = int("9" * digits)
+    for dividend in (a, -a):
+        for divisor in (2, -2, 7, -7):
+            assert remainder_floor(
+                Decimal(dividend), Decimal(divisor)
+            ) == Decimal(dividend % divisor)
+
+
+def test_remainder_floor_keeps_the_finer_of_the_two_scales():
+    # Trailing zeros are significant in this language, and `%` must not
+    # quietly normalize them away: 49.90 % 7 is 0.90, not 0.9.
+    from decimal import Decimal
+
+    from matrixlang.values import remainder_floor
+
+    assert str(remainder_floor(Decimal("49.90"), Decimal(7))) == "0.90"
+    assert str(remainder_floor(Decimal("7.5"), Decimal(-2))) == "-0.5"
+
+
+@pytest.mark.parametrize("digits", [1025, 3000, 6000])
+def test_remainder_floor_never_contradicts_the_divisors_sign(digits):
+    # The binding rule, and the one that broke: `a - floor(a / b) * b`
+    # cannot produce a negative remainder for a positive divisor. Past 2 *
+    # EXACT.prec digits the exact answer is out of reach (see above), so
+    # this pins the part that is NOT allowed to degrade with size. The sign
+    # correction is unconditional, so this holds by shape rather than by
+    # precision -- which is exactly what the old divide-then-floor spelling
+    # could not claim.
+    from decimal import Decimal
+
+    from matrixlang.values import remainder_floor
+
+    a = Decimal("9" * digits)
+    for dividend in (a, -a):
+        for divisor in (Decimal(2), Decimal(-2), Decimal("0.7"), Decimal("-0.7")):
+            got = remainder_floor(dividend, divisor)
+            assert got.is_zero() or (got < 0) == (divisor < 0)
+            assert abs(got) <= abs(divisor)

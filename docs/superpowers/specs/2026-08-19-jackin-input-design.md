@@ -34,6 +34,18 @@ This adds input. Two keywords, one protocol, and no async refactor.
 | JI-13 | Glyphs | Two new slots from the 15 free in U+FF66–FF9D. D-03's bijectivity is preserved, not amended. |
 | JI-14 | Scope guard | No Scribe intent, no floats, no `--input` flag, no async/resumable interpreter. |
 
+> **Partly superseded (#135).** The `numbers` branch replaced the integer type
+> with a single exact-decimal `number` type, so the premise JI-3, JI-4, JI-14
+> and the `decode "5.5" -> error` line in §3 rest on — "the language has no
+> floats" — no longer holds. `decode` now accepts exactly what the lexer's own
+> number grammar accepts, which includes one decimal point: `decode "5.5"` is
+> `5.5`. Refusing it would break the `decode encode n == n` identity for every
+> non-whole number. The rows and the §3 example are left as originally
+> written — they record what this feature decided and why, against the type
+> system of the time. See `docs/superpowers/specs/2026-08-24-numbers-design.md`
+> for the decision that superseded them, and `docs/LEARNING-MATRIXLANG.md` for
+> `decode`'s current rules.
+
 ## 1. Why a protocol, and not a builtin
 
 The browser cannot block. JavaScript is single-threaded, so a blocking read
