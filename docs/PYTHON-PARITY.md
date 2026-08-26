@@ -166,11 +166,34 @@ halves of the shape are not both independently refused (because translation
 never reached one of them), nothing is collapsed and the reader keeps every
 accurate message they had.
 
+### 6. List comprehensions — **done**
+
+`[f(x) for x in xs if c]` translates. Not by teaching the translator a new
+construct: a pass rewrites the comprehension into the accumulator loop the
+`for` desugaring already emits, before translation starts, so the walker
+never sees a comprehension at all.
+
+Unlike items 1–5 this one came from a blocked program rather than from the
+queue above, which is the register working as intended.
+
+Still refused, and each for a reason rather than for lack of time: more
+than one `for` clause, a tuple target (the translator has no tuples), set
+and dict comprehensions and generator expressions (no set type, and the
+rest is scope), and a comprehension in a `while` test — that one because
+`while` re-evaluates its test every turn and a hoisted loop runs once, so
+rewriting it would produce a program that silently loops wrong.
+
+One accepted difference, which is the exception that proves the governing
+rule: hoisting out of an `and`/`or` operand runs a comprehension Python
+would have skipped. It is the only expression position with no statement
+boundary to emit at, and a test pins the behaviour so it stays a known
+quantity.
+
 ---
 
 ## Tier 2 — real, workaroundable, unscheduled
 
-Slicing · tuples · `a if c else b` · comprehensions · number formatting
+Slicing · tuples · `a if c else b` · set and dict comprehensions · number formatting
 (`{x:.2f}`) · chained comparison (`a < b < c`) · multiple assignment · `del` ·
 `**`
 
