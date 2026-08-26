@@ -933,9 +933,12 @@ attempt.
 
 **The subset:** `+`, `-`, `*`, `/`, `%` and comparisons, `print`,
 assignment (`=` and `+=`), `if`/`elif`/`else`, `while`, `for` over a list
-or `range(...)`, `def`/`return`, lists, dictionaries, `input()`, and
-f-strings. **Refused, always:** `class`, `try`/`except`, `import`,
-comprehensions, `lambda`, slicing, `//`, and anything else MatrixLang
+or `range(...)`, `def`/`return`, lists, dictionaries, `input()`,
+f-strings, and list comprehensions with a single `for` and a plain
+variable target (`[f(x) for x in xs if c]`). **Refused, always:** `class`,
+`try`/`except`, `import`, set and dict comprehensions, generator
+expressions, a list comprehension with more than one `for` clause or a
+tuple target, `lambda`, slicing, `//`, and anything else MatrixLang
 genuinely cannot express — not a temporary gap, but the same "no sets,
 no null" boundary the rest of this guide draws around MatrixLang itself.
 

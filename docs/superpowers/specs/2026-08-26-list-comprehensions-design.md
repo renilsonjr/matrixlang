@@ -102,9 +102,13 @@ if c:
 
 does not call `f` when `c` is false. That is the same hazard class as the
 short-circuit difference accepted below — and it is closed for free by
-emitting in place rather than at the top of the block. The accepted hole
-is genuinely only `and`/`or` operands, where the two sides are one
-expression and there is no statement boundary to emit between.
+emitting in place rather than at the top of the block, wherever there is a
+statement boundary to emit at. `and`/`or` operands are the position with
+none — the two sides are one expression — which is why that hole stays
+open. It is not the only accepted hole, though: emitting the loop before
+the containing statement also reorders whatever else that statement
+evaluates, which "The accepted differences" section below covers as its
+own case.
 
 ### The loop variable must be renamed
 
@@ -139,7 +143,7 @@ Every generated node carries `ast.copy_location` from the node it came
 from, so a refusal raised inside a comprehension still points at the
 reader's line rather than at invented code.
 
-## The accepted difference
+## The accepted differences
 
 Hoisting is allowed in every expression position, **including operands of
 `and` and `or`**. That is a deliberate exception to the translator's
@@ -162,6 +166,26 @@ likely fail at runtime regardless.
 but one asserting it is *this*, so the difference stays a known quantity
 rather than something a later reader mistakes for a bug and "fixes" into an
 inconsistency.
+
+A second difference comes from the same mechanism and is not narrow in the
+same way: emitting the loop immediately before the containing statement
+also moves it ahead of anything else that statement evaluates.
+
+```python
+print(g(0) + len([f(x) for x in xs]))
+```
+
+Python evaluates left to right — `g(0)` runs before the comprehension
+calls `f`. The translation emits the comprehension's loop first, so `f`
+runs before `g`. Any side effect the reader put earlier in the same
+statement, outside the comprehension, now runs after it instead. This is
+not fixable without giving up the feature: the loop has to be a statement
+of its own, and the only place to put it is before the statement it came
+from — there is no other statement boundary to emit at. Narrowing it would
+mean refusing every comprehension that shares a statement with another
+side-effecting call, which is most of them.
+
+**It is pinned by a test** as well, for the same reason as the first.
 
 ## Testing
 

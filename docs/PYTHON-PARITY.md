@@ -183,11 +183,21 @@ rest is scope), and a comprehension in a `while` test — that one because
 `while` re-evaluates its test every turn and a hoisted loop runs once, so
 rewriting it would produce a program that silently loops wrong.
 
-One accepted difference, which is the exception that proves the governing
-rule: hoisting out of an `and`/`or` operand runs a comprehension Python
-would have skipped. It is the only expression position with no statement
-boundary to emit at, and a test pins the behaviour so it stays a known
-quantity.
+Two accepted differences, both from the same mechanism. The first is the
+exception that proves the governing rule: hoisting out of an `and`/`or`
+operand runs a comprehension Python would have skipped. It is the only
+expression position with no statement boundary to emit at.
+
+The second is that hoisting also reorders side effects within a
+statement. The loop is emitted immediately before the statement that
+contains it, so anything else that statement evaluates — a call before
+the comprehension in source order, say — now runs after it instead of
+before. `print(g(0) + len([f(x) for x in xs]))` calls `g` then `f` in
+Python and `f` then `g` in the translation. Narrowing this would mean
+refusing any comprehension sharing a statement with another
+side-effecting call, which is most of them, so it is accepted rather
+than closed. Both differences are pinned by tests so they stay known
+quantities.
 
 ---
 
@@ -199,6 +209,17 @@ Slicing · tuples · `a if c else b` · set and dict comprehensions · number fo
 
 Each has a working substitute today. They move up if a program you actually
 wanted to run gets blocked by one — that is what the register is for.
+
+`a if c else b` is not independent of the comprehension pass: `_Hoister`
+(comprehensions.py) descends into every sub-expression, including an
+`ast.IfExp`'s branches, so a comprehension inside one would be hoisted the
+same as anywhere else. Nothing goes wrong today only because the
+translator refuses `IfExp` outright before a hoisted comprehension there
+could matter. Implementing `a if c else b` means deciding what the
+comprehension pass does inside it — hoisting unconditionally would run a
+comprehension from a branch that was never taken, a third accepted
+difference alongside the two above, unless whoever implements it chooses
+to close it instead.
 
 ---
 
