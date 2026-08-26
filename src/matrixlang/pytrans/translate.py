@@ -99,10 +99,12 @@ def translate(source: str) -> Translated | Refusals:
         # read straight off the exception, the way error.offset is above.
         return Refusals([Refusal(str(error), *_position(source, getattr(error, "start", 0)))])
 
+    paired = _none_then_truth_test(tree)
     walker = _Translator(bound_names(tree))
     statements = walker.body(tree.body)
     if walker.refusals:
-        return Refusals(sorted(walker.refusals, key=lambda r: (r.line, r.column)))
+        collapsed = _collapse_none_pattern(walker.refusals, paired)
+        return Refusals(sorted(collapsed, key=lambda r: (r.line, r.column)))
     try:
         # A second guard, not a redundant one: body()'s per-statement guard
         # protects the WALK (turning Python's AST into MatrixLang nodes),
@@ -1548,6 +1550,27 @@ def _none_pattern_refusal(
         f"    if len({name}) > 0:  instead of   if {name}:\n"
         f"        {name}[0]                     {name}",
     )
+
+
+def _collapse_none_pattern(
+    refusals: list[Refusal],
+    paired: tuple[Refusal, frozenset[tuple[int, int]]] | None,
+) -> list[Refusal]:
+    """Swap the two component refusals for the paired one.
+
+    Only when BOTH actually fired. If one did not -- because translation
+    refused something earlier in the program and never reached it -- the
+    reader keeps every accurate message they had, rather than trading one
+    away for a claim about a shape they never got to.
+    """
+    if paired is None:
+        return refusals
+    refusal, positions = paired
+    matched = [r for r in refusals if (r.line, r.column) in positions]
+    if len(matched) != len(positions):
+        return refusals
+    kept = [r for r in refusals if (r.line, r.column) not in positions]
+    return kept + [refusal]
 
 
 # What a reader calls each construct, keyed by its ast class name. Without
