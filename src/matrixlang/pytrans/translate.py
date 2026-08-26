@@ -102,7 +102,13 @@ def translate(source: str) -> Translated | Refusals:
     walker = _Translator(bound_names(tree))
     statements = walker.body(tree.body)
     if walker.refusals:
-        return Refusals(sorted(walker.refusals, key=lambda r: (r.line, r.column)))
+        # Only computed here, not unconditionally above: its only consumer
+        # is this branch, and it is an analysis pass over the whole module
+        # -- so every program that translates cleanly would otherwise pay
+        # for a pairing that has nothing to collapse.
+        paired = _none_then_truth_test(tree)
+        collapsed = _collapse_none_pattern(walker.refusals, paired)
+        return Refusals(sorted(collapsed, key=lambda r: (r.line, r.column)))
     try:
         # A second guard, not a redundant one: body()'s per-statement guard
         # protects the WALK (turning Python's AST into MatrixLang nodes),
@@ -1219,6 +1225,377 @@ def _refuse_function_in_loop(body: list[ast.stmt]) -> None:
             "define the agent once, outside the loop",
         )
     )
+
+
+def _returns_of(func: ast.FunctionDef) -> list[ast.Return]:
+    """Every `return` belonging to THIS function.
+
+    Not to a `def` or `lambda` nested inside it, whose returns are its
+    own -- counting those would invent a mixed shape where the outer
+    function has only one kind of return.
+    """
+    found: list[ast.Return] = []
+    stack: list[ast.AST] = list(func.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            continue
+        if isinstance(node, ast.Return):
+            found.append(node)
+        stack.extend(ast.iter_child_nodes(node))
+    return found
+
+
+def _mixed_return_none(func: ast.FunctionDef) -> ast.Constant | None:
+    """The `None` of an explicit `return None`, when this function also
+    returns a value somewhere. None if it is not that shape.
+
+    A bare `return` (`node.value is None`) is deliberately not counted:
+    it produces no refusal of its own, so pairing on it would detect a
+    shape that can never be acted on.
+    """
+    returns_value = False
+    none_node: ast.Constant | None = None
+    for node in _returns_of(func):
+        if node.value is None:
+            continue
+        if isinstance(node.value, ast.Constant) and node.value.value is None:
+            if none_node is None:
+                none_node = node.value
+        else:
+            returns_value = True
+    return none_node if returns_value else None
+
+
+def _call_binding(
+    stmt: ast.stmt, functions: dict[str, ast.FunctionDef]
+) -> tuple[str, ast.FunctionDef] | None:
+    """`name = f(...)` where `f` is a def in this module -> (name, def)."""
+    if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+        return None
+    target = stmt.targets[0]
+    if not isinstance(target, ast.Name):
+        return None
+    call = stmt.value
+    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+        return None
+    func = functions.get(call.func.id)
+    return None if func is None else (target.id, func)
+
+
+def _binds(node: ast.AST, name: str) -> bool:
+    """Does this ONE node, by itself, bind `name`?
+
+    The single answer to "does this node bind that name", shared by
+    `_rebinds_in_stmt` (walks one statement, for the RESULT name) and
+    `_shadowed_in_scope` (walks a whole scope body, for the CALLED
+    name). The two guards used to answer this question separately and
+    drifted: `_rebinds_in_stmt` recognised fewer bind forms than
+    `_shadowed_in_scope` already had, so `class result:` or
+    `import result` between the assign and the `if` was not seen as a
+    rebind of the result name, and the paired refusal fired blaming the
+    wrong thing. Factoring the predicate out means that class of
+    divergence cannot recur -- both callers walk differently, but
+    neither can disagree with the other about what counts as a bind.
+
+    Recognises: a plain assignment target (`Name`/Store); a `def`,
+    `async def`, or `class` whose name matches; an import or
+    `import ... as` (`ast.alias`, whose bound name is the dotted path's
+    head, or the alias when there is one); and an `except ... as`
+    handler (`ast.ExceptHandler`, whose bound name is a plain string on
+    `.name`, not a `Name` node, so it needs its own check here).
+    """
+    if (
+        isinstance(node, ast.Name)
+        and isinstance(node.ctx, ast.Store)
+        and node.id == name
+    ):
+        return True
+    if (
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        and node.name == name
+    ):
+        return True
+    if isinstance(node, ast.alias):
+        bound = (node.asname or node.name).split(".")[0]
+        if bound == name:
+            return True
+    if isinstance(node, ast.ExceptHandler) and node.name == name:
+        return True
+    return False
+
+
+def _rebinds_in_stmt(stmt: ast.stmt, name: str) -> bool:
+    """Does this statement bind `name` again?
+
+    Named apart from the existing `_rebinds` (which takes a *list* of
+    statements and is already used by `_for`'s translation, above) --
+    this one takes a single statement. Reusing the name would have the
+    later definition silently replace the earlier one at module load,
+    breaking every existing caller that passes a list.
+    """
+    return any(_binds(node, name) for node in ast.walk(stmt))
+
+
+def _bare_name_test_after(rest: list[ast.stmt], name: str) -> ast.Name | None:
+    """The first `if <name>:` in `rest`, before anything rebinds `name`.
+
+    The `if` is checked before the rebinding check on the same statement:
+    a condition is evaluated before its own body runs.
+    """
+    for stmt in rest:
+        if (
+            isinstance(stmt, ast.If)
+            and isinstance(stmt.test, ast.Name)
+            and stmt.test.id == name
+        ):
+            return stmt.test
+        if _rebinds_in_stmt(stmt, name):
+            return None
+    return None
+
+
+def _scope_bodies(tree: ast.Module) -> list[list[ast.stmt]]:
+    """Every statement list that is a scope body: the module's, and each
+    function's. The binding and its test must share one of these."""
+    bodies = [tree.body]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            bodies.append(node.body)
+    return bodies
+
+
+def _direct_child_functions(
+    stmt: ast.stmt,
+) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """`def`s lexically written directly in this statement's own scope --
+    inside `if`/`for`/`while`/`with`/`try` blocks at this level, or `stmt`
+    itself when it is a `def`. Not inside ANOTHER nested `def`'s body,
+    whose own children belong to that def's own scope and are found when
+    the walk that builds the parent chain reaches it, not here.
+    """
+    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    stack: list[ast.AST] = [stmt]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            found.append(node)
+            continue
+        if isinstance(node, ast.Lambda):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return found
+
+
+def _scope_parents(tree: ast.Module) -> dict[int, list[ast.stmt]]:
+    """Map each function's body (by `id`) to its immediately enclosing
+    scope's body -- the module's body for a top-level `def`, or the body
+    of the function it is lexically written inside otherwise. The chain
+    from any scope up through `_scope_parents` to the module is exactly
+    the lexical scopes Python would search, closest first.
+    """
+    parents: dict[int, list[ast.stmt]] = {}
+
+    def scan(body: list[ast.stmt]) -> None:
+        for stmt in body:
+            for func in _direct_child_functions(stmt):
+                parents[id(func.body)] = body
+                scan(func.body)
+
+    scan(tree.body)
+    return parents
+
+
+def _lexical_chain(
+    body: list[ast.stmt], parents: dict[int, list[ast.stmt]]
+) -> list[list[ast.stmt]]:
+    """This scope's body, then each enclosing scope's body outward, in
+    order, ending with the module's -- which has no parent and stops the
+    chain. What LEGB name resolution would search from this scope.
+    """
+    chain = [body]
+    current = body
+    while id(current) in parents:
+        current = parents[id(current)]
+        chain.append(current)
+    return chain
+
+
+def _scope_params(tree: ast.Module) -> dict[int, list[str]]:
+    """Every function scope's parameter names, keyed by `id(body)` so a
+    scan over `_scope_bodies` can look up "does my own signature bind
+    this name" without re-deriving it from the tree. The module scope
+    has no entry -- it binds no names through a signature.
+    """
+    scopes: dict[int, list[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            names = [
+                a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)
+            ]
+            if args.vararg is not None:
+                names.append(args.vararg.arg)
+            if args.kwarg is not None:
+                names.append(args.kwarg.arg)
+            scopes[id(node.body)] = names
+    return scopes
+
+
+def _shadowed_in_scope(
+    body: list[ast.stmt], params: list[str], name: str, own_def: ast.stmt
+) -> bool:
+    """Does this scope bind `name` to something OTHER than `own_def` --
+    a parameter, a nested `def`/`class`, an assignment, an import, a
+    `for` target, a `with ... as`, or anything else?
+
+    `own_def` is excluded from the walk: it is the very definition the
+    call resolves to when nothing shadows it, not a shadow of itself --
+    without the exclusion, the ordinary module-level case (where the
+    call and its `def` share one scope) would flag itself as shadowed
+    and never fire at all.
+
+    Deliberately over-broad otherwise: it walks the WHOLE scope, not
+    just what precedes or follows the call, because Python resolves a
+    name assigned anywhere in a function as local to that function for
+    its entire body -- shadowing does not require the assignment to
+    come first. Whenever this cannot be sure the module-level function
+    is what actually gets called, it must not fire: a missed detection
+    costs a worse message; a wrong one costs a confident, false claim.
+    """
+    if name in params:
+        return True
+    for stmt in body:
+        if stmt is own_def:
+            continue
+        for node in ast.walk(stmt):
+            if _binds(node, name):
+                return True
+    return False
+
+
+def _none_then_truth_test(
+    tree: ast.Module,
+) -> tuple[Refusal, frozenset[tuple[int, int]]] | None:
+    """The `return None` + `if result:` shape, recognised to EXPLAIN it.
+
+    Never to translate it. MatrixLang has neither null nor truthiness,
+    both by design, and this shape stays refused -- what changes is that
+    one message describes the whole rewrite instead of two describing
+    half of it each.
+
+    Returns the paired refusal and the two positions it stands in for,
+    or None. The positions are the ones the existing raise sites report:
+    `_constant` reports the `None` constant node, `condition` reports the
+    `If` test node.
+
+    `functions` is built from module-level defs only, and reused while
+    scanning every scope body -- including nested ones. A scope ANYWHERE
+    in the call's lexical chain -- its own scope, every enclosing
+    function scope, or the module scope -- can shadow the called name (a
+    nested `def` of the same name, a local assignment, a parameter, an
+    import, a `for` target, a `with ... as`, a later module-level
+    rebind, anything): `_shadowed_in_scope` is checked across the whole
+    chain from `_lexical_chain`, not just the call's own scope. Checking
+    only the immediate scope would miss a shadow one level further out
+    -- a closure variable, an intermediate function's local -- and still
+    blame the matched module-level def for a call that actually
+    resolves elsewhere: a confident, wrong claim about a shape the
+    reader did not write.
+    """
+    functions = {
+        stmt.name: stmt for stmt in tree.body if isinstance(stmt, ast.FunctionDef)
+    }
+    if not functions:
+        return None
+    params_by_scope = _scope_params(tree)
+    parents = _scope_parents(tree)
+    for body in _scope_bodies(tree):
+        chain = _lexical_chain(body, parents)
+        for index, stmt in enumerate(body):
+            binding = _call_binding(stmt, functions)
+            if binding is None:
+                continue
+            name, func = binding
+            if any(
+                _shadowed_in_scope(
+                    scope, params_by_scope.get(id(scope), []), func.name, func
+                )
+                for scope in chain
+            ):
+                continue
+            none_node = _mixed_return_none(func)
+            if none_node is None:
+                continue
+            test = _bare_name_test_after(body[index + 1 :], name)
+            if test is None:
+                continue
+            return (
+                _none_pattern_refusal(func, name, none_node, test),
+                frozenset(
+                    {
+                        (none_node.lineno, none_node.col_offset),
+                        (test.lineno, test.col_offset),
+                    }
+                ),
+            )
+    return None
+
+
+def _none_pattern_refusal(
+    func: ast.FunctionDef, name: str, none_node: ast.Constant, test: ast.Name
+) -> Refusal:
+    """One message for both halves, anchored at the line that must change.
+
+    Names both ends of the rewrite deliberately: the function's contract
+    has to change for either half to make sense, and the value has to be
+    unwrapped afterwards. A reader told only one hits a fresh error on
+    the next run.
+    """
+    return Refusal(
+        f"`{func.name}` returns None on one path and its result is used as "
+        f"a condition on line {test.lineno}. MatrixLang has neither null "
+        f"nor truthiness.",
+        none_node.lineno,
+        none_node.col_offset,
+        'Return a list instead — empty for "not found", one element for '
+        "found:\n"
+        "\n"
+        "    return [value]        instead of   return value\n"
+        "    return []             instead of   return None\n"
+        "\n"
+        "then test its length, and read the value out of it:\n"
+        "\n"
+        # The two `instead of` columns below stay aligned for any `name`,
+        # not just this example's: the left column's own text grows by
+        # `len(name)` (inside `len(...)`) exactly as the line before the
+        # `instead of` does, and the right column shifts by `len(name)` on
+        # both lines the same way -- so the hand-placed spacing is not
+        # tuned to one name length and does not need re-tuning for another.
+        f"    if len({name}) > 0:  instead of   if {name}:\n"
+        f"        {name}[0]                     {name}",
+    )
+
+
+def _collapse_none_pattern(
+    refusals: list[Refusal],
+    paired: tuple[Refusal, frozenset[tuple[int, int]]] | None,
+) -> list[Refusal]:
+    """Swap the two component refusals for the paired one.
+
+    Only when BOTH actually fired. If one did not -- because translation
+    refused something earlier in the program and never reached it -- the
+    reader keeps every accurate message they had, rather than trading one
+    away for a claim about a shape they never got to.
+    """
+    if paired is None:
+        return refusals
+    refusal, positions = paired
+    matched = [r for r in refusals if (r.line, r.column) in positions]
+    if len(matched) != len(positions):
+        return refusals
+    kept = [r for r in refusals if (r.line, r.column) not in positions]
+    return kept + [refusal]
 
 
 # What a reader calls each construct, keyed by its ast class name. Without

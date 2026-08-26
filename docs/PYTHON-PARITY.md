@@ -140,20 +140,31 @@ the same value, and only the second is what the translator emits.
 part of this — see the oddity above — and stays refused permanently, not
 provisionally: there is no slot left to give it one.
 
-### 5. The `None` pattern — #136 — *next*
+### 5. The `None` pattern — #136 — **done**
 
 `return None` plus `if result:` — a function that might not find anything, and a
 test of whether it did. **This shape has blocked two real programs**, more than
 any other single thing here.
 
-Deliberately last, because it is the only item where the right answer may not be
-a language change at all. MatrixLang has no null and no truthiness *by design* —
-the translator's governing rule ("refuse where the difference would be silent")
-leans on truthiness not existing. But the pattern is recognisable, and the
-language already has an idiom for it: return an empty list, test with `len`.
-A translator-side rewrite of that specific shape would fix the Python unchanged
-without touching the language. It might also be too clever. That argument is
-worth having after the cheap wins are in.
+Deliberately last, because it turned out to be the one item where the right
+answer was not a language change at all. MatrixLang has no null and no
+truthiness *by design* — the translator's governing rule ("refuse where the
+difference would be silent") leans on both not existing, and neither gained a
+glyph: the table stays closed at 56 used, 0 free.
+
+What shipped instead is a better refusal. The shape used to produce two
+messages, each locally correct and together misleading: the truthiness one
+suggested `len(result) > 0`, which reads fine on its own but on a dict tests
+how many keys it has, not whether one was found — a program that runs and
+answers a different question. The translator now recognises the paired shape
+and reports it as one refusal, anchored at the `return None`, that names both
+ends of the rewrite: the function's contract has to change (return a list —
+empty for "not found", one element for found) and the caller has to unwrap it
+(`len(result) > 0`, then `result[0]`). The program stays refused either way;
+only the message changed. Detection only ever *fails* to fire — if the two
+halves of the shape are not both independently refused (because translation
+never reached one of them), nothing is collapsed and the reader keeps every
+accurate message they had.
 
 ---
 

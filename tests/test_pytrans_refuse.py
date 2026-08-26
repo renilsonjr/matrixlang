@@ -1,5 +1,6 @@
 """The translator's refusal machinery, and its promise never to raise."""
 
+import ast
 import io
 
 import pytest
@@ -9,6 +10,7 @@ from matrixlang.interpreter import Interpreter
 from matrixlang.lexer import lex
 from matrixlang.parser import parse
 from matrixlang.pytrans import Refusals, Translated, translate
+from matrixlang.pytrans.translate import _none_then_truth_test
 
 
 def test_invalid_python_is_a_refusal_not_an_exception():
@@ -357,3 +359,530 @@ def test_loop_else_is_still_refused():
     result = translate("for x in xs:\n    break\nelse:\n    print(1)\n")
     assert isinstance(result, Refusals)
     assert "for ... else" in result.items[0].idiom
+
+
+FIND_BOOK = """def find_book(books, term):
+    for book in books:
+        if book["name"] == term:
+            return book
+    return None
+
+result = find_book(library, user_input)
+if result:
+    print(result["name"])
+"""
+
+
+def _detect(source):
+    return _none_then_truth_test(ast.parse(source))
+
+
+def test_the_none_then_truth_test_shape_is_detected():
+    found = _detect(FIND_BOOK)
+    assert found is not None
+    refusal, positions = found
+    # Anchored at the `return None`, naming the condition's line.
+    assert refusal.line == 5
+    assert "find_book" in refusal.reason
+    assert "line 8" in refusal.reason
+    # The two positions it stands in for: the None constant and the If test,
+    # exactly as _constant and condition() report them.
+    assert positions == frozenset({(5, 11), (8, 3)})
+
+
+def test_the_idiom_shows_both_ends_of_the_rewrite():
+    refusal, _ = _detect(FIND_BOOK)
+    # The function's contract has to change, and the value has to be
+    # unwrapped afterwards. A reader who is told neither hits a fresh
+    # error on the next run.
+    assert "return []" in refusal.idiom
+    assert "len(result) > 0" in refusal.idiom
+    assert "result[0]" in refusal.idiom
+
+
+def test_a_function_whose_every_path_returns_none_is_not_the_shape():
+    assert _detect(
+        "def f(x):\n"
+        "    return None\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_function_whose_every_path_returns_a_value_is_not_the_shape():
+    assert _detect(
+        "def f(x):\n"
+        "    return x\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_bare_return_is_not_the_shape():
+    # Measured, not assumed: a bare `return` produces only ONE refusal
+    # today, so admitting it here would detect a shape the safety property
+    # in Task 2 then forbids acting on.
+    assert _detect(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_rebound_name_is_not_the_shape():
+    # Without this, the condition gets paired with the wrong function and
+    # the refusal explains a shape the reader did not write.
+    assert _detect(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = f(1)\n"
+        "result = other()\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_test_that_is_not_a_bare_name_is_not_the_shape():
+    assert _detect(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = f(1)\n"
+        "if result.name:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_a_nested_defs_returns_do_not_count_as_the_outer_functions():
+    # The inner def supplies the `return None`; the outer only ever returns
+    # a value. Treating the inner's returns as the outer's would invent a
+    # mixed shape that is not there.
+    assert _detect(
+        "def f(x):\n"
+        "    def inner():\n"
+        "        return None\n"
+        "    return inner\n"
+        "\n"
+        "result = f(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+# Fix round 1: the `functions` dict is built from module-level defs only,
+# then reused while scanning every scope body -- including nested ones --
+# without checking whether the call site's own scope shadows that name.
+# These are the reviewer's repro and its variants.
+
+
+def test_a_called_name_shadowed_by_a_nested_def_is_not_the_shape():
+    # The reviewer's repro: the inner `find_book` shadows the outer one,
+    # so the call resolves to a function that never returns None. Blaming
+    # the outer function's `return None` for it is a wrong, confident
+    # claim about a shape the reader did not write.
+    assert _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    def find_book(y):\n"
+        "        return y\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    ) is None
+
+
+def test_a_called_name_shadowed_by_a_local_assignment_is_not_the_shape():
+    assert _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    find_book = lambda y: y\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    ) is None
+
+
+def test_a_called_name_shadowed_by_an_enclosing_parameter_is_not_the_shape():
+    assert _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g(find_book):\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    ) is None
+
+
+def test_the_ordinary_module_level_case_still_fires():
+    # Regression guard for this round: the shadow check must not swallow
+    # the base case just because the call and its def share one scope --
+    # the def statement itself is not a shadow of itself.
+    found = _detect(FIND_BOOK)
+    assert found is not None
+
+
+def test_a_call_from_an_unshadowed_nested_function_still_fires():
+    # A fix that closes the shadowing hole by never firing from a nested
+    # scope at all would pass the negative tests above and break the
+    # feature. This call is nested but not shadowed, so it must still
+    # fire.
+    found = _detect(
+        "def find_book(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    result = find_book(1)\n"
+        "    if result:\n"
+        "        print(result)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "find_book" in refusal.reason
+
+
+# Fix round 2: round 1's guard only inspected the call's OWN scope. A
+# shadow one level further out -- an intermediate enclosing function's
+# local, or a module-level rebind anywhere in the module body -- still
+# resolves at the call site, and blaming the matched module-level def
+# for it is the same confident, wrong claim round 1 closed for the
+# immediate scope only.
+
+
+def test_a_shadow_in_an_intermediate_enclosing_function_is_not_the_shape():
+    # `g` itself binds nothing, so an immediate-scope-only guard would
+    # miss this: `find` actually resolves to `outer`'s local lambda.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    find = lambda y: y\n"
+        "    def g():\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    ) is None
+
+
+def test_a_module_level_rebind_after_the_def_is_not_the_shape():
+    # No closures needed at all: `find` is rebound at module scope,
+    # after both the def and the nested call site that uses it.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def g():\n"
+        "    r = find(1)\n"
+        "    if r:\n"
+        "        print(r)\n"
+        "\n"
+        "find = lambda y: y\n"
+    ) is None
+
+
+def test_a_nonlocal_naming_an_enclosing_local_shadow_is_not_the_shape():
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    find = lambda y: y\n"
+        "    def g():\n"
+        "        nonlocal find\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    ) is None
+
+
+def test_an_unshadowed_call_two_scopes_deep_still_fires():
+    # A fix that declines whenever ANY enclosing scope exists at all
+    # would pass every negative test above and quietly kill the
+    # feature for every nested call -- the same trap round 1 avoided
+    # for one level of nesting. Two levels deep, still unshadowed, must
+    # still fire.
+    found = _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    def g():\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "find" in refusal.reason
+
+
+def test_the_none_pattern_is_one_refusal_not_two():
+    result = translate(FIND_BOOK)
+    assert isinstance(result, Refusals)
+    assert len(result.items) == 1
+    only = result.items[0]
+    assert only.line == 5
+    assert "find_book" in only.reason
+    assert "line 8" in only.reason
+
+
+def test_the_paired_refusal_replaces_the_misleading_len_advice():
+    # Today's truthiness idiom suggests `len(result) > 0` -- on a dict,
+    # that tests how many keys it has. A reader following it gets a
+    # program that runs and answers a different question, which is what
+    # the truthiness refusal exists to prevent.
+    result = translate(FIND_BOOK)
+    (only,) = result.items
+    assert "a list or string" not in (only.idiom or "")
+    assert "return []" in only.idiom
+
+
+def test_a_program_without_the_shape_still_gets_both_refusals():
+    # The regression net: everything that does not match must behave
+    # exactly as it did before.
+    result = translate(
+        "def f(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "print(f(1))\n"
+        "if other:\n"
+        "    print(1)\n"
+    )
+    assert isinstance(result, Refusals)
+    reasons = " ".join(item.reason for item in result.items)
+    assert "None cannot be translated" in reasons
+    assert "truthiness" in reasons
+
+
+def test_nothing_is_replaced_when_only_one_of_the_two_fired():
+    # The safety property, tested directly.
+    #
+    # The task-2 brief's version of this test put an `import os` between
+    # the call and the `if`, on the theory that it "refuses the whole
+    # statement first, so the truthiness position never produces a
+    # refusal". Measured against the actual walker, that is false:
+    # `body()` collects refusals statement by statement and never stops
+    # (see its own docstring, and test_every_refusal_is_collected_not_
+    # just_the_first above) -- an earlier `import os` does not prevent a
+    # later `if result:` from being walked and refused on its own. Run
+    # against the real implementation, that source produces THREE
+    # refusals (None, import, truthiness) and _collapse_none_pattern
+    # correctly swaps two of them, exactly as it should when both
+    # component positions truly fired. It was not a case of "only one
+    # fired" at all, so it could not pin the property it was named for.
+    #
+    # A case that actually isolates one side: decorating the callee.
+    # `_function` refuses a decorated `def` as a whole, before recursing
+    # into its body (translate.py's `_function`), so `return None` is
+    # never independently visited and the None-side refusal never fires
+    # -- while `if result:` is untouched and still refuses normally on
+    # its own. Only one of the two positions `_none_then_truth_test`
+    # pairs on is then present in `walker.refusals`, so
+    # `_collapse_none_pattern` must leave both remaining refusals
+    # exactly as they are.
+    source = (
+        "@staticmethod\n"
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    )
+    result = translate(source)
+    assert isinstance(result, Refusals)
+    reasons = " ".join(item.reason for item in result.items)
+    assert "truthiness" in reasons
+    assert "returns None on one path" not in reasons
+
+
+# Final review, Important #1: `_rebinds_in_stmt` (the guard on the RESULT
+# name) recognised fewer bind forms than `_shadowed_in_scope` (the guard
+# on the CALLED name) -- Name/Store and def only, missing `class` and
+# `import`, which `_shadowed_in_scope` already had, and missing
+# `except ... as`, which neither guard had. All three are runnable
+# programs where `result` is rebound between the assign and the `if`, so
+# the paired refusal fires and blames `find` for a condition that is
+# actually testing the class/module/exception, not find's return value.
+
+
+def test_a_class_binding_the_result_name_is_not_the_shape():
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "class result:\n"
+        "    pass\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_an_import_binding_the_result_name_is_not_the_shape():
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "import result\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_an_except_handler_binding_the_result_name_is_not_the_shape():
+    # `except Exception as result:` leaves `result` holding find's value
+    # when the handler does not run, so -- unlike the same gap on the
+    # CALLED name -- this is not merely theoretical: the program below
+    # runs, and pairs the refusal on a name the handler clause rebinds.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "try:\n"
+        "    pass\n"
+        "except Exception as result:\n"
+        "    pass\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_the_ordinary_case_still_fires_after_unifying_the_bind_check():
+    # Positive guard for this round: a fix that closes the class/import
+    # gap by declining more broadly -- rather than by recognising exactly
+    # those bind forms -- would pass every negative test above and still
+    # silently kill the ordinary case. That trap has already appeared
+    # twice on this branch.
+    found = _detect(FIND_BOOK)
+    assert found is not None
+
+
+def test_an_unshadowed_call_two_scopes_deep_still_fires_after_unifying_the_bind_check():
+    # Same guard, for the nested-scope path through `_shadowed_in_scope`,
+    # which now shares the unified bind check too.
+    found = _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def outer():\n"
+        "    def g():\n"
+        "        r = find(1)\n"
+        "        if r:\n"
+        "            print(r)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "find" in refusal.reason
+
+
+# Final review, Important #2: the plan dropped two of the design's six
+# mandated negative cases, and half of a third. All three behaviours
+# below are already correct -- these tests exist to pin them, not to fix
+# anything.
+
+
+def test_none_arriving_by_falling_off_the_end_is_not_the_shape():
+    # No explicit `return None` at all -- the function just runs out of
+    # statements. `_mixed_return_none` needs a `Constant` node to anchor
+    # the refusal on, so this must decline rather than guess at one.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "\n"
+        "result = find(1)\n"
+        "if result:\n"
+        "    print(result)\n"
+    ) is None
+
+
+def test_two_matching_functions_in_one_module_blame_the_right_one():
+    # `a`'s result and `b`'s result are crossed: the `if` that is actually
+    # reachable through the shape only follows `b`'s call, so the paired
+    # refusal must name `b`, not `a`.
+    found = _detect(
+        "def a(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "def b(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "ra = a(1)\n"
+        "rb = b(1)\n"
+        "if rb:\n"
+        "    print(rb)\n"
+    )
+    assert found is not None
+    refusal, _ = found
+    assert "`b`" in refusal.reason
+    assert "`a`" not in refusal.reason
+
+
+def test_a_call_as_the_test_is_not_the_shape():
+    # `if find(x):` -- a call, not a bare Name. `_bare_name_test_after`
+    # requires `isinstance(stmt.test, ast.Name)`, so a call re-invoking
+    # the function must decline rather than pair on it.
+    assert _detect(
+        "def find(x):\n"
+        "    if x:\n"
+        "        return x\n"
+        "    return None\n"
+        "\n"
+        "result = find(1)\n"
+        "if find(x):\n"
+        "    print(result)\n"
+    ) is None
