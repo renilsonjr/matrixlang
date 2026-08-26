@@ -456,3 +456,34 @@ def test_encode_binds_tighter_than_arithmetic():
     assert declare.value.op is TokenType.PLUS
     assert isinstance(declare.value.left, Unary)
     assert declare.value.left.op is TokenType.ENCODE
+
+
+def test_a_deeply_nested_list_literal_is_a_positioned_parse_error():
+    # A bare RecursionError out of the parser carries no line, no column and
+    # no MatrixLangError wrapping -- and site/glue.py's run() promises never
+    # to raise, a promise this project has already broken six times.
+    # Interpreter.run converts RecursionError into a positioned "expression
+    # is nested too deeply"; parse() is the same kind of boundary and needs
+    # the same shape. No interpreter is involved in reaching this.
+    depth = 3000
+    with pytest.raises(ParseError) as excinfo:
+        program("trace " + "[" * depth + "]" * depth + "\n")
+    assert "nested too deeply" in str(excinfo.value)
+    # Position is the part worth getting right: "nested too deeply" with no
+    # line number is only marginally better than a traceback, and which
+    # bracket ran away is exactly what the position tells the reader.
+    assert excinfo.value.line == 1
+    assert excinfo.value.column > 1
+
+
+def test_a_deeply_nested_expression_is_a_positioned_parse_error():
+    # parse_expression() is the REPL's entry point and the same kind of
+    # boundary as parse(). Guarding only the boundary where the failure was
+    # first noticed is the exact mistake that produced the related
+    # translate_python() break: the guard sat at the walker, and the
+    # RecursionError arrived at the render step instead.
+    depth = 3000
+    with pytest.raises(ParseError) as excinfo:
+        expr("[" * depth + "]" * depth)
+    assert "nested too deeply" in str(excinfo.value)
+    assert excinfo.value.line == 1

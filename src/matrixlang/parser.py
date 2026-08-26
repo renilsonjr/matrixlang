@@ -39,9 +39,31 @@ from matrixlang.nodes import (
 from matrixlang.tokens import Token, TokenType
 
 
+def _nested_too_deeply(parser: "_Parser") -> ParseError:
+    """The error a blown Python stack becomes, positioned where it gave up.
+
+    The descent is recursive, so a deep enough literal exhausts the stack
+    before any syntax is wrong. Interpreter.run converts RecursionError the
+    same way; every parser entry point is the same kind of boundary, and
+    site/glue.py's run() promises never to raise -- a promise this project
+    has broken six times, twice because a guard sat at one boundary and the
+    failure arrived at another.
+
+    peek() is safe: the stack has fully unwound by the time this runs, and
+    the parser's position is still where it stopped, which is the bracket
+    the reader is looking for.
+    """
+    token = parser.peek()
+    return ParseError("expression is nested too deeply", token.line, token.column)
+
+
 def parse(tokens: list[Token]) -> Program:
-    """Parse a complete program."""
-    return _Parser(tokens).parse_program()
+    """Parse a complete program. Raises ParseError, never RecursionError."""
+    parser = _Parser(tokens)
+    try:
+        return parser.parse_program()
+    except RecursionError:
+        raise _nested_too_deeply(parser) from None
 
 
 def parse_expression(tokens: list[Token]) -> Expr:
@@ -52,7 +74,10 @@ def parse_expression(tokens: list[Token]) -> Expr:
     via parse(), where trivia is preserved.
     """
     parser = _Parser(tokens)
-    expr = parser.expression()
+    try:
+        expr = parser.expression()
+    except RecursionError:
+        raise _nested_too_deeply(parser) from None
     if parser.check(TokenType.COMMENT):
         parser.advance()
     if parser.check(TokenType.NEWLINE):
