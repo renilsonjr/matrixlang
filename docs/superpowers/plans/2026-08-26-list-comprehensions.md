@@ -930,13 +930,46 @@ Then in `translate()`, replace this line:
 with:
 
 ```python
-    # Comprehensions become the loops they mean before the walk starts, so
-    # _Translator only ever sees constructs it already handles. `taken` is
-    # shared rather than recomputed: the rewrite adds the names it invents
-    # to it, so the counters the walker invents cannot collide with them.
     taken = bound_names(tree)
-    tree = rewrite_comprehensions(tree, taken)
+    rewritten: list[ast.stmt] = []
+    for statement in tree.body:
+        try:
+            with recursion_guard():
+                module = rewrite_comprehensions(
+                    ast.Module(body=[copy.deepcopy(statement)], type_ignores=[]), taken
+                )
+            rewritten.extend(module.body)
+        except TooDeepError:
+            rewritten.append(statement)
+    tree.body = rewritten
     walker = _Translator(taken)
+```
+
+`taken` is shared rather than recomputed: the rewrite adds the names it
+invents to it, so the counters the walker invents cannot collide with them.
+
+**Three things this shape buys, none of them obvious.** A single whole-tree
+call — which is what this plan originally specified — lets a plain
+`RecursionError` escape `translate()` on deeply nested input containing no
+comprehension at all, because the pass's own `NodeTransformer` descent has
+no depth guard. That breaks the file's binding constraint. Going one
+statement at a time under `recursion_guard()` also means a single deep
+statement cannot cost its siblings their rewrite. And the rewrite runs
+against a `copy.deepcopy`: a `NodeTransformer` replaces a non-list field as
+soon as it visits it, so without the copy a statement could be left
+half-rewritten, referencing an invented name whose loop was discarded when
+a deeper sibling field raised.
+
+Add `import copy` beside the other stdlib imports. Also add a `MemoryError`
+clause beside the existing `SyntaxError`/`ValueError` ones — CPython reports
+parser stack overflow as `MemoryError`, which neither catches, so
+`translate("print(" + "-" * 6000 + "1)")` raises. That bug predates this
+plan; it is fixed here because this task is defined by the never-raise
+constraint and the fix is one clause:
+
+```python
+    except MemoryError:
+        return Refusals([Refusal("this is nested too deeply to translate", 1, 1)])
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -956,6 +989,14 @@ In `tests/test_architecture.py`, add to `_ALLOWED` beside `"pytrans.names"`:
 and add `"pytrans.comprehensions"` to the set on the `"pytrans.translate"` entry.
 
 - [ ] **Step 6: Run the whole suite**
+
+Two extra tests belong in `tests/test_pytrans_refuse.py` alongside the
+existing deep-nesting ones: that `translate("print(" + "-" * 6000 + "1)")`
+returns `Refusals` rather than raising, and that a deep statement does not
+cost its siblings their rewrite — `"y = " + "1 // " * 600 + "1\na = [x for x in xs]\nprint(a)\n"`
+must give exactly one refusal, the `//` one on line 1. Without the second,
+nothing distinguishes per-statement from whole-tree: the entire suite
+passes either way.
 
 Run: `pytest`
 Expected: all pass. This is the run that matters — every existing refusal
