@@ -108,6 +108,24 @@ def test_a_tuple_target_never_proves_a_name():
     assert proven('d, e = {"a": 1, "b": 2}\n') == []
 
 
+def test_a_type_parameter_never_proves_a_name():
+    # PEP 695. `def f[d](x)` binds `d` as a TypeVar, and the name lives
+    # in a plain string field exactly as MatchAs's does. Skipped below
+    # 3.12, where the syntax does not parse.
+    import sys
+
+    if sys.version_info < (3, 12):
+        return
+    assert proven('d = {"a": 1}\ndef f[d](x):\n    return x\n') == []
+    assert proven('d = {"a": 1}\ntype d = int\n') == []
+
+
+def test_a_call_keyword_argument_is_not_a_binding():
+    # `f(d=1)` names `d` in an ast.keyword, which binds nothing. Denying
+    # on the field alone would lose this fix for no safety.
+    assert proven('d = {"a": 1}\nf(d=1)\n') == ["d"]
+
+
 def test_a_match_capture_never_proves_a_name():
     # `case d:` binds `d` through MatchAs, which carries the name as a
     # string and has no ast.Name node to find.
@@ -134,14 +152,31 @@ Expected: FAIL — `ImportError: cannot import name 'dict_names'`.
 Append to `src/matrixlang/pytrans/names.py`:
 
 ```python
+# Python 3.12+ only; isinstance against an empty tuple is always False,
+# which is what keeps this working on the 3.11 floor.
+_TYPE_ALIAS = getattr(ast, "TypeAlias", ())
+
+# Every binding form that carries its name as a plain string rather than
+# an ast.Name node puts it in one of these fields.
+_NAME_FIELDS = ("name", "rest", "asname", "arg")
+
+
 def dict_names(tree: ast.AST) -> set[str]:
     """Names every one of whose bindings is a dict literal.
 
     Deliberately conservative, and the asymmetry is the reason. A name
     that holds a dictionary but is not proven here costs the fix; a name
     wrongly proven costs a `keymaker` on a list, which is a runtime error
-    this analysis would be introducing. So anything unclear disqualifies:
-    a parameter, a loop target, a tuple target, a value from a call.
+    this analysis would be introducing. So anything unclear disqualifies.
+
+    Denial is structural rather than a list of node types, which is the
+    second design this had. The first enumerated binding forms and missed
+    four of them in a row -- `match ... case d`, and PEP 695's `type d =`,
+    `def f[d]`, `class C[d]` -- every one a binding that carries its name
+    as a plain string field where a walk looking for ast.Name finds
+    nothing. Denying on the FIELD rather than the node type closes that
+    class instead of adding a fifth special case, and covers forms this
+    version of Python does not have yet.
 
     A subscript target is NOT a binding. `d = {}` followed by
     `d["a"] = 1` leaves `d` proven, which matters because building a
@@ -163,37 +198,34 @@ def dict_names(tree: ast.AST) -> set[str]:
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 # A tuple target binds no single name to the literal,
-                # whatever the right-hand side is.
+                # whatever the right-hand side is: unpacking a dictionary
+                # binds its KEYS.
                 ok = isinstance(node.value, ast.Dict) and isinstance(target, ast.Name)
                 for inner in ast.walk(target):
                     if isinstance(inner, ast.Name) and isinstance(inner.ctx, ast.Store):
                         proven[inner.id] = proven.get(inner.id, True) and ok
-        elif isinstance(node, ast.arg):
-            proven[node.arg] = False
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            proven[node.name] = False
-        elif isinstance(node, (ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
+            continue
+
+        if isinstance(
+            node,
+            (ast.AugAssign, ast.AnnAssign, ast.NamedExpr,
+             ast.For, ast.AsyncFor, ast.comprehension),
+        ):
             deny(node.target)
-        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
-            deny(node.target)
-        elif isinstance(node, ast.alias):
-            proven[node.asname or node.name.split(".")[0]] = False
-        elif isinstance(node, ast.ExceptHandler) and node.name:
-            proven[node.name] = False
-        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
-            # A `case d:` capture binds `d` with no ast.Name node anywhere
-            # -- the name is a plain string on the pattern. A walk looking
-            # for Name(ctx=Store) misses it entirely and would prove a
-            # name that holds whatever was matched. `match` is refused by
-            # the translator today, which makes this unreachable rather
-            # than harmless: this is the third defect in this project
-            # traced to ast.Match keeping its bindings somewhere a field
-            # walk does not look.
-            proven[node.name] = False
-        elif isinstance(node, ast.MatchMapping) and node.rest:
-            proven[node.rest] = False
         elif isinstance(node, ast.withitem) and node.optional_vars is not None:
             deny(node.optional_vars)
+        elif isinstance(node, _TYPE_ALIAS):
+            # The one string-named form whose name IS an ast.Name node.
+            deny(node.name)
+
+        if isinstance(node, ast.keyword):
+            # A call's keyword argument name binds nothing: `f(d=1)` must
+            # leave a dictionary named `d` proven.
+            continue
+        for field in _NAME_FIELDS:
+            value = getattr(node, field, None)
+            if isinstance(value, str):
+                proven[value] = False
 
     return {name for name, ok in proven.items() if ok}
 ```
@@ -205,12 +237,12 @@ makes the analysis order-independent.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_names.py -v`
-Expected: 10 passed.
+Expected: 12 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
 Run: `pytest`
-Expected: 2192 + 10. Nothing calls `dict_names` yet, so no
+Expected: 2192 + 12. Nothing calls `dict_names` yet, so no
 existing behaviour can have changed.
 
 - [ ] **Step 6: Commit**
