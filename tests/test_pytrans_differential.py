@@ -626,3 +626,84 @@ def test_a_loop_else_whose_flag_name_is_taken_agrees():
         "for x in xs:\n    break\nelse:\n    print(1)\n"
         "print(broke)\n"
     )
+
+
+def test_iterating_a_dictionary_yields_its_keys_agrees():
+    agree('d = {"a": 1, "b": 2}\nfor k in d:\n    print(k)\n')
+
+
+def test_iterating_a_dictionary_with_integer_keys_agrees():
+    # The case that used to run cleanly and print the VALUES where Python
+    # prints the keys. A crash is at least visible; this one was not.
+    agree("d = {0: 10, 1: 20}\nfor k in d:\n    print(k)\n")
+
+
+def test_iterating_an_empty_dictionary_agrees():
+    agree("d = {}\nfor k in d:\n    print(k)\nprint(9)\n")
+
+
+def test_looking_up_values_while_iterating_a_dictionary_agrees():
+    agree('d = {"a": 1, "b": 2}\nfor k in d:\n    print(d[k])\n')
+
+
+def test_iterating_a_dictionary_built_by_subscript_agrees():
+    agree('d = {}\nd["a"] = 1\nd["b"] = 2\nfor k in d:\n    print(k)\n')
+
+
+def test_iterating_a_dict_literal_inline_agrees():
+    agree('for k in {"a": 1, "b": 2}:\n    print(k)\n')
+
+
+def test_a_comprehension_over_a_dictionary_agrees():
+    agree('d = {"a": 1, "b": 2}\nprint(len([k for k in d]))\n')
+
+
+def test_adding_a_key_during_iteration_completes_where_python_raises():
+    # The one accepted difference, pinned so it stays a known quantity.
+    # Python raises `RuntimeError: dictionary changed size during
+    # iteration`; the translation walks the keys as they were at loop
+    # entry and finishes. There is no MatrixLang output that reproduces a
+    # Python runtime error, and the reader's program was already an error
+    # -- so this is recorded rather than closed. Not an `agree()` case,
+    # because the two deliberately do not agree.
+    # io, Interpreter, ListSource, lex, parse, translate and Translated
+    # are all already imported at the top of this file -- do not add them.
+    source = 'd = {"a": 1}\nfor k in d:\n    d[k + "x"] = 2\n    print(k)\n'
+    result = translate(source)
+    assert isinstance(result, Translated), result
+    out = io.StringIO()
+    Interpreter(out=out, source=ListSource([])).run(parse(lex(result.source)))
+    assert out.getvalue() == "a\n"
+
+
+def test_rebinding_a_dictionary_inside_its_own_loop_agrees():
+    # The list path REFUSES this shape, because the output indexes the
+    # name and would follow the rebinding. A dictionary is hoisted into a
+    # keys list instead, so rebinding cannot reach it -- which is also
+    # what Python does, its `for` holding the object it was given.
+    agree('d = {"a": 1, "b": 2}\nfor k in d:\n    d = {"z": 9}\n    print(k)\n')
+
+
+def test_iterating_dict_keys_explicitly_agrees():
+    agree('d = {"a": 1, "b": 2}\nfor k in d.keys():\n    print(k)\n')
+
+
+def test_iterating_dict_keys_of_a_parameter_agrees():
+    # The case the analysis can never prove: the dictionary arrives as an
+    # argument. `.keys()` is what makes it expressible.
+    agree(
+        'def f(d):\n    for k in d.keys():\n        print(k)\n'
+        'f({"a": 1, "b": 2})\n'
+    )
+
+
+def test_a_dictionary_loop_beside_a_long_unrelated_expression_agrees():
+    # The backstop's own `copy.deepcopy` breaks around 245 terms, well
+    # before `ast.unparse` (327) or `symtable`/`ast.parse` (thousands),
+    # so 300 terms is enough to make the backstop itself raise
+    # `RecursionError` while leaving the rest of the module perfectly
+    # analysable. An unrelated long expression must not switch the fix
+    # off: on backstop failure, `dict_names` falls back to the walk's
+    # own answer rather than denying every proven name in the file.
+    long_expression = "y = " + "+".join(["1"] * 300) + "\n"
+    agree(long_expression + 'd = {0: 10, 1: 20}\nfor k in d:\n    print(k)\n')

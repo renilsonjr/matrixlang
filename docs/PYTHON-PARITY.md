@@ -248,6 +248,70 @@ first: when a statement is too deep for the pass's own recursion guard,
 attached, and those checks are what stop the else body vanishing from
 the output silently rather than being named in a refusal.
 
+### 8. Dictionary iteration — **defect fixed**
+
+Unlike items 1–7, this was not a gap closed. `for k in d:` over a
+dictionary already translated, and the program it produced was wrong —
+the governing rule ("refuse where the difference would be silent")
+exists to stop exactly that, and it did not fire.
+
+The `for` desugaring indexes its iterable by an integer counter, which
+is right for a list or a string and wrong for a dictionary. It failed
+two ways. With string keys, the generated `d[0]` crashed at runtime —
+loud, and pointing at the wrong line, but at least visible. With
+integer keys it did not crash at all: `d[0]` is a valid lookup on
+`{0: 10, 1: 20}`, so the loop ran to completion and **printed the
+values where Python prints the keys**. A program that means something
+else and gives no sign of it.
+
+`keymaker` (§8 of the learner guide) already returned a dictionary's
+keys as a list; the fix was not a new primitive but a new analysis,
+`dict_names`, to know when to reach for it. The translator carries no
+type information and never evaluates anything, so `dict_names` proves
+"this name is a dictionary" from syntax alone — every assignment,
+augmented assignment, `for` target, `with`, comprehension clause,
+`match` capture, and every PEP 695 binding form, denying on anything it
+cannot classify.
+
+**The analysis is asymmetrically conservative, on purpose.** Proving
+"dictionary" wrongly would emit `keymaker` onto a list — a new runtime
+error this change would be introducing. Proving "not a dictionary"
+wrongly only declines to fix the existing bug, leaving today's
+behaviour in place. Anything unclear disqualifies the name, in both
+directions: a module-level `d` and an unrelated parameter also named
+`d` disqualify each other, because the analysis carries no scope. A
+`symtable` backstop catches what the syntactic walk itself might miss —
+a future Python binding form the walk was never taught — so a gap there
+costs a lost fix, not an introduced error. The backstop misses on depth
+as well as on binding form: above roughly 250 nodes in a single
+expression it cannot run at all (`copy.deepcopy`, one of its steps,
+hits Python's recursion limit), and the analysis then falls back to the
+walk alone — which is complete for Python as it stands, so this still
+costs a lost fix, never an introduced error.
+
+**The residual, stated plainly: this is not closed for every
+dictionary.** A dictionary that arrives through a function parameter or
+as a call's return value cannot be proven from syntax, and a loop over
+one is still translated as though it were a list — the original defect,
+unfixed, for exactly the cases the analysis cannot see into. `for k in
+d.keys():` is what a reader writes instead, supported as a `for`
+iterable only, never as a value: Python prints `d.keys()` as
+`dict_keys(['a'])`, where a MatrixLang list prints `["a"]`, so returning
+it from `keymaker` would trade one silent difference for another.
+
+**One accepted difference.** Python takes a live view of a dictionary's
+keys, so adding one during iteration raises `RuntimeError: dictionary
+changed size during iteration`. The translation takes the keys once, at
+loop entry, and completes instead. The reader's program was already an
+error in Python, and no MatrixLang output can reproduce a Python runtime
+error, so this is recorded rather than closed — pinned by a test that
+checks the translation runs to completion, not that the two agree.
+
+The comprehension form, `[k for k in d]`, was fixed for free: the
+comprehension pass (item 6) rewrites it into a `for` before translation
+ever sees it, so it goes through the same fix without a line of new
+code.
+
 ---
 
 ## Tier 2 — real, workaroundable, unscheduled
