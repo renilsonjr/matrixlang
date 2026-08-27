@@ -21,11 +21,22 @@ import glue
 # The narrative's examples. Each must be a request Scribe knows — the
 # freshness test asserts every one produced source and output.
 EXAMPLES = [
+    # The first four are the narrative's, quoted verbatim in index.html's
+    # "How It Works" panel. Reordering or removing one silently desyncs that
+    # panel from this file, which nothing checks — the panel is prose.
     "add 5 and 3",
     "count from 1 to 5",
     "make a list of 1 2 3",
     "if 5 is greater than 3 trace bigger",
     "define a function that doubles",
+    # The rest exist for the Examples tab, which reads this file at runtime.
+    # Every one is a request Scribe already knows: the assert below is what
+    # stops a plausible-sounding phrase that Scribe cannot actually answer
+    # from reaching the page as a dead button.
+    "trace hello world",
+    "count from 1 to 10",
+    "divide 10 by 4",
+    "is 5 greater than 3",
 ]
 
 _OUT = Path(__file__).parent / "examples.json"
