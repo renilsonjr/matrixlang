@@ -219,8 +219,8 @@ fired, and that interaction is exactly what the existing refusals close
 off." That was correct when written — `break` itself was still being
 added, and deferring an interaction with an unfinished feature was the
 right call. It does not survive the shipped code: the interaction was
-never actually unhandled, only unwritten, and once `break` existed the
-flag pattern loop-else desugars to needed nothing new from the
+never actually unhandled, only unwritten, and once `break` existed, the
+flag pattern that loop-else desugars to needed nothing new from the
 translator at all.
 
 Two things about the rewrite are worth naming. It emits `broke == False`,
@@ -232,10 +232,14 @@ straight after the loop rather than writing a flag that is set once,
 never changed, and tested to a foregone conclusion — a program a learner
 would read and have to explain the pointlessness of.
 
-Still refused: `async for ... else` (async is refused wholesale, and the
-pass leaves it alone rather than carving out an exception to that) and
-`try ... else` (a different construct, on a statement already refused
-wholesale).
+Still refused: `async for ... else` and `try ... else`. Neither refusal
+comes from the pass declining to touch the construct — `try` is a
+different construct the pass was never asked to rewrite, and `ast.AsyncFor`
+IS in `_LOOPS`, so an `async for ... else` is rewritten into the same flag
+pattern as any other loop-else. The refusal comes from one level up:
+`async def` is refused wholesale before this pass's output ever reaches
+the translator, so no program containing `async for ... else` gets this
+far in the first place.
 
 The walker's own `orelse` checks in `_for` and `_while` (`translate.py`)
 stay in place, and they are not dead code even though the pass runs

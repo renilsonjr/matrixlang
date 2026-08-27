@@ -38,6 +38,7 @@ Baseline: **1880 passed.** If yours differs before you change anything, stop and
 - **`jackout` beats both** — it unwinds past a loop to the call site. Free, provided the loop catches only `_Wake`/`_Glitch`.
 - **The step limit is untouched.** Steps count executed statements (`interpreter.py:228`).
 - **`for ... else` and `while ... else` stay refused** (`translate.py:462`, `:248`). Do not add support; Python's loop-else runs only when no `break` fired, and that interaction is exactly what the existing refusals close off.
+  - **Reversed 2026-08-26.** Once `break` existed, the interaction above turned out to be already handled rather than unhandled — see `docs/superpowers/specs/2026-08-26-loop-else-design.md` for the reasoning and `docs/superpowers/plans/2026-08-26-loop-else.md` for the implementation. Support shipped; this bullet is kept for the record, not as current guidance.
 - **Loops with no `glitch` in them must keep byte-for-byte the output the translator produces today.** The playground shows this code to the reader.
 - **The full suite must be green at the end of every task.**
 
