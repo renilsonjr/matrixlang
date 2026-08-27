@@ -682,3 +682,16 @@ def test_rebinding_a_dictionary_inside_its_own_loop_agrees():
     # keys list instead, so rebinding cannot reach it -- which is also
     # what Python does, its `for` holding the object it was given.
     agree('d = {"a": 1, "b": 2}\nfor k in d:\n    d = {"z": 9}\n    print(k)\n')
+
+
+def test_iterating_dict_keys_explicitly_agrees():
+    agree('d = {"a": 1, "b": 2}\nfor k in d.keys():\n    print(k)\n')
+
+
+def test_iterating_dict_keys_of_a_parameter_agrees():
+    # The case the analysis can never prove: the dictionary arrives as an
+    # argument. `.keys()` is what makes it expressible.
+    agree(
+        'def f(d):\n    for k in d.keys():\n        print(k)\n'
+        'f({"a": 1, "b": 2})\n'
+    )

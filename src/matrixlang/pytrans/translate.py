@@ -1107,12 +1107,20 @@ def _dict_keys_iterable(node: ast.expr, dicts: set[str]) -> ast.expr | None:
 
     Read off the raw ast, BEFORE expression() -- that call is what raises
     the existing `.keys()` refusal, so a branch placed after it never
-    runs. Task 3 adds the `.keys()` case here.
+    runs.
     """
     if isinstance(node, ast.Dict):
         return node
     if isinstance(node, ast.Name) and node.id in dicts:
         return node
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "keys"
+        and not node.args
+        and not node.keywords
+    ):
+        return node.func.value
     return None
 
 

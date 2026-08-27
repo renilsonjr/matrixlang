@@ -976,3 +976,13 @@ def test_a_call_as_the_test_is_not_the_shape():
         "if find(x):\n"
         "    print(result)\n"
     ) is None
+
+
+def test_keys_outside_a_for_iterable_still_refuses():
+    # `.keys()` is supported ONLY as the thing a `for` walks. Python
+    # prints `d.keys()` as `dict_keys(['a'])` where a MatrixLang list
+    # prints `["a"]`, so supporting it as a value would trade one silent
+    # difference for another.
+    result = translate('d = {"a": 1}\nprint(d.keys())\n')
+    assert isinstance(result, Refusals), result
+    assert "`.keys()`" in result.items[0].reason
