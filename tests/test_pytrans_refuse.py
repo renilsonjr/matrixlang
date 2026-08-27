@@ -129,13 +129,31 @@ def test_a_deep_statement_does_not_cost_its_siblings_their_rewrite():
 
 
 def test_a_loop_else_too_deep_to_rewrite_still_refuses():
-    # The pass declines a statement it cannot walk, handing the walker the
-    # ORIGINAL -- `else` still attached. The walker's orelse refusal is
-    # what stops the else body being silently dropped, so it is load
-    # bearing rather than dead code. 900 terms puts it past the guard.
-    source = "for x in [" + "1 + " * 900 + "1]:\n    break\nelse:\n    print(999)\n"
+    # The pass declines a statement it cannot walk and hands the walker
+    # the ORIGINAL, `else` still attached -- so the walker's orelse
+    # refusal is what stops the else body vanishing from the output
+    # without a word. 350 terms is deliberate: it is inside the measured
+    # window where the pass declines but the walk still succeeds. At 900
+    # the walker refuses for depth anyway and this test passed with the
+    # raise deleted.
+    source = "for x in [" + "1 + " * 350 + "1]:\n    break\nelse:\n    print(999)\n"
     result = translate(source)
-    assert isinstance(result, Refusals)
+    assert isinstance(result, Refusals), result
+    assert result.items[0].idiom == "MatrixLang has no `for ... else`"
+
+
+def test_a_while_else_too_deep_to_rewrite_still_refuses():
+    # The `while` twin of the test above. Its raise had no coverage at
+    # all, and deleting it dropped an else body just as silently.
+    source = (
+        "while [" + "1 + " * 350 + "1][0] < 2:\n"
+        "    break\n"
+        "else:\n"
+        "    print(999)\n"
+    )
+    result = translate(source)
+    assert isinstance(result, Refusals), result
+    assert result.items[0].idiom == "MatrixLang has no `while ... else`"
 
 
 def test_the_rewrite_runs_against_a_copy_not_the_statement_itself():

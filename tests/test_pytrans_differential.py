@@ -570,23 +570,43 @@ def test_a_loop_else_with_no_break_agrees():
 
 
 def test_a_nested_loops_break_does_not_suppress_the_outer_else_agrees():
-    agree("A = [1, 2]\nB = [3]\nfor a in A:\n    for b in B:\n        break\nelse:\n    print(5)\n")
+    agree(
+        "A = [1, 2]\nB = [3]\n"
+        "for a in A:\n    for b in B:\n        break\n"
+        "else:\n    print(5)\n"
+    )
 
 
 def test_a_break_in_an_inner_loops_else_exits_the_outer_loop_agrees():
     agree(
         "A = [1, 2, 3]\nB = []\n"
-        "for a in A:\n    for b in B:\n        print(b)\n    else:\n        print(a)\n        break\n"
+        "for a in A:\n    for b in B:\n        print(b)\n"
+        "    else:\n        print(a)\n        break\n"
         "else:\n    print(999)\n"
     )
 
 
 def test_a_while_else_agrees():
-    agree("n = 0\nwhile n < 5:\n    if n == 2:\n        print(2)\n        break\n    n = n + 1\nelse:\n    print(99)\n")
+    agree(
+        "n = 0\nwhile n < 5:\n    if n == 2:\n        print(2)\n        break\n"
+        "    n = n + 1\nelse:\n    print(99)\n"
+    )
 
 
 def test_a_while_else_that_completes_agrees():
     agree("n = 0\nwhile n < 3:\n    n = n + 1\nelse:\n    print(42)\n")
+
+
+def test_a_while_else_whose_reachable_break_never_fires_agrees():
+    # A `while` whose `break` is reachable but its condition never true
+    # during the run: the flag is emitted (there is a `break` to guard
+    # against) but stays false, so the else body runs -- the third leg,
+    # alongside test_a_while_else_agrees (breaks) and
+    # test_a_while_else_that_completes_agrees (no break at all, no flag).
+    agree(
+        "n = 0\nwhile n < 3:\n    if n == 99:\n        break\n"
+        "    n = n + 1\nelse:\n    print(42)\n"
+    )
 
 
 def test_a_loop_else_inside_a_loop_agrees():
@@ -601,4 +621,8 @@ def test_a_loop_else_inside_a_loop_agrees():
 
 
 def test_a_loop_else_whose_flag_name_is_taken_agrees():
-    agree("broke = 5\nxs = [1]\nfor x in xs:\n    break\nelse:\n    print(1)\nprint(broke)\n")
+    agree(
+        "broke = 5\nxs = [1]\n"
+        "for x in xs:\n    break\nelse:\n    print(1)\n"
+        "print(broke)\n"
+    )
