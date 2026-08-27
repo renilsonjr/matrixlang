@@ -128,12 +128,35 @@ def test_a_break_inside_a_match_case_is_still_ours():
     )
 
 
+def test_a_break_in_an_ifs_else_arm_is_still_ours():
+    # `orelse` is an `if`'s `else:` arm, not just a loop's -- dropping it
+    # from the fields `_suites` walks would leave a `break` sitting there
+    # unmarked, and the loop-else body would wrongly run alongside it.
+    assert rewritten(
+        "for x in xs:\n"
+        "    if c:\n"
+        "        print(1)\n"
+        "    else:\n"
+        "        break\n"
+        "else:\n"
+        "    print(9)\n"
+    ) == (
+        "broke = False\n"
+        "for x in xs:\n"
+        "    if c:\n"
+        "        print(1)\n"
+        "    else:\n"
+        "        broke = True\n"
+        "        break\n"
+        "if broke == False:\n"
+        "    print(9)"
+    )
+
+
 def test_the_flag_stem_is_not_a_matrixlang_keyword():
     from matrixlang.pytrans.loop_else import _FLAG_STEM
 
     assert _FLAG_STEM not in tokens.KEYWORDS
-
-
 
 
 def test_a_program_without_loop_else_is_untouched():
@@ -209,6 +232,32 @@ def test_a_break_in_a_nested_while_is_not_ours():
         "    while c:\n"
         "        break\n"
         "print(1)"
+    )
+
+
+def test_a_break_in_a_nested_while_is_not_ours_even_when_our_flag_is_needed():
+    # Unlike the test above, the outer loop has a break of its OWN here
+    # (the `if a == t` guard), so the flag path is taken. The nested
+    # while's break still must not be marked with the outer flag -- only
+    # `_mark`'s own skip of `ast.While` keeps it that way.
+    assert rewritten(
+        "for a in A:\n"
+        "    while c:\n"
+        "        break\n"
+        "    if a == t:\n"
+        "        break\n"
+        "else:\n"
+        "    print(1)\n"
+    ) == (
+        "broke = False\n"
+        "for a in A:\n"
+        "    while c:\n"
+        "        break\n"
+        "    if a == t:\n"
+        "        broke = True\n"
+        "        break\n"
+        "if broke == False:\n"
+        "    print(1)"
     )
 
 

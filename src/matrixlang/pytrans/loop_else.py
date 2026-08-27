@@ -1,4 +1,5 @@
-"""`for ... else`, turned into the flag pattern before translation begins.
+"""`for ... else` and `while ... else`, turned into the flag pattern before
+translation begins.
 
 Python's loop-else runs only when no `break` fired. The way anyone writes
 that by hand -- a flag set beside the `break`, tested after the loop --
@@ -28,16 +29,21 @@ _FLAG_STEM = "broke"
 
 _BLOCK_FIELDS = ("body", "orelse", "finalbody")
 
-_LOOPS = (ast.For, ast.While)
+_LOOPS = (ast.For, ast.AsyncFor, ast.While)
 
 
 def _suites(statement: ast.stmt):
     """Every statement list this statement carries directly.
 
-    The single place that knows where suites live. `ast.Match` keeps its
-    under `cases` and `ast.Try` under `handlers`, neither of which is a
-    plain field -- which is exactly the kind of omission that is easy to
-    make in one copy of a walk and not another.
+    The place THIS MODULE's walk knows where suites live -- not the only
+    one in the codebase. `ast.Match` keeps its under `cases` and
+    `ast.Try` under `handlers`, neither of which is a plain field, and
+    this function knows to look in both. `comprehensions.py` keeps its
+    own copy of this same idea (`_rewrite_nested_blocks` there) which does
+    NOT walk `ast.Match` cases -- the two are not interchangeable, and
+    that gap is exactly the kind of omission that is easy to make in one
+    copy of a walk and not another. Unifying them is tracked separately;
+    this module does not attempt it.
     """
     for field in _BLOCK_FIELDS:
         block = getattr(statement, field, None)

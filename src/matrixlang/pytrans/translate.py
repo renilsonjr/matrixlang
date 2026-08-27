@@ -311,7 +311,9 @@ class _Translator:
             return [*hoisted, If(condition, then_body, else_body)]
         if isinstance(node, ast.While):
             if node.orelse:
-                raise _Unsupported(self._no(node, "MatrixLang has no `while ... else`"))
+                raise _Unsupported(
+                    self._no(node, "this `while ... else` is too deeply nested to rewrite")
+                )
             _refuse_function_in_loop(node.body)
             condition = self.condition(node.test)
             # Same hazard `_for` hoists around: `construct` inside a
@@ -529,7 +531,9 @@ class _Translator:
 
     def _for(self, node: ast.For) -> list[Stmt]:
         if node.orelse:
-            raise _Unsupported(self._no(node, "MatrixLang has no `for ... else`"))
+            raise _Unsupported(
+                self._no(node, "this `for ... else` is too deeply nested to rewrite")
+            )
         if not isinstance(node.target, ast.Name):
             raise _Unsupported(
                 self._no(node.target, "loop over one name at a time")

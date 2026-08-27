@@ -139,7 +139,7 @@ def test_a_loop_else_too_deep_to_rewrite_still_refuses():
     source = "for x in [" + "1 + " * 350 + "1]:\n    break\nelse:\n    print(999)\n"
     result = translate(source)
     assert isinstance(result, Refusals), result
-    assert result.items[0].idiom == "MatrixLang has no `for ... else`"
+    assert result.items[0].idiom == "this `for ... else` is too deeply nested to rewrite"
 
 
 def test_a_while_else_too_deep_to_rewrite_still_refuses():
@@ -153,7 +153,7 @@ def test_a_while_else_too_deep_to_rewrite_still_refuses():
     )
     result = translate(source)
     assert isinstance(result, Refusals), result
-    assert result.items[0].idiom == "MatrixLang has no `while ... else`"
+    assert result.items[0].idiom == "this `while ... else` is too deeply nested to rewrite"
 
 
 def test_the_rewrite_runs_against_a_copy_not_the_statement_itself():

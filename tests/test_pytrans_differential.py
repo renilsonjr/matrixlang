@@ -614,7 +614,7 @@ def test_a_loop_else_inside_a_loop_agrees():
     # `construct`-in-a-loop trap this project has hit before -- it only
     # works because _hoist_declares lifts the declaration out.
     agree(
-        "rows = [[1, 2], [3, 4]]\nt = 3\n"
+        "rows = [[1, 2], [3, 4]]\nt = 1\n"
         "for r in rows:\n    for v in r:\n        if v == t:\n            break\n"
         "    else:\n        print(r[0])\n"
     )
