@@ -86,6 +86,14 @@ def dict_names(tree: ast.AST) -> set[str]:
             proven[node.asname or node.name.split(".")[0]] = False
         elif isinstance(node, ast.ExceptHandler) and node.name:
             proven[node.name] = False
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            # A `case d:` capture binds `d` with no ast.Name node anywhere
+            # -- the name is a plain string on the pattern. A walk looking
+            # for Name(ctx=Store) misses it entirely and would prove a
+            # name that holds whatever was matched.
+            proven[node.name] = False
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            proven[node.rest] = False
         elif isinstance(node, ast.withitem) and node.optional_vars is not None:
             deny(node.optional_vars)
 

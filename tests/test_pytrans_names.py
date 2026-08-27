@@ -39,7 +39,20 @@ def test_a_loop_target_of_that_name_disqualifies_it():
 
 
 def test_a_tuple_target_never_proves_a_name():
-    assert proven('d, e = {"a": 1}, 2\n') == []
+    # The right-hand side must be a dict LITERAL, or this never reaches
+    # the `isinstance(target, ast.Name)` guard it exists to pin -- it
+    # would fail on the value check instead and the guard could be
+    # deleted with every test still green. Unpacking a dict binds its
+    # KEYS, so here `d` is the string "a", not a dictionary.
+    assert proven('d, e = {"a": 1, "b": 2}\n') == []
+
+
+def test_a_match_capture_never_proves_a_name():
+    # `case d:` binds `d` through MatchAs, which carries the name as a
+    # string and has no ast.Name node to find.
+    assert proven(
+        'd = {"a": 1}\nmatch xs:\n    case d:\n        print(d)\n'
+    ) == []
 
 
 def test_a_value_from_a_call_is_not_proven():
