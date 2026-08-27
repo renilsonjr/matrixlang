@@ -33,5 +33,42 @@
     "source": "agent double(n)\n  jackout n * 2\nflatline\n",
     "glyph": "\uff74 double\uff78n\uff79\n  \uff96 n \uff76 \uff68\n\uff97\n",
     "output": []
+  },
+  "trace hello world": {
+    "source": "trace \"hello world\"\n",
+    "glyph": "\uff84 \"hello world\"\n",
+    "output": [
+      "hello world"
+    ]
+  },
+  "count from 1 to 10": {
+    "source": "construct i = 1\ndejavu i <= 10\n  trace i\n  i = i + 1\nflatline\n",
+    "glyph": "\uff71 i \uff85 \uff67\n\uff83 i \uff7e \uff67\uff66\n  \uff84 i\n  i \uff85 i \uff80 \uff67\n\uff97\n",
+    "output": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+    ]
+  },
+  "divide 10 by 4": {
+    "source": "trace 10 / 4\n",
+    "glyph": "\uff84 \uff67\uff66 \uff9c \uff6a\n",
+    "output": [
+      "2.5"
+    ]
+  },
+  "is 5 greater than 3": {
+    "source": "trace 5 > 3\n",
+    "glyph": "\uff84 \uff6b \uff7f \uff69\n",
+    "output": [
+      "true"
+    ]
   }
 }

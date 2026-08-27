@@ -38,6 +38,12 @@
 </head>
 <body>
 
+<!-- The page's wall. Behind every other element and marked aria-hidden: it is
+     scenery, and a screen reader should meet the document, not the weather.
+     rain.js fills it from examples.json; if that fetch fails the canvas stays
+     empty and the page reads exactly the same. -->
+<canvas id="page-rain" aria-hidden="true"></canvas>
+
 <!-- The intro. Invisible unless intro.js sets data-intro on <html>, so a
      reader whose JavaScript failed, who has seen it already, or who asked for
      reduced motion gets the page and never knows this element is here.
@@ -49,8 +55,7 @@
 </div>
 
 <header class="masthead">
-  <p class="eyebrow">MATRIXLANG</p>
-  <h1>Explore MatrixLang</h1>
+  <h1>Welcome to the MatrixLang</h1>
   <p class="premise">A real programming language, invented for a film that
   never had one.</p>
 
@@ -64,13 +69,98 @@
 <main>
 
 <div class="tabs" role="tablist" aria-label="About MatrixLang">
-  <button class="tab" role="tab" aria-selected="true"  aria-controls="tab-overview" id="tab-overview-btn">Overview</button>
+  <button class="tab" role="tab" aria-selected="true"  aria-controls="tab-construct" id="tab-construct-btn">The Construct</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="tab-examples" id="tab-examples-btn">Examples</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="tab-why"      id="tab-why-btn">Why It Exists</button>
   <button class="tab" role="tab" aria-selected="false" aria-controls="tab-faces"    id="tab-faces-btn">Two Faces</button>
   <button class="tab" role="tab" aria-selected="false" aria-controls="tab-how"      id="tab-how-btn">How It Works</button>
   <button class="tab" role="tab" aria-selected="false" aria-controls="tab-translit" id="tab-translit-btn">Transliterator</button>
 </div>
 
-<div role="tabpanel" id="tab-overview" aria-labelledby="tab-overview-btn" class="prose" tabindex="0">
+<div role="tabpanel" id="tab-construct" aria-labelledby="tab-construct-btn" tabindex="0">
+
+  <section id="playground">
+    <button id="boot">Load the interpreter and try it</button>
+    <p class="boot-note">About 13&nbsp;MB, fetched once and then cached: real
+    Python, compiled to run in this tab. After it loads nothing you type
+    leaves your machine — there is no server on the other end of this page.</p>
+    <div id="live" hidden>
+      <!-- One column, in the order a reader works in: see the answer, ask
+           for a program, edit what came back, feed it input, run it. The
+           output window leads because the cascade is where a program ends
+           up, and keeping it in view while you edit the question is the
+           whole point of putting a language on a page. -->
+      <div class="console">
+        <p class="field-label">Output</p>
+        <div class="cascade-pane">
+          <button id="cascade-face">Latin</button>
+          <canvas id="cascade" width="960" height="540"></canvas>
+        </div>
+
+        <label for="request">Describe a program</label>
+        <input id="request" placeholder="count from 1 to 10" autocomplete="off">
+        <button id="write">Write it</button>
+        <p id="miss" hidden></p>
+
+        <details id="python-panel">
+          <summary>Or paste Python</summary>
+          <textarea id="python-source" rows="10" spellcheck="false"
+                    placeholder="for x in xs:&#10;    print(x)"></textarea>
+          <button id="translate">Translate it</button>
+        </details>
+
+        <label for="editor">MatrixLang</label>
+        <textarea id="editor" rows="16" spellcheck="false"></textarea>
+        <button id="editor-face">Show glyphs</button>
+        <pre id="editor-glyph" class="glyph" hidden></pre>
+
+        <label for="program-input">Input (one line per <code>jackin</code>)</label>
+        <textarea id="program-input" rows="3" spellcheck="false"
+                  placeholder="Refactoring"></textarea>
+
+        <button id="run">Run it</button>
+
+        <!-- Shown only while a running program is waiting for a line. The
+             prompt is the program's own most recent output, repeated here
+             in readable Latin: the cascade shows glyphs, which is a poor
+             place to read a question. -->
+        <div id="answer-row" hidden>
+          <p id="answer-prompt"></p>
+          <input id="answer" placeholder="your answer" autocomplete="off">
+          <button id="answer-send">Answer</button>
+        </div>
+      </div>
+
+      <details id="operator-panel">
+        <summary>Use Operator instead (needs your own API key)</summary>
+        <p class="warning">
+          Your key is held in this tab's memory only — never saved, never sent
+          anywhere but Anthropic, and gone when you close the page. Anyone
+          asking you to paste an API key into a web page is asking for a lot
+          of trust; this page is open source, and
+          <a href="https://github.com/renilsonjr/matrixlang/blob/main/site/playground.js">playground.js</a>
+          is the file that makes the call.
+        </p>
+        <input id="api-key" type="password" placeholder="sk-ant-..." autocomplete="off">
+        <button id="ask-operator">Ask Operator</button>
+      </details>
+    </div>
+  </section>
+</div>
+
+<div role="tabpanel" id="tab-examples" aria-labelledby="tab-examples-btn" class="prose" tabindex="0" hidden>
+  <h2>Example programs</h2>
+  <p>Every one of these was written by Scribe and then executed, at build
+  time, by the same interpreter this page runs. The source and the output
+  below are what that run produced — none of it is typed by hand, and
+  <a href="https://github.com/renilsonjr/matrixlang/blob/main/tests/test_site_examples.py">a
+  test fails the build</a> if this file and a fresh run ever disagree.</p>
+  <div id="example-list" class="exgrid">
+    <p class="muted">Loading the examples…</p>
+  </div>
+</div>
+
+<div role="tabpanel" id="tab-why" aria-labelledby="tab-why-btn" class="prose" tabindex="0" hidden>
   <p><b>The code in <i>The Matrix</i> was never a programming language.</b>
   This is the one it pretended to have — invented, written down, and made to
   run.</p>
@@ -118,63 +208,6 @@
   <p>Describe a program and Scribe writes it, needing no account and no key.
   Edit what it wrote, or ignore it and type MatrixLang directly. Then run it,
   and watch it fall.</p>
-
-  <section id="playground">
-    <button id="boot">Load the interpreter and try it</button>
-    <div id="live" hidden>
-      <div class="playground-grid">
-        <div class="editor-pane">
-          <label for="request">Describe a program</label>
-          <input id="request" placeholder="count from 1 to 10" autocomplete="off">
-          <button id="write">Write it</button>
-          <p id="miss" hidden></p>
-
-          <details id="python-panel">
-            <summary>Or paste Python</summary>
-            <textarea id="python-source" rows="10" spellcheck="false"
-                      placeholder="for x in xs:&#10;    print(x)"></textarea>
-            <button id="translate">Translate it</button>
-          </details>
-
-          <label for="editor">MatrixLang</label>
-          <textarea id="editor" rows="16" spellcheck="false"></textarea>
-          <button id="editor-face">Show glyphs</button>
-          <pre id="editor-glyph" class="glyph" hidden></pre>
-          <label for="program-input">Input (one line per <code>jackin</code>)</label>
-          <textarea id="program-input" rows="3" spellcheck="false"
-                    placeholder="Refactoring"></textarea>
-          <button id="run">Run it</button>
-          <!-- Shown only while a running program is waiting for a line. The
-               prompt is the program's own most recent output, repeated here
-               in readable Latin: the cascade shows glyphs, which is a poor
-               place to read a question. -->
-          <div id="answer-row" hidden>
-            <p id="answer-prompt"></p>
-            <input id="answer" placeholder="your answer" autocomplete="off">
-            <button id="answer-send">Answer</button>
-          </div>
-        </div>
-        <div class="cascade-pane">
-          <button id="cascade-face">Latin</button>
-          <canvas id="cascade" width="960" height="540"></canvas>
-        </div>
-      </div>
-
-      <details id="operator-panel">
-        <summary>Use Operator instead (needs your own API key)</summary>
-        <p class="warning">
-          Your key is held in this tab's memory only — never saved, never sent
-          anywhere but Anthropic, and gone when you close the page. Anyone
-          asking you to paste an API key into a web page is asking for a lot
-          of trust; this page is open source, and
-          <a href="https://github.com/renilsonjr/matrixlang/blob/main/site/playground.js">playground.js</a>
-          is the file that makes the call.
-        </p>
-        <input id="api-key" type="password" placeholder="sk-ant-..." autocomplete="off">
-        <button id="ask-operator">Ask Operator</button>
-      </details>
-    </div>
-  </section>
 </div>
 
 <div role="tabpanel" id="tab-faces" aria-labelledby="tab-faces-btn" class="prose" tabindex="0" hidden>
@@ -363,6 +396,10 @@ flatline</pre>
         integrity="sha384-i3R37b3tF+HWudsUf1VSEOY2YxwSNMqY8DQa9Z0O3xh+NkJ9o+yjcGyIi5huj+nB"
         crossorigin="anonymous"></script>
 <script src="tabs.js"></script>
+<!-- After tabs.js and before playground.js: it is scenery, so it must not
+     delay the widget that makes the page usable, and it must not wait on
+     the interpreter either. -->
+<script src="rain.js"></script>
 <script src="playground.js"></script>
 
 </body>
