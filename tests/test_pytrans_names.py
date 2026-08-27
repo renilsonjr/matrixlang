@@ -47,6 +47,24 @@ def test_a_tuple_target_never_proves_a_name():
     assert proven('d, e = {"a": 1, "b": 2}\n') == []
 
 
+def test_a_type_parameter_never_proves_a_name():
+    # PEP 695. `def f[d](x)` binds `d` as a TypeVar, and the name lives
+    # in a plain string field exactly as MatchAs's does. Skipped below
+    # 3.12, where the syntax does not parse.
+    import sys
+
+    if sys.version_info < (3, 12):
+        return
+    assert proven('d = {"a": 1}\ndef f[d](x):\n    return x\n') == []
+    assert proven('d = {"a": 1}\ntype d = int\n') == []
+
+
+def test_a_call_keyword_argument_is_not_a_binding():
+    # `f(d=1)` names `d` in an ast.keyword, which binds nothing. Denying
+    # on the field alone would lose this fix for no safety.
+    assert proven('d = {"a": 1}\nf(d=1)\n') == ["d"]
+
+
 def test_a_match_capture_never_proves_a_name():
     # `case d:` binds `d` through MatchAs, which carries the name as a
     # string and has no ast.Name node to find.
