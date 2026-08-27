@@ -385,12 +385,12 @@ its size.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_names.py -v`
-Expected: 19 passed.
+Expected: 18 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
 Run: `pytest`
-Expected: 2192 + 19. Nothing calls `dict_names` yet, so no
+Expected: 2192 + 18. Nothing calls `dict_names` yet, so no
 existing behaviour can have changed.
 
 - [ ] **Step 6: Commit**
