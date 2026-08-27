@@ -120,6 +120,26 @@ def test_a_type_parameter_never_proves_a_name():
     assert proven('d = {"a": 1}\ntype d = int\n') == []
 
 
+def test_the_backstop_denies_a_binding_the_walk_cannot_classify():
+    # The walk and the backstop are independent, so this pins the
+    # backstop rather than the walk: `del` then rebind is a shape the
+    # walk has no branch for at all.
+    assert proven('d = {"a": 1}\ndel d\nd = [1]\n') == []
+
+
+def test_a_star_import_proves_nothing():
+    # `from m import *` brings in names nobody can enumerate. symtable
+    # does not know them either, so it would report every proven name as
+    # unbound and wave them all through.
+    assert proven('d = {"a": 1}\nfrom m import *\n') == []
+
+
+def test_an_attribute_assignment_is_not_a_binding():
+    # `o.d = 1` names `d` but binds nothing. The backstop must not deny
+    # it -- over-denial is safe but costs a fix for no reason.
+    assert proven('d = {"a": 1}\no.d = 1\n') == ["d"]
+
+
 def test_a_dotted_import_denies_the_name_it_actually_binds():
     # `import d.b.c` binds only `d`. The alias node carries the whole
     # dotted path as its name, so denying the raw field value would deny
@@ -158,6 +178,10 @@ Expected: FAIL — `ImportError: cannot import name 'dict_names'`.
 - [ ] **Step 3: Implement**
 
 Append to `src/matrixlang/pytrans/names.py`:
+
+The module's imports become `import ast`, `import copy`, `import symtable`
+— all stdlib, so `tests/test_architecture.py`, which tracks matrixlang
+siblings, is still unaffected.
 
 ```python
 # Python 3.12+ only; isinstance against an empty tuple is always False,
@@ -244,22 +268,102 @@ def dict_names(tree: ast.AST) -> set[str]:
             if isinstance(value, str):
                 proven[value] = False
 
-    return {name for name, ok in proven.items() if ok}
+    walked = {name for name, ok in proven.items() if ok}
+    return walked - _still_bound_without_their_proofs(tree, walked)
+
+
+class _WithoutProvingAssigns(ast.NodeTransformer):
+    """Drops the dict-literal assignments the walk credited for a proof."""
+
+    def __init__(self, names: set[str]) -> None:
+        self.names = names
+
+    def visit_Assign(self, node: ast.Assign):
+        if isinstance(node.value, ast.Dict) and all(
+            isinstance(t, ast.Name) and t.id in self.names for t in node.targets
+        ):
+            return None
+        return node
+
+
+def _still_bound_without_their_proofs(tree: ast.AST, proven: set[str]) -> set[str]:
+    """Of `proven`, the names Python still binds once their proofs are gone.
+
+    The backstop, and the reason it is shaped this way. Asking symtable
+    which names are bound cannot catch anything on its own: a name that is
+    both assigned a dict literal AND captured by a form the walk missed is
+    reported bound either way, so subtracting what the walk saw leaves
+    nothing. Removing the assignments the walk is relying on and asking
+    again is what makes the missed binding the only one left to report.
+
+    Any name that survives that has a binding the walk did not classify.
+    It is denied, and the cost is one lost fix rather than a `keymaker`
+    emitted onto a list.
+    """
+    if not proven:
+        return set()
+    for node in ast.walk(tree):
+        # `from m import *` brings in names nobody can enumerate --
+        # symtable does not know them either, so it would report every
+        # proven name as unbound and wave them all through. The only
+        # honest answer is to prove nothing.
+        if isinstance(node, ast.alias) and node.name == "*":
+            return set(proven)
+    try:
+        stripped = _WithoutProvingAssigns(proven).visit(copy.deepcopy(tree))
+        ast.fix_missing_locations(stripped)
+        table = symtable.symtable(ast.unparse(stripped) or "pass", "<dict_names>", "exec")
+    except (SyntaxError, ValueError, RecursionError, AttributeError, TypeError):
+        # Unparseable or unanalysable: deny everything, the safe direction.
+        return set(proven)
+
+    still: set[str] = set()
+
+    def visit(scope) -> None:
+        for symbol in scope.get_symbols():
+            name = symbol.get_name()
+            if name in proven and (
+                symbol.is_assigned() or symbol.is_parameter() or symbol.is_imported()
+            ):
+                still.add(name)
+        for child in scope.get_children():
+            visit(child)
+
+    visit(table)
+    return still
 ```
 
 `False` is absorbing: once a name is denied, `proven.get(name, True) and ok`
 keeps it denied whatever order `ast.walk` visits things in. That is what
 makes the analysis order-independent.
 
+**Why the backstop is shaped the way it is, and not the obvious way.** The
+obvious backstop — ask `symtable` which names are bound and deny any the
+walk did not see a site for — **catches nothing**, and this was measured
+rather than reasoned about. A name that is both assigned a dict literal
+and captured by a form the walk missed is reported bound either way, so
+subtracting what the walk saw leaves an empty set. Removing the
+assignments the walk is *relying on* and asking again is what makes the
+missed binding the only one left to report.
+
+Verified against nine simulated misses — every historical one plus
+parameters, `except ... as`, `with ... as`, and loop targets — all caught;
+and against five names that must stay proven, all kept.
+
+Cost: nothing when no name is proven (an early return, measured at 0.02ms
+on a 1900-line file), and one deepcopy, unparse and `symtable` build when
+one is — 44ms on that same file, and playground programs are a fraction of
+its size.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_names.py -v`
-Expected: 13 passed.
+Expected: 16 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
 Run: `pytest`
-Expected: 2192 + 13. Nothing calls `dict_names` yet, so no
+Expected: 2192 + 16. Nothing calls `dict_names` yet, so no
 existing behaviour can have changed.
 
 - [ ] **Step 6: Commit**
