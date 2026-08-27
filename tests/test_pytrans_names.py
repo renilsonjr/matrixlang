@@ -59,6 +59,26 @@ def test_a_type_parameter_never_proves_a_name():
     assert proven('d = {"a": 1}\ntype d = int\n') == []
 
 
+def test_the_backstop_denies_a_binding_the_walk_cannot_classify():
+    # The walk and the backstop are independent, so this pins the
+    # backstop rather than the walk: `del` then rebind is a shape the
+    # walk has no branch for at all.
+    assert proven('d = {"a": 1}\ndel d\nd = [1]\n') == []
+
+
+def test_a_star_import_proves_nothing():
+    # `from m import *` brings in names nobody can enumerate. symtable
+    # does not know them either, so it would report every proven name as
+    # unbound and wave them all through.
+    assert proven('d = {"a": 1}\nfrom m import *\n') == []
+
+
+def test_an_attribute_assignment_is_not_a_binding():
+    # `o.d = 1` names `d` but binds nothing. The backstop must not deny
+    # it -- over-denial is safe but costs a fix for no reason.
+    assert proven('d = {"a": 1}\no.d = 1\n') == ["d"]
+
+
 def test_a_dotted_import_denies_the_name_it_actually_binds():
     # `import d.b.c` binds only `d`. The alias node carries the whole
     # dotted path as its name, so denying the raw field value would deny

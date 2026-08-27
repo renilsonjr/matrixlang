@@ -6,6 +6,8 @@ must be guaranteed not to collide with one they did.
 """
 
 import ast
+import copy
+import symtable
 
 
 def bound_names(tree: ast.AST) -> set[str]:
@@ -57,16 +59,16 @@ def dict_names(tree: ast.AST) -> set[str]:
     wrongly proven costs a `keymaker` on a list, which is a runtime error
     this analysis would be introducing. So anything unclear disqualifies.
 
-    Denial is structural rather than a list of node types, which is the
-    second design this had. The first enumerated binding forms and missed
+    Denial is structural rather than a list of node types, with two
+    nodes handled by hand: `ast.keyword`, whose name binds nothing, and
+    `ast.alias`, whose name is a dotted path rather than the identifier
+    it binds. This is the second design this had. The first enumerated binding forms and missed
     four of them in a row -- `match ... case d`, and PEP 695's `type d =`,
     `def f[d]`, `class C[d]` -- every one a binding that carries its name
     as a plain string field where a walk looking for ast.Name finds
     nothing. Denying on the FIELD rather than the node type closes that
     class instead of adding a fifth special case, and covers forms this
-    version of Python does not have yet. Two nodes are handled by hand:
-    `ast.keyword`, whose name binds nothing, and `ast.alias`, whose name
-    is a dotted path rather than the identifier it binds.
+    version of Python does not have yet.
 
     A subscript target is NOT a binding. `d = {}` followed by
     `d["a"] = 1` leaves `d` proven, which matters because building a
@@ -125,4 +127,66 @@ def dict_names(tree: ast.AST) -> set[str]:
             if isinstance(value, str):
                 proven[value] = False
 
-    return {name for name, ok in proven.items() if ok}
+    walked = {name for name, ok in proven.items() if ok}
+    return walked - _still_bound_without_their_proofs(tree, walked)
+
+
+class _WithoutProvingAssigns(ast.NodeTransformer):
+    """Drops the dict-literal assignments the walk credited for a proof."""
+
+    def __init__(self, names: set[str]) -> None:
+        self.names = names
+
+    def visit_Assign(self, node: ast.Assign):
+        if isinstance(node.value, ast.Dict) and all(
+            isinstance(t, ast.Name) and t.id in self.names for t in node.targets
+        ):
+            return None
+        return node
+
+
+def _still_bound_without_their_proofs(tree: ast.AST, proven: set[str]) -> set[str]:
+    """Of `proven`, the names Python still binds once their proofs are gone.
+
+    The backstop, and the reason it is shaped this way. Asking symtable
+    which names are bound cannot catch anything on its own: a name that is
+    both assigned a dict literal AND captured by a form the walk missed is
+    reported bound either way, so subtracting what the walk saw leaves
+    nothing. Removing the assignments the walk is relying on and asking
+    again is what makes the missed binding the only one left to report.
+
+    Any name that survives that has a binding the walk did not classify.
+    It is denied, and the cost is one lost fix rather than a `keymaker`
+    emitted onto a list.
+    """
+    if not proven:
+        return set()
+    for node in ast.walk(tree):
+        # `from m import *` brings in names nobody can enumerate --
+        # symtable does not know them either, so it would report every
+        # proven name as unbound and wave them all through. The only
+        # honest answer is to prove nothing.
+        if isinstance(node, ast.alias) and node.name == "*":
+            return set(proven)
+    try:
+        stripped = _WithoutProvingAssigns(proven).visit(copy.deepcopy(tree))
+        ast.fix_missing_locations(stripped)
+        table = symtable.symtable(ast.unparse(stripped) or "pass", "<dict_names>", "exec")
+    except (SyntaxError, ValueError, RecursionError, AttributeError, TypeError):
+        # Unparseable or unanalysable: deny everything, the safe direction.
+        return set(proven)
+
+    still: set[str] = set()
+
+    def visit(scope) -> None:
+        for symbol in scope.get_symbols():
+            name = symbol.get_name()
+            if name in proven and (
+                symbol.is_assigned() or symbol.is_parameter() or symbol.is_imported()
+            ):
+                still.add(name)
+        for child in scope.get_children():
+            visit(child)
+
+    visit(table)
+    return still
