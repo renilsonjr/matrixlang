@@ -120,6 +120,14 @@ def test_a_type_parameter_never_proves_a_name():
     assert proven('d = {"a": 1}\ntype d = int\n') == []
 
 
+def test_a_dotted_import_denies_the_name_it_actually_binds():
+    # `import d.b.c` binds only `d`. The alias node carries the whole
+    # dotted path as its name, so denying the raw field value would deny
+    # "d.b.c" -- which nobody wrote -- and leave `d` proven.
+    assert proven('d = {"a": 1}\nimport d.b.c\n') == []
+    assert proven('d = {"a": 1}\nimport x.y as d\n') == []
+
+
 def test_a_call_keyword_argument_is_not_a_binding():
     # `f(d=1)` names `d` in an ast.keyword, which binds nothing. Denying
     # on the field alone would lose this fix for no safety.
@@ -169,8 +177,10 @@ def dict_names(tree: ast.AST) -> set[str]:
     wrongly proven costs a `keymaker` on a list, which is a runtime error
     this analysis would be introducing. So anything unclear disqualifies.
 
-    Denial is structural rather than a list of node types, which is the
-    second design this had. The first enumerated binding forms and missed
+    Denial is structural rather than a list of node types, with two
+    nodes handled by hand: `ast.keyword`, whose name binds nothing, and
+    `ast.alias`, whose name is a dotted path rather than the identifier
+    it binds. This is the second design this had. The first enumerated binding forms and missed
     four of them in a row -- `match ... case d`, and PEP 695's `type d =`,
     `def f[d]`, `class C[d]` -- every one a binding that carries its name
     as a plain string field where a walk looking for ast.Name finds
@@ -218,6 +228,13 @@ def dict_names(tree: ast.AST) -> set[str]:
             # The one string-named form whose name IS an ast.Name node.
             deny(node.name)
 
+        if isinstance(node, ast.alias):
+            # The one field whose value is not the identifier it binds:
+            # `import d.b.c` has name="d.b.c" and binds only `d`. Denying
+            # the raw string would deny a name nobody wrote and leave the
+            # real one proven.
+            proven[node.asname or node.name.split(".")[0]] = False
+            continue
         if isinstance(node, ast.keyword):
             # A call's keyword argument name binds nothing: `f(d=1)` must
             # leave a dictionary named `d` proven.
@@ -237,12 +254,12 @@ makes the analysis order-independent.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_names.py -v`
-Expected: 12 passed.
+Expected: 13 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
 Run: `pytest`
-Expected: 2192 + 12. Nothing calls `dict_names` yet, so no
+Expected: 2192 + 13. Nothing calls `dict_names` yet, so no
 existing behaviour can have changed.
 
 - [ ] **Step 6: Commit**
