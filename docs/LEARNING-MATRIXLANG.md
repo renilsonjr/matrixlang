@@ -1099,9 +1099,10 @@ is deliberate, not a bug — do not "fix" it by making `oracle` treat
 `true` and `1` as the same element, since that would break dictionary
 keys the same way.
 
-**`for k in d:` walks a dictionary by index, not by key.** Rule 1 below
-turns a `for` into a counter and `length`, which is exactly right for a
-list and wrong for a dictionary — MatrixLang has no "loop over the keys":
+**`for k in d:` walks a dictionary's keys, using `keymaker` (§8).** Rule 1
+below turns a `for` into a counter and `length`, which is exactly right
+for a list and wrong for a dictionary — the translator recognises a
+dictionary syntactically and reaches for `keymaker` instead:
 
 ```python
 print(translate('d = {"a": 1, "b": 2}\nfor k in d:\n    print(k)\n').source)
@@ -1109,23 +1110,46 @@ print(translate('d = {"a": 1, "b": 2}\nfor k in d:\n    print(k)\n').source)
 
 ```
 construct d = {"a": 1, "b": 2}
+construct ks = keymaker d
 construct n = 0
-dejavu n < length d
-  trace d[n]
+dejavu n < length ks
+  trace ks[n]
   n = n + 1
 flatline
 ```
 
-Run it:
+Run it: `a` then `b`, same as Python — the loop walks the keys, in the
+order they were first written.
+
+This depends on the translator being able to *see* that `d` is a
+dictionary, and it only looks at the syntax that builds and assigns
+`d`, never at a value. A dictionary that arrives as a function parameter
+or as the result of a call cannot be proven that way, so a loop over one
+is still translated as if it were a list — the same shape shown above
+with `d` in place of `ks`, wrong for the same reason. Write `.keys()`
+explicitly when you mean it and the translator cannot see it:
+
+```python
+print(translate(
+    "def totals(d):\n    for k in d.keys():\n        print(k)\n"
+).source)
+```
 
 ```
-matrixlang: [line 4, column 11] no key 0 in this dictionary
+agent totals(d)
+  construct ks = keymaker d
+  construct n = 0
+  dejavu n < length ks
+    trace ks[n]
+    n = n + 1
+  flatline
+flatline
 ```
 
-Loud, so it is allowed — but it points at the generated line rather than
-at what you wrote, which is the least helpful error in this section. If
-you need the keys, keep them in a list beside the dictionary and loop
-over that.
+`.keys()` is supported only as the thing a `for` walks, not as a value —
+Python prints `d.keys()` as `dict_keys(['a'])`, where a MatrixLang list
+prints `["a"]`, so returning it from `keymaker` and calling that
+"the same" would trade one silent difference for another.
 
 ### The three rewrites, and the hoisted `construct`
 
