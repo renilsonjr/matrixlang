@@ -120,11 +120,28 @@ def test_a_type_parameter_never_proves_a_name():
     assert proven('d = {"a": 1}\ntype d = int\n') == []
 
 
-def test_the_backstop_denies_a_binding_the_walk_cannot_classify():
-    # The walk and the backstop are independent, so this pins the
-    # backstop rather than the walk: `del` then rebind is a shape the
-    # walk has no branch for at all.
-    assert proven('d = {"a": 1}\ndel d\nd = [1]\n') == []
+def test_the_backstop_denies_what_a_blind_walk_would_prove():
+    # The backstop exists for binding forms the walk does not know about
+    # -- which, the walk being complete for Python as it stands, cannot
+    # be reached through dict_names at all. So it is called directly with
+    # a proof the walk would never actually make.
+    from matrixlang.pytrans.names import _still_bound_without_their_proofs
+
+    tree = ast.parse('d = {"a": 1}\nmatch xs:\n    case d:\n        pass\n')
+    assert _still_bound_without_their_proofs(tree, {"d"}) == {"d"}
+
+
+def test_a_dict_alone_in_a_block_is_still_proven():
+    # Stripping the proof must not empty the block: an empty `class C:`
+    # or `def f():` does not unparse, symtable refuses the program, and
+    # the failure path denies everything -- including names elsewhere.
+    assert proven('class C:\n    d = {"a": 1}\n') == ["d"]
+    assert proven('def f():\n    d = {"a": 1}\n') == ["d"]
+    assert proven('if c:\n    d = {"a": 1}\n') == ["d"]
+
+
+def test_one_collapsed_block_does_not_deny_unrelated_names():
+    assert proven('class C:\n    d = {"a": 1}\ne = {"b": 2}\n') == ["d", "e"]
 
 
 def test_a_star_import_proves_nothing():
@@ -135,8 +152,10 @@ def test_a_star_import_proves_nothing():
 
 
 def test_an_attribute_assignment_is_not_a_binding():
-    # `o.d = 1` names `d` but binds nothing. The backstop must not deny
-    # it -- over-denial is safe but costs a fix for no reason.
+    # `o.d = 1` names `d` but binds nothing. Guards the Assign-target
+    # walk restricting to ast.Name, and would also fail if "attr" were
+    # ever added to _NAME_FIELDS. Passes with the backstop disabled --
+    # it is not a backstop test.
     assert proven('d = {"a": 1}\no.d = 1\n') == ["d"]
 
 
@@ -273,7 +292,15 @@ def dict_names(tree: ast.AST) -> set[str]:
 
 
 class _WithoutProvingAssigns(ast.NodeTransformer):
-    """Drops the dict-literal assignments the walk credited for a proof."""
+    """Replaces the dict-literal assignments the walk credited for a proof.
+
+    `pass` rather than deletion, and that is not a style choice. Removing
+    the only statement in a block leaves an empty body, which `ast.unparse`
+    renders as invalid source -- `class C:` with nothing under it -- and
+    `symtable` then refuses the whole program. The failure path denies
+    every proven name, so one `def f(): d = {...}` would cost every fix in
+    the file, including names with nothing to do with it.
+    """
 
     def __init__(self, names: set[str]) -> None:
         self.names = names
@@ -282,7 +309,7 @@ class _WithoutProvingAssigns(ast.NodeTransformer):
         if isinstance(node.value, ast.Dict) and all(
             isinstance(t, ast.Name) and t.id in self.names for t in node.targets
         ):
-            return None
+            return ast.copy_location(ast.Pass(), node)
         return node
 
 
@@ -358,12 +385,12 @@ its size.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `pytest tests/test_pytrans_names.py -v`
-Expected: 16 passed.
+Expected: 19 passed.
 
 - [ ] **Step 5: Run the whole suite**
 
 Run: `pytest`
-Expected: 2192 + 16. Nothing calls `dict_names` yet, so no
+Expected: 2192 + 19. Nothing calls `dict_names` yet, so no
 existing behaviour can have changed.
 
 - [ ] **Step 6: Commit**
