@@ -23,7 +23,7 @@ from matrixlang.render import render_ascii
 from matrixlang.tokens import TokenType
 
 from matrixlang.pytrans.refuse import Refusal, Refusals, Translated, _Unsupported
-from matrixlang.pytrans.names import bound_names, free_name
+from matrixlang.pytrans.names import bound_names, dict_names, free_name
 from matrixlang.pytrans.comprehensions import rewrite_comprehensions
 from matrixlang.pytrans.loop_else import rewrite_loop_else
 
@@ -154,7 +154,7 @@ def translate(source: str) -> Translated | Refusals:
         except TooDeepError:
             rewritten.append(statement)
     tree.body = rewritten
-    walker = _Translator(taken)
+    walker = _Translator(taken, dict_names(tree))
     statements = walker.body(tree.body)
     if walker.refusals:
         # Only computed here, not unconditionally above: its only consumer
@@ -196,7 +196,9 @@ def _position(source: str, index: int) -> tuple[int, int]:
 
 
 class _Translator:
-    def __init__(self, taken: set[str] | None = None) -> None:
+    def __init__(self, taken: set[str] | None = None,
+                 dicts: set[str] | None = None) -> None:
+        self.dicts: set[str] = dicts or set()
         self.refusals: list[Refusal] = []
         # One set of bound names per MatrixLang scope. An agent body is its
         # own scope, so a name declared inside one does not collide with the
@@ -603,35 +605,48 @@ class _Translator:
             # straight off the ast, `for v in row:` emitted `length row` for
             # a `row` that was never declared, and the most ordinary nested
             # loop there is died with "'row' is not declared".
-            value = self.expression(node.iter)
-            if isinstance(value, Name):
-                holder = value.ident
-                if _rebinds(node.body, holder):
-                    # The list path's counterpart to hoisting a `range`
-                    # bound, and it has to be a refusal rather than a hoist.
-                    # Python's `for` holds the LIST OBJECT it was given, so
-                    # rebinding the name inside the body changes nothing;
-                    # indexing the name, as the output does, follows the
-                    # rebinding and walks a different list from the next
-                    # iteration on. Hoisting `xs` into a generated holder
-                    # would fix that shape and break another -- `xs` growing
-                    # by `xs.append(v)` inside its own loop runs forever in
-                    # Python, and the holder would quietly make it finish.
-                    # There is no output that is right for both, so this one
-                    # is named and refused.
-                    raise _Unsupported(
-                        Refusal(
-                            f"the loop reassigns `{holder}`, the list it walks; "
-                            "copy it to another name first",
-                            node.iter.lineno,
-                            node.iter.col_offset,
-                        )
-                    )
-            else:
-                # Evaluated once. Substituting a call inline would run it
-                # on every iteration -- a different program.
-                holder = self._fresh("xs")
+            keys_of = _dict_keys_iterable(node.iter, self.dicts)
+            if keys_of is not None:
+                # A dictionary iterates its KEYS, and the desugaring below
+                # indexes by an integer counter -- right for a list or a
+                # string, wrong for a dictionary. `keymaker` turns it into
+                # the list of keys the loop should walk. Hoisted like any
+                # other non-name iterable, which is also what makes
+                # rebinding the dictionary inside the body harmless, the
+                # way Python's `for` holding the object it was given is.
+                value = Unary(TokenType.KEYMAKER, self.expression(keys_of))
+                holder = self._fresh("ks")
                 before.append(Declare(holder, value))
+            else:
+                value = self.expression(node.iter)
+                if isinstance(value, Name):
+                    holder = value.ident
+                    if _rebinds(node.body, holder):
+                        # The list path's counterpart to hoisting a `range`
+                        # bound, and it has to be a refusal rather than a hoist.
+                        # Python's `for` holds the LIST OBJECT it was given, so
+                        # rebinding the name inside the body changes nothing;
+                        # indexing the name, as the output does, follows the
+                        # rebinding and walks a different list from the next
+                        # iteration on. Hoisting `xs` into a generated holder
+                        # would fix that shape and break another -- `xs` growing
+                        # by `xs.append(v)` inside its own loop runs forever in
+                        # Python, and the holder would quietly make it finish.
+                        # There is no output that is right for both, so this one
+                        # is named and refused.
+                        raise _Unsupported(
+                            Refusal(
+                                f"the loop reassigns `{holder}`, the list it walks; "
+                                "copy it to another name first",
+                                node.iter.lineno,
+                                node.iter.col_offset,
+                            )
+                        )
+                else:
+                    # Evaluated once. Substituting a call inline would run it
+                    # on every iteration -- a different program.
+                    holder = self._fresh("xs")
+                    before.append(Declare(holder, value))
             self.substitutions[node.target.id] = Index(Name(holder), Name(counter))
             before.append(Declare(counter, NumberLiteral(Decimal(0))))
             condition = Binary(
@@ -1085,6 +1100,20 @@ class _Translator:
             getattr(where, "col_offset", 0),
             idiom if idiom is not None else _IDIOM.get(name),
         )
+
+
+def _dict_keys_iterable(node: ast.expr, dicts: set[str]) -> ast.expr | None:
+    """The expression whose KEYS this iterable stands for, or None.
+
+    Read off the raw ast, BEFORE expression() -- that call is what raises
+    the existing `.keys()` refusal, so a branch placed after it never
+    runs. Task 3 adds the `.keys()` case here.
+    """
+    if isinstance(node, ast.Dict):
+        return node
+    if isinstance(node, ast.Name) and node.id in dicts:
+        return node
+    return None
 
 
 def _is_input_call(node: ast.expr) -> bool:
