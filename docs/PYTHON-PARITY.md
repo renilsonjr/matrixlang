@@ -199,6 +199,51 @@ side-effecting call, which is most of them, so it is accepted rather
 than closed. Both differences are pinned by tests so they stay known
 quantities.
 
+### 7. `for ... else` and `while ... else` — **done**
+
+Python's loop-else runs its `else` body only when the loop finished without
+a `break`. The way anyone writes that by hand — a flag set beside the
+`break`, tested after the loop — already translates and runs correctly,
+including nested inside another loop, where `_hoist_declares` lifts the
+flag out of the loop body on its own. A new pass, `pytrans.loop_else`,
+rewrites the construct into that flag pattern in Python-AST space, before
+translation starts, the same way the comprehension pass rewrites a
+comprehension into the loop it means. `_Translator` was not touched and
+never learns what a loop-else is — Python in, Python out, tested with
+`ast.unparse` and no translator involved.
+
+This reverses a written decision.
+`docs/superpowers/plans/2026-08-23-loop-control.md:40` said loop-else
+stays refused, because "Python's loop-else runs only when no `break`
+fired, and that interaction is exactly what the existing refusals close
+off." That was correct when written — `break` itself was still being
+added, and deferring an interaction with an unfinished feature was the
+right call. It does not survive the shipped code: the interaction was
+never actually unhandled, only unwritten, and once `break` existed the
+flag pattern loop-else desugars to needed nothing new from the
+translator at all.
+
+Two things about the rewrite are worth naming. It emits `broke == False`,
+not `not broke` — MatrixLang has no truthiness and refuses a bare name as
+a condition, so the natural spelling would have produced output that
+refuses itself. And a loop whose body cannot `break` gets no flag at
+all: its `else` always runs regardless, so the pass emits the else body
+straight after the loop rather than writing a flag that is set once,
+never changed, and tested to a foregone conclusion — a program a learner
+would read and have to explain the pointlessness of.
+
+Still refused: `async for ... else` (async is refused wholesale, and the
+pass leaves it alone rather than carving out an exception to that) and
+`try ... else` (a different construct, on a statement already refused
+wholesale).
+
+The walker's own `orelse` checks in `_for` and `_while` (`translate.py`)
+stay in place, and they are not dead code even though the pass runs
+first: when a statement is too deep for the pass's own recursion guard,
+`translate()` hands the walker the original statement, `else` still
+attached, and those checks are what stop the else body vanishing from
+the output silently rather than being named in a refusal.
+
 ---
 
 ## Tier 2 — real, workaroundable, unscheduled
