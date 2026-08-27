@@ -50,7 +50,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir -p _site
-          cp site/index.html site/style.css site/layout.js site/intro.js site/tabs.js site/playground.js site/glue.py site/examples.json site/intro.json _site/
+          cp site/index.html site/style.css site/layout.js site/intro.js site/tabs.js site/rain.js site/playground.js site/glue.py site/examples.json site/intro.json _site/
           # The typeface, and the licence that has to travel with it.
           cp -R site/fonts _site/fonts
           # Copied, never forked. cascade.js may re-implement presentation;

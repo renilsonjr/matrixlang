@@ -87,10 +87,16 @@
 
 * { box-sizing: border-box; }
 
+html { background: var(--bg); }
+
 body {
   margin: 0;
   padding: 0 1.25rem 4rem;
-  background: var(--bg);
+  /* Transparent, not --bg: the wall is a fixed canvas behind the document,
+     and a painted body would hide it. The colour moves up to <html> so the
+     page is still the right colour before the canvas has drawn a frame, and
+     for a reader whose JavaScript never ran. */
+  background: transparent;
   color: var(--text);
   font: 17px/1.65 var(--prose);
   /* A long unbroken token in prose must wrap rather than widen the page. */
@@ -120,10 +126,6 @@ body {
   margin: 0 auto 2rem;
 }
 
-.playground-grid {
-  display: block; /* stacked until the wide band applies */
-}
-
 .masthead { padding: 3.5rem 0 2.5rem; }
 
 .eyebrow {
@@ -147,16 +149,26 @@ h1 {
   margin: 0;
   color: var(--head);
   font-family: var(--mono);
-  font-size: 1.7rem;
+  /* Fluid rather than fixed: this is the first thing on the page now, and a
+     1.7rem line that filled a narrow column looks like a caption once the
+     column runs to the window's edge. */
+  font-size: clamp(2rem, 6.4vw, 4rem);
   font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: -0.02em;
+  line-height: 1.04;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-transform: uppercase;
+  /* The glow is the one piece of set dressing in the type. Two shadows: a
+     tight one for the phosphor edge, a wide one for the bloom. */
+  text-shadow: 0 0 20px rgba(0, 255, 65, 0.55), 0 0 52px rgba(0, 255, 65, 0.26);
 }
 
 .premise {
-  margin: 1rem 0 0;
+  margin: 1rem auto 0;
+  max-width: 34rem;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 0.95rem;
+  text-align: center;
 }
 
 h2 {
@@ -283,31 +295,35 @@ pre {
 
 .tabs {
   display: flex;
-  gap: 2px;
-  margin: 0 auto 1.5rem;
-  padding: 2px;
-  background: var(--panel);
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 0 auto 1.9rem;
+  padding: 0;
+  background: none;
+  border: 0;
 }
 
 .tab {
   margin: 0;
-  padding: 0.5rem 0.9rem;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--muted);
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--dim);
+  border-radius: 2px;
+  /* Not transparent: a chip sits over the wall, and unreadable navigation is
+     a worse trade than a little less atmosphere. */
+  background: rgba(5, 10, 7, 0.72);
+  color: var(--head);
   font: 11px/1.2 var(--mono);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
 }
-.tab:hover { color: var(--head); background: #08120c; }
+.tab:hover { color: #fff; border-color: var(--green); box-shadow: 0 0 12px rgba(0, 255, 65, 0.28); }
 .tab[aria-selected="true"] {
-  color: var(--green);
-  background: #0a1a0f;
+  color: #fff;
+  border-color: var(--green);
+  box-shadow: 0 0 14px rgba(0, 255, 65, 0.32);
 }
 
 /* ---- the transliterator ---- */
@@ -635,12 +651,6 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
     grid-template-columns: 1fr 1fr;
     gap: 1.75rem;
   }
-  .playground-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-    gap: 1.75rem;
-    align-items: start;
-  }
 }
 
 #layout-switch {
@@ -666,4 +676,137 @@ footer { border-top: 1px solid var(--edge); margin-top: 4rem; padding-top: 0.5re
 #layout-switch button.active {
   color: var(--green);
   background: #0a1a0f;
+}
+
+
+/* ---------------------------------------------------------------------- */
+/* The front page: one console over a wall.                                */
+/*                                                                          */
+/* The playground used to be two columns with the cascade beside the editor,*/
+/* inside the reading measure. It is now a single column that runs close to */
+/* the window's edge, with the output window on top, and the wall moved out */
+/* from behind the editor to behind the whole page.                         */
+
+#page-rain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Scenery must never eat a click meant for the page above it. */
+  pointer-events: none;
+}
+
+/* Everything that is the document sits over the wall. Stated on the three
+   landmarks rather than on `*`, so a stacking context is not created inside
+   the console, where the answer row and the glyph face rely on normal flow. */
+.masthead,
+main,
+footer { position: relative; z-index: 1; }
+
+.masthead { text-align: center; }
+
+/* The console. Opaque on purpose: the wall behind the page is atmosphere,
+   and a wall showing through the box you are trying to type code into is
+   not. --console is its own token rather than --page because this box is
+   not the reading column and should not inherit its measure argument. */
+:root { --console: 110rem; }
+
+.console {
+  max-width: var(--console);
+  margin: 0 auto;
+  padding: 1.35rem 1.5rem 1.75rem;
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  border-radius: 5px;
+  box-shadow: 0 0 34px rgba(0, 0, 0, 0.85), 0 0 18px rgba(0, 255, 65, 0.10);
+}
+
+/* `label` already carries this; the output window is a canvas, which cannot
+   be labelled by one. */
+.field-label {
+  display: block;
+  margin: 0 0 0.42rem;
+  color: var(--muted);
+  font: 11px/1.2 var(--mono);
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.boot-note {
+  max-width: 46rem;
+  margin: 0.75rem auto 1.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* The output window. Its face toggle doubles as the window's title bar —
+   one element rather than a bar plus a button inside it. */
+.cascade-pane {
+  margin: 0 0 0.4rem;
+  background: #02050a;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#cascade-face {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  border-radius: 0;
+  background: #060b10;
+  text-align: right;
+}
+#cascade-face:hover { background: #0a1410; }
+#cascade {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+/* ---- the Examples panel ---- */
+
+.exgrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  margin: 1.5rem 0 0;
+}
+
+.ex {
+  padding: 0.9rem 1rem 1rem;
+  background: #04080a;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+}
+.ex h3 {
+  margin: 0 0 0.6rem;
+  color: var(--head);
+  font: 700 0.82rem/1.3 var(--mono);
+  letter-spacing: 0.04em;
+}
+.ex .source,
+.ex .output {
+  margin: 0 0 0.6rem;
+  padding: 0.6rem 0.7rem;
+  background: #02050a;
+  border: 1px solid #101a20;
+  border-radius: 2px;
+  font: 12px/1.55 var(--mono);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.ex .source { color: var(--white); }
+/* The output is what the interpreter printed, so it is the green one. */
+.ex .output { color: var(--green); }
+.ex-load { margin: 0; }
+
+/* One column on a phone, whatever the auto-fill would have allowed. */
+@media (max-width: 30rem) {
+  .exgrid { grid-template-columns: 1fr; }
 }
