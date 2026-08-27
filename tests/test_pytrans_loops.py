@@ -101,9 +101,25 @@ def test_a_name_first_bound_inside_a_loop_is_hoisted():
     assert "  total = xs[n]" in out
 
 
-def test_for_else_is_refused():
+def test_a_for_else_with_no_break_translates():
+    # loop_else.py now rewrites this before the walker ever sees an
+    # `orelse` -- no `break` means the else always runs, so the pass
+    # emits it straight after the loop with no flag at all. This test
+    # used to pin the refusal; see test_pytrans_differential.py's
+    # loop-else tests for the cases with a `break`, and
+    # test_pytrans_refuse.py's test_a_loop_else_too_deep_to_rewrite_still_refuses
+    # for the refusal this construct still earns when the pass itself
+    # declines.
     source = "xs = [1]\nfor x in xs:\n    print(x)\nelse:\n    print(2)\n"
-    assert "for ... else" in refused(source)[0].idiom
+    assert ml(source) == (
+        "construct xs = [1]\n"
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  trace xs[n]\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace 2\n"
+    )
 
 
 

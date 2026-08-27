@@ -118,6 +118,10 @@ and `:248`). This closes the one interaction where adding `break` would
 otherwise silently change meaning, since Python's loop-else runs only when no
 `break` fired.
 
+> **Reversed 2026-08-26.** Once `break` existed, this interaction was already
+> handled rather than unhandled, and support for `for ... else` / `while ...
+> else` shipped. See `docs/superpowers/specs/2026-08-26-loop-else-design.md`.
+
 ### The `for` collision, and the rewrite
 
 MatrixLang has no `for`. The translator desugars Python's into a counter plus
@@ -194,6 +198,8 @@ element, which no structural assertion on the output text would catch.
 - **Labelled break**, or breaking more than one level. Python has neither.
 - **`for ... else` / `while ... else`.** Already refused, and this change does
   not alter that.
+  (**Reversed 2026-08-26** — see `docs/superpowers/specs/2026-08-26-loop-else-design.md`;
+  a later change added support.)
 - **`wake`/`glitch` as expressions.** They are statements. `construct x = wake`
   is a parse error.
 - **Anything about `in` over a list, or numbers.** Register items 3 and 4, each

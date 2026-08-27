@@ -128,6 +128,34 @@ def test_a_deep_statement_does_not_cost_its_siblings_their_rewrite():
     assert result.items[0].line == 1
 
 
+def test_a_loop_else_too_deep_to_rewrite_still_refuses():
+    # The pass declines a statement it cannot walk and hands the walker
+    # the ORIGINAL, `else` still attached -- so the walker's orelse
+    # refusal is what stops the else body vanishing from the output
+    # without a word. 350 terms is deliberate: it is inside the measured
+    # window where the pass declines but the walk still succeeds. At 900
+    # the walker refuses for depth anyway and this test passed with the
+    # raise deleted.
+    source = "for x in [" + "1 + " * 350 + "1]:\n    break\nelse:\n    print(999)\n"
+    result = translate(source)
+    assert isinstance(result, Refusals), result
+    assert result.items[0].idiom == "this `for ... else` is too deeply nested to rewrite"
+
+
+def test_a_while_else_too_deep_to_rewrite_still_refuses():
+    # The `while` twin of the test above. Its raise had no coverage at
+    # all, and deleting it dropped an else body just as silently.
+    source = (
+        "while [" + "1 + " * 350 + "1][0] < 2:\n"
+        "    break\n"
+        "else:\n"
+        "    print(999)\n"
+    )
+    result = translate(source)
+    assert isinstance(result, Refusals), result
+    assert result.items[0].idiom == "this `while ... else` is too deeply nested to rewrite"
+
+
 def test_the_rewrite_runs_against_a_copy_not_the_statement_itself():
     # `_Hoister` is a NodeTransformer: it replaces `BinOp.left` in place as
     # soon as it is visited, before `BinOp.right` -- the 700-deep chain
@@ -398,21 +426,29 @@ def test_a_bare_continue_outside_a_loop_now_translates():
     assert caught.value.column == 1
 
 
-def test_loop_else_is_still_refused():
-    # Python's loop-else runs only when no `break` fired. Adding `break`
-    # without keeping this refusal would let a `for ... else` translate
-    # into something that quietly means the wrong thing.
-    #
-    # "for ... else" is carried in .idiom, not .reason -- self._no()'s
-    # reason falls back to _DESCRIBE.get("For", _UNNAMED), and "For" has
-    # no _DESCRIBE entry, so the reason is the generic "this construct
-    # cannot be translated". test_for_else_is_refused in
-    # test_pytrans_loops.py already checks .idiom for the plain (no
-    # `break`) case; this one checks the same field so it agrees with
-    # that established convention.
+def test_loop_else_now_translates_via_the_flag_pattern():
+    # Python's loop-else runs only when no `break` fired. This used to be
+    # the test pinning that `for ... else` refuses outright; loop_else.py
+    # (this project's flag-pattern rewrite) now turns it into that exact
+    # flag before the walker ever sees an `orelse`, so it translates
+    # rather than refuses. The walker's own `orelse` refusal is still
+    # very much alive -- see
+    # test_pytrans_refuse.py::test_a_loop_else_too_deep_to_rewrite_still_refuses,
+    # which reaches it for a statement the pass declines to rewrite.
     result = translate("for x in xs:\n    break\nelse:\n    print(1)\n")
-    assert isinstance(result, Refusals)
-    assert "for ... else" in result.items[0].idiom
+    assert isinstance(result, Translated)
+    assert result.source == (
+        "construct broke = false\n"
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  broke = true\n"
+        "  wake\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "redpill broke == false\n"
+        "  trace 1\n"
+        "flatline\n"
+    )
 
 
 FIND_BOOK = """def find_book(books, term):
