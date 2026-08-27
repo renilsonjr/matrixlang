@@ -132,7 +132,15 @@ def dict_names(tree: ast.AST) -> set[str]:
 
 
 class _WithoutProvingAssigns(ast.NodeTransformer):
-    """Drops the dict-literal assignments the walk credited for a proof."""
+    """Replaces the dict-literal assignments the walk credited for a proof.
+
+    `pass` rather than deletion, and that is not a style choice. Removing
+    the only statement in a block leaves an empty body, which `ast.unparse`
+    renders as invalid source -- `class C:` with nothing under it -- and
+    `symtable` then refuses the whole program. The failure path denies
+    every proven name, so one `def f(): d = {...}` would cost every fix in
+    the file, including names with nothing to do with it.
+    """
 
     def __init__(self, names: set[str]) -> None:
         self.names = names
@@ -141,7 +149,7 @@ class _WithoutProvingAssigns(ast.NodeTransformer):
         if isinstance(node.value, ast.Dict) and all(
             isinstance(t, ast.Name) and t.id in self.names for t in node.targets
         ):
-            return None
+            return ast.copy_location(ast.Pass(), node)
         return node
 
 

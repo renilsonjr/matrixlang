@@ -59,11 +59,28 @@ def test_a_type_parameter_never_proves_a_name():
     assert proven('d = {"a": 1}\ntype d = int\n') == []
 
 
-def test_the_backstop_denies_a_binding_the_walk_cannot_classify():
-    # The walk and the backstop are independent, so this pins the
-    # backstop rather than the walk: `del` then rebind is a shape the
-    # walk has no branch for at all.
-    assert proven('d = {"a": 1}\ndel d\nd = [1]\n') == []
+def test_the_backstop_denies_what_a_blind_walk_would_prove():
+    # The backstop exists for binding forms the walk does not know about
+    # -- which, the walk being complete for Python as it stands, cannot
+    # be reached through dict_names at all. So it is called directly with
+    # a proof the walk would never actually make.
+    from matrixlang.pytrans.names import _still_bound_without_their_proofs
+
+    tree = ast.parse('d = {"a": 1}\nmatch xs:\n    case d:\n        pass\n')
+    assert _still_bound_without_their_proofs(tree, {"d"}) == {"d"}
+
+
+def test_a_dict_alone_in_a_block_is_still_proven():
+    # Stripping the proof must not empty the block: an empty `class C:`
+    # or `def f():` does not unparse, symtable refuses the program, and
+    # the failure path denies everything -- including names elsewhere.
+    assert proven('class C:\n    d = {"a": 1}\n') == ["d"]
+    assert proven('def f():\n    d = {"a": 1}\n') == ["d"]
+    assert proven('if c:\n    d = {"a": 1}\n') == ["d"]
+
+
+def test_one_collapsed_block_does_not_deny_unrelated_names():
+    assert proven('class C:\n    d = {"a": 1}\ne = {"b": 2}\n') == ["d", "e"]
 
 
 def test_a_star_import_proves_nothing():
@@ -74,8 +91,10 @@ def test_a_star_import_proves_nothing():
 
 
 def test_an_attribute_assignment_is_not_a_binding():
-    # `o.d = 1` names `d` but binds nothing. The backstop must not deny
-    # it -- over-denial is safe but costs a fix for no reason.
+    # `o.d = 1` names `d` but binds nothing. Guards the Assign-target
+    # walk restricting to ast.Name, and would also fail if "attr" were
+    # ever added to _NAME_FIELDS. Passes with the backstop disabled --
+    # it is not a backstop test.
     assert proven('d = {"a": 1}\no.d = 1\n') == ["d"]
 
 
