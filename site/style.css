@@ -745,7 +745,15 @@ footer { position: relative; z-index: 1; }
 /* The output window. Its face toggle doubles as the window's title bar —
    one element rather than a bar plus a button inside it. */
 .cascade-pane {
-  margin: 0 0 0.4rem;
+  /* Capped against the viewport, not the console. The console runs nearly
+     the full width now, and a 16:9 canvas that wide is taller than the
+     screen -- a reader would land on a title and an empty box, and have to
+     scroll past a window with nothing in it yet to reach the field they
+     came to type in. Bounding the WIDTH keeps the ratio intact, which is
+     what stops cascade.js's ResizeObserver feeding its own output back in
+     (see #cascade below). 76vh of width is 43vh of height. */
+  max-width: min(100%, 76vh);
+  margin: 0 auto 0.4rem;
   background: #02050a;
   border: 1px solid var(--edge);
   border-radius: 3px;
