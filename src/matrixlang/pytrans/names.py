@@ -64,7 +64,9 @@ def dict_names(tree: ast.AST) -> set[str]:
     as a plain string field where a walk looking for ast.Name finds
     nothing. Denying on the FIELD rather than the node type closes that
     class instead of adding a fifth special case, and covers forms this
-    version of Python does not have yet.
+    version of Python does not have yet. Two nodes are handled by hand:
+    `ast.keyword`, whose name binds nothing, and `ast.alias`, whose name
+    is a dotted path rather than the identifier it binds.
 
     A subscript target is NOT a binding. `d = {}` followed by
     `d["a"] = 1` leaves `d` proven, which matters because building a
@@ -105,6 +107,14 @@ def dict_names(tree: ast.AST) -> set[str]:
         elif isinstance(node, _TYPE_ALIAS):
             # The one string-named form whose name IS an ast.Name node.
             deny(node.name)
+
+        if isinstance(node, ast.alias):
+            # The one field whose value is not the identifier it binds:
+            # `import d.b.c` has name="d.b.c" and binds only `d`. Denying
+            # the raw string would deny a name nobody wrote and leave the
+            # real one proven.
+            proven[node.asname or node.name.split(".")[0]] = False
+            continue
 
         if isinstance(node, ast.keyword):
             # A call's keyword argument name binds nothing: `f(d=1)` must

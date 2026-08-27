@@ -59,6 +59,14 @@ def test_a_type_parameter_never_proves_a_name():
     assert proven('d = {"a": 1}\ntype d = int\n') == []
 
 
+def test_a_dotted_import_denies_the_name_it_actually_binds():
+    # `import d.b.c` binds only `d`. The alias node carries the whole
+    # dotted path as its name, so denying the raw field value would deny
+    # "d.b.c" -- which nobody wrote -- and leave `d` proven.
+    assert proven('d = {"a": 1}\nimport d.b.c\n') == []
+    assert proven('d = {"a": 1}\nimport x.y as d\n') == []
+
+
 def test_a_call_keyword_argument_is_not_a_binding():
     # `f(d=1)` names `d` in an ast.keyword, which binds nothing. Denying
     # on the field alone would lose this fix for no safety.
