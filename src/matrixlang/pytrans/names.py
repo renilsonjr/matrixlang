@@ -1,8 +1,15 @@
-"""Names the translator has to invent, and how they avoid the reader's.
+"""Two questions about names the translator cannot answer from a token.
 
-A `for` loop needs a counter, and an iterable that is not already a name
-needs somewhere to live. Both are names the reader never wrote, so both
-must be guaranteed not to collide with one they did.
+The first: names the translator has to invent, and how they avoid the
+reader's. A `for` loop needs a counter, and an iterable that is not
+already a name needs somewhere to live. Both are names the reader never
+wrote, so both must be guaranteed not to collide with one they did.
+
+The second: which of the reader's OWN names hold a dictionary. The
+translator carries no type information and never evaluates anything, so
+`dict_names` proves this from syntax alone, conservatively — a name
+left unproven costs a fix, a name proven wrongly costs a runtime error
+this analysis would itself be introducing.
 """
 
 import ast
@@ -181,8 +188,16 @@ def _still_bound_without_their_proofs(tree: ast.AST, proven: set[str]) -> set[st
         ast.fix_missing_locations(stripped)
         table = symtable.symtable(ast.unparse(stripped) or "pass", "<dict_names>", "exec")
     except (SyntaxError, ValueError, RecursionError, AttributeError, TypeError):
-        # Unparseable or unanalysable: deny everything, the safe direction.
-        return set(proven)
+        # Fall back to the walk, which is complete for Python as it
+        # stands -- an exhaustive hunt over 192 binding forms could not
+        # falsify it. The backstop exists for binding forms Python has
+        # not shipped yet, so losing it here is exactly the behaviour
+        # this module had before the backstop was added, and that was
+        # reviewed sound. Denying everything instead would silently
+        # switch the whole fix off for any file containing one long
+        # expression, anywhere -- which is the defect this branch exists
+        # to close.
+        return set()
 
     still: set[str] = set()
 

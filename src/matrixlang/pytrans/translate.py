@@ -1119,6 +1119,13 @@ def _dict_keys_iterable(node: ast.expr, dicts: set[str]) -> ast.expr | None:
         and node.func.attr == "keys"
         and not node.args
         and not node.keywords
+        # A literal receiver that plainly is not a dict -- `[1, 2].keys()`,
+        # `"abc".keys()`, `(1).keys()` -- must keep falling through to the
+        # ordinary `.keys()` refusal below, not translate to a `keymaker`
+        # that dies at runtime naming a keyword the reader never wrote. A
+        # name is left alone: it is the unprovable case this feature
+        # exists for, and could genuinely hold a dictionary.
+        and not isinstance(node.func.value, (ast.List, ast.Tuple, ast.Set, ast.Constant))
     ):
         return node.func.value
     return None

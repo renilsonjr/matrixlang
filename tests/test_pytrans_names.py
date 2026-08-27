@@ -39,11 +39,11 @@ def test_a_loop_target_of_that_name_disqualifies_it():
 
 
 def test_a_tuple_target_never_proves_a_name():
-    # The right-hand side must be a dict LITERAL, or this never reaches
-    # the `isinstance(target, ast.Name)` guard it exists to pin -- it
-    # would fail on the value check instead and the guard could be
-    # deleted with every test still green. Unpacking a dict binds its
-    # KEYS, so here `d` is the string "a", not a dictionary.
+    # Pins the outcome, not the mechanism: the walk's
+    # `isinstance(target, ast.Name)` guard could be deleted and this
+    # would still pass, since the backstop denies `d` and `e` on its own
+    # once symtable sees them assigned. Unpacking a dict binds its KEYS,
+    # so here `d` is the string "a", not a dictionary.
     assert proven('d, e = {"a": 1, "b": 2}\n') == []
 
 
@@ -99,9 +99,13 @@ def test_an_attribute_assignment_is_not_a_binding():
 
 
 def test_a_dotted_import_denies_the_name_it_actually_binds():
-    # `import d.b.c` binds only `d`. The alias node carries the whole
-    # dotted path as its name, so denying the raw field value would deny
-    # "d.b.c" -- which nobody wrote -- and leave `d` proven.
+    # Pins the outcome, not the mechanism: this passes even with the
+    # dotted-import special case reverted, because the backstop denies
+    # `d` on its own once symtable sees it imported -- the backstop is
+    # the second line of defence, not this test. `import d.b.c` binds
+    # only `d`. The alias node carries the whole dotted path as its
+    # name, so denying the raw field value would deny "d.b.c" -- which
+    # nobody wrote -- and leave `d` proven.
     assert proven('d = {"a": 1}\nimport d.b.c\n') == []
     assert proven('d = {"a": 1}\nimport x.y as d\n') == []
 

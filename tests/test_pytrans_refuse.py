@@ -986,3 +986,24 @@ def test_keys_outside_a_for_iterable_still_refuses():
     result = translate('d = {"a": 1}\nprint(d.keys())\n')
     assert isinstance(result, Refusals), result
     assert "`.keys()`" in result.items[0].reason
+
+
+def test_keys_on_a_literal_that_is_not_a_dict_still_refuses():
+    # `[1, 2].keys()` is a `TypeError` at runtime in Python, but a list
+    # LITERAL receiver is provable right here in the ast -- unlike a bare
+    # name, which could genuinely hold a dictionary. Emitting `keymaker`
+    # on it anyway would trade a clean refusal for `'keymaker' takes a
+    # dictionary, got list`, naming a keyword the reader never wrote.
+    result = translate("for k in [1, 2].keys():\n    print(k)\n")
+    assert isinstance(result, Refusals), result
+    assert "`.keys()`" in result.items[0].reason
+
+
+def test_keys_with_an_argument_still_refuses():
+    # `d.keys(1)` is a `TypeError` in Python -- `dict.keys` takes no
+    # arguments -- so no `agree()` case can reach this. Without the
+    # `not node.args` guard in `_dict_keys_iterable`, it would emit
+    # `keymaker d` and silently drop the argument instead of refusing.
+    result = translate('d = {"a": 1}\nfor k in d.keys(1):\n    print(k)\n')
+    assert isinstance(result, Refusals), result
+    assert "`.keys()`" in result.items[0].reason

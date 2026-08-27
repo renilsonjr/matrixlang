@@ -695,3 +695,15 @@ def test_iterating_dict_keys_of_a_parameter_agrees():
         'def f(d):\n    for k in d.keys():\n        print(k)\n'
         'f({"a": 1, "b": 2})\n'
     )
+
+
+def test_a_dictionary_loop_beside_a_long_unrelated_expression_agrees():
+    # The backstop's own `copy.deepcopy` breaks around 245 terms, well
+    # before `ast.unparse` (327) or `symtable`/`ast.parse` (thousands),
+    # so 300 terms is enough to make the backstop itself raise
+    # `RecursionError` while leaving the rest of the module perfectly
+    # analysable. An unrelated long expression must not switch the fix
+    # off: on backstop failure, `dict_names` falls back to the walk's
+    # own answer rather than denying every proven name in the file.
+    long_expression = "y = " + "+".join(["1"] * 300) + "\n"
+    agree(long_expression + 'd = {0: 10, 1: 20}\nfor k in d:\n    print(k)\n')

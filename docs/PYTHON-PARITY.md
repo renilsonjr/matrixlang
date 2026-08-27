@@ -248,7 +248,7 @@ first: when a statement is too deep for the pass's own recursion guard,
 attached, and those checks are what stop the else body vanishing from
 the output silently rather than being named in a refusal.
 
-### 8. Dictionary iteration — defect fixed
+### 8. Dictionary iteration — **defect fixed**
 
 Unlike items 1–7, this was not a gap closed. `for k in d:` over a
 dictionary already translated, and the program it produced was wrong —
@@ -282,7 +282,12 @@ directions: a module-level `d` and an unrelated parameter also named
 `d` disqualify each other, because the analysis carries no scope. A
 `symtable` backstop catches what the syntactic walk itself might miss —
 a future Python binding form the walk was never taught — so a gap there
-costs a lost fix, not an introduced error.
+costs a lost fix, not an introduced error. The backstop misses on depth
+as well as on binding form: above roughly 250 nodes in a single
+expression it cannot run at all (`copy.deepcopy`, one of its steps,
+hits Python's recursion limit), and the analysis then falls back to the
+walk alone — which is complete for Python as it stands, so this still
+costs a lost fix, never an introduced error.
 
 **The residual, stated plainly: this is not closed for every
 dictionary.** A dictionary that arrives through a function parameter or
