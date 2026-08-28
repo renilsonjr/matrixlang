@@ -57,13 +57,6 @@ GLYPHS: dict[str, str] = {
     "invert": "ﾛ",
     "uplink": "ﾉ",
     "downlink": "ｰ",
-    # Bitwise operators.
-    "mask": "ﾊ",
-    "merge": "ﾕ",
-    "flip": "ﾘ",
-    "invert": "ﾛ",
-    "uplink": "ﾉ",
-    "downlink": "ｰ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",

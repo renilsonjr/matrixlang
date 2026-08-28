@@ -57,7 +57,7 @@ for the keys in insertion order, and the infix `oracle` to ask whether a
 key is there before reading it, since reading a missing one is an error —
 **bitwise operators** — `mask`, `merge`, `flip`, `invert`, `uplink` and
 `downlink` operate on integers, with non-negative shift counts — **Operator**,
-**Operator**, an assistive companion that writes MatrixLang from
+an assistive companion that writes MatrixLang from
 plain language, in the terminal or in a browser, and **Scribe**, a
 keyless, deterministic companion that does the same without a key, an
 SDK, or the network.
