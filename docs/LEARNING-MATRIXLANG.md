@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has twenty-five keywords, five types, and two ways of writing
+MatrixLang has thirty keywords, five types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -22,7 +22,7 @@ trace "wake up, Neo"
 
 `trace` prints. That is the only way a program produces output; there is
 no `print` and no `return` to a console. Reading input has its own two
-keywords — see §18.
+keywords — see §19.
 
 Save it as `hello.rain` and run it:
 
@@ -35,7 +35,7 @@ wake up, Neo
 ```
 
 `--no-window` prints to the terminal. Without it, a window opens and the
-program falls through it as glyphs — see §13.
+program falls through it as glyphs — see §14.
 
 ---
 
@@ -75,13 +75,15 @@ tells you the name already exists somewhere above.
 
 | Type | Examples |
 | --- | --- |
-| integer | `0`, `42`, `-7` |
+| number | `0`, `42`, `-7`, `3.5`, `-0.25` |
 | boolean | `true`, `false` |
 | string | `"Neo"`, `""`, `"wake up"` |
 | list | `[1, 2, 3]`, `[]`, `["Neo", true]` |
 | dictionary | `{"id": 1}`, `{}` |
 
-No floats, no sets, and **no null**. If you are used to a language
+One number type, not two — there is no separate integer type to spill
+into or out of. `3` and `3.0` are the same value; more on what that
+means below. No sets, and **no null**. If you are used to a language
 where a missing value is `null` or `None`, there is nothing here that
 corresponds — a name either holds a value or does not exist. Lists and
 dictionaries each get their own section (§7, §8) once agents have been
@@ -96,13 +98,109 @@ mutation.
 trace 7 + 3        # 10
 trace 7 - 3        # 4
 trace 7 * 3        # 21
-trace 7 / 3        # 2
+trace 7 / 2        # 3.5
 ```
 
-Division **truncates toward zero**, so `-7 / 2` is `-3`, not `-4`. Most
-languages that floor would give you `-4`; this one rounds toward zero in
-both directions, which is the behaviour most people expect when they first
-meet it.
+`/` is **true division**, the same operation Python's `/` performs —
+`7 / 2` is `3.5`, not `3`. A division that does not come out even keeps
+going to 28 significant digits rather than stopping short or rounding to
+something misleadingly tidy:
+
+```
+trace 7 / 3
+```
+
+```
+2.333333333333333333333333333
+```
+
+### `%` is the remainder
+
+```
+trace 7 % 2         # 1
+trace -7 % 2        # 1
+trace 7 % -2        # -1
+trace -7 % -2       # -1
+```
+
+`%` follows **the sign of the right operand**, the same rule Python's `%`
+uses — not the sign of the left operand, which is what some other
+languages give you. That is why `-7 % 2` is `1`, not `-1`: the result
+takes the divisor's sign, not the dividend's. Even and odd are
+`n % 2 == 0` and `n % 2 != 0`, and that holds for negative `n` too,
+precisely because of this rule.
+
+### One number type, more precisely
+
+`3` and `3.0` compare equal:
+
+```
+trace 3 == 3.0
+```
+
+```
+true
+```
+
+A whole-number *result* of arithmetic prints without a point — `6 / 2`
+is `3`, not `3.0` — but a value that is written or computed with a
+fractional part keeps it, trailing zero and all:
+
+```
+trace 6 / 2
+trace 1.5 + 1.5
+trace 2.50
+```
+
+```
+3
+3.0
+2.50
+```
+
+That last line is not a typo: `2.50` and `2.5` are the same value
+(`2.50 == 2.5` is `true`), but the language does not quietly drop the
+zero you wrote. Trailing zeros are significant to *how a value prints*,
+even though they make no difference to *what it equals*.
+
+This exactness is also why `0.1 + 0.2` behaves the way you would hope,
+not the way binary floating point makes it behave in most languages:
+
+```
+trace 0.1 + 0.2
+```
+
+```
+0.3
+```
+
+The language stores `0.1` as the decimal digits `0.1`, not as the
+nearest binary fraction, so arithmetic on it never picks up the rounding
+error that gives other languages `0.30000000000000004`.
+
+### An index must be whole
+
+`xs[i]` requires `i` to be a whole number. `2` and `2.0` both work,
+because they are the same value; `2.5` does not, because there is no
+list element halfway between two positions:
+
+```
+construct xs = ["a", "b", "c"]
+trace xs[2.0]
+```
+
+```
+c
+```
+
+```
+construct xs = ["a", "b", "c"]
+trace xs[2.5]
+```
+
+```
+matrixlang: [line 2, column 9] an index must be a whole number, got 2.5
+```
 
 ### `+` joins strings too
 
@@ -113,7 +211,7 @@ trace "wake up, " + "Neo"     # wake up, Neo
 But never both at once:
 
 ```
-trace "n = " + 5              # error: cannot add string and integer
+trace "n = " + 5              # error: cannot add string and number
 ```
 
 There is no automatic conversion. If you want a number in a message, you
@@ -160,7 +258,7 @@ trace "Neo" < 5
 ```
 
 ```
-matrixlang: [line 1, column 13] cannot order string with integer
+matrixlang: [line 1, column 13] cannot order string with number
 ```
 
 ---
@@ -189,7 +287,7 @@ flatline
 **Conditions must be boolean.** There is no truthiness:
 
 ```
-redpill 1          # error: condition must be a boolean, got integer
+redpill 1          # error: condition must be a boolean, got number
 ```
 
 There is no `else if`. Nest instead:
@@ -227,12 +325,56 @@ flatline
 `dejavu` is *while*. Same rules: the condition must be boolean, and
 `flatline` closes it.
 
-There is no `for`, no `break`, and no `continue`. A counter and a
-condition are how loops are written here.
+There is no `for`. A counter and a condition are how loops are written
+here — but `wake` and `glitch`, below, give you the two escapes a `for`
+loop's `break` and `continue` would.
 
 > **A loop that never ends** is stopped after 200,000 statements with a
 > diagnostic rather than running forever. Raise or remove the limit with
 > `--max-steps N`, where `0` means no limit.
+
+### `wake` and `glitch`
+
+A `dejavu` normally runs until its condition goes false. Two keywords let
+you leave early.
+
+```
+construct n = 0
+dejavu n < 10
+  n = n + 1
+  redpill n == 3
+    glitch
+  flatline
+  redpill n == 6
+    wake
+  flatline
+  trace n
+flatline
+```
+
+```
+1
+2
+4
+5
+```
+
+`wake` leaves the loop entirely — you wake up, and the loop is over.
+`glitch` skips the rest of this turn and goes back to the condition. The
+name is the film's own: a déjà vu *is* a glitch in the Matrix, and the
+loop keyword is `dejavu`.
+
+Both are bare words on a line of their own, like a bare `jackout`. Both
+belong to the **innermost** loop they sit in, so a `wake` inside a loop
+inside another loop leaves only the inner one.
+
+Two rules worth knowing:
+
+- Outside a loop, either one is an error. That includes inside an agent
+  called from a loop — the agent's body is not in a loop, so it cannot
+  reach out and stop the caller's.
+- `jackout` beats both. A `jackout` inside a loop inside an agent returns
+  from the agent, loop and all.
 
 ---
 
@@ -515,7 +657,7 @@ trace n[0]
 ```
 
 ```
-matrixlang: [line 2, column 8] cannot index integer
+matrixlang: [line 2, column 8] cannot index number
 ```
 
 ```
@@ -523,7 +665,7 @@ trace [1] + 2
 ```
 
 ```
-matrixlang: [line 1, column 11] cannot add list and integer
+matrixlang: [line 1, column 11] cannot add list and number
 ```
 
 Indexing a string out of bounds gives the same message as a list, with
@@ -571,7 +713,7 @@ trace aluno
 ```
 
 A dictionary literal is `{`, comma-separated `key: value` pairs, `}`.
-**Keys are strings or integers only**, and like a list literal (§7),
+**Keys are strings or numbers only**, and like a list literal (§7),
 the whole thing is **one line, with no trailing comma**.
 
 ### Reading a value — `d["key"]`
@@ -598,7 +740,7 @@ matrixlang: [line 2, column 13] no key "turma" in this dictionary
 
 There is no null anywhere in this language (§3) — there is nothing it
 could hand back for a key that was never written. Check first with
-`oracle`, below, the same discipline the bounded-search idiom (§9)
+`oracle`, below, the same discipline the bounded-search idiom (§10)
 already teaches for a list index that might be past the end.
 
 ### Writing — insert or update — `d["key"] = v`
@@ -637,7 +779,63 @@ counts entries. `keymaker` is new — a prefix keyword like `length`, not
 a function call — and returns a dictionary's keys as a list, in that
 same insertion order.
 
-### `oracle` — is a key there?
+### `fold`, `trim` and `cleave`
+
+Three things you will want to do to a string.
+
+```
+construct name = "  Mouse  "
+trace trim name
+trace fold "MOUSE"
+trace "a,b,c" cleave ","
+```
+
+```
+Mouse
+mouse
+["a", "b", "c"]
+```
+
+`fold` lower-cases and `trim` takes the whitespace off both ends. Both are
+prefix keywords like `length`, so they bind tightly: `fold a + b` is
+`(fold a) + b`.
+
+`cleave` is infix, like `oracle`. It splits a string on a separator and
+gives back a list. It binds looser than `+` and tighter than `==`, which
+is what makes both of these read the way they look:
+
+```
+trace a + b cleave ","       # concatenate, THEN split
+trace s cleave "," == parts  # split, THEN compare the lists
+```
+
+Reaching for `length` on the result needs parentheses, the same way
+`length keymaker d` does — a prefix keyword binds tightest of all:
+
+```
+trace length (s cleave ",")
+```
+
+Three rules worth knowing:
+
+- All three take strings. `fold 1` is an error, not a `1`.
+- An empty separator is an error. `"abc" cleave ""` does not give you the
+  letters; there is no operation in MatrixLang that does.
+- Empty pieces are kept: `"a,,b" cleave ","` is `["a", "", "b"]`, and
+  `"" cleave ","` is a list holding one empty string, not an empty list.
+
+There is no upper-casing operator. To compare two strings ignoring case,
+`fold` both sides:
+
+```
+construct typed = "MOUSE"
+construct stored = "Mouse"
+redpill fold typed == fold stored
+  trace "match"
+flatline
+```
+
+### `oracle` — is it in there?
 
 ```
 construct aluno = {"id": 1, "grade": "B"}
@@ -650,7 +848,7 @@ true
 false
 ```
 
-`oracle` is infix, like `splice` and `fork` (§9) — it sits between the
+`oracle` is infix, like `splice` and `fork` (§10) — it sits between the
 dictionary and the key being asked about, and answers with a boolean.
 Guard a lookup with it before indexing a key you are not sure is there:
 
@@ -667,9 +865,362 @@ flatline
 no turma yet
 ```
 
+`oracle` is not only for dictionaries. It asks any container the same
+question — *do you hold this?*
+
+```
+trace ["neo", "trinity"] oracle "neo"
+trace "matrix" oracle "rix"
+trace {"a": 1} oracle "a"
+```
+
+```
+true
+true
+true
+```
+
+A list is asked about its elements, a dictionary about its keys, and a
+string about the text inside it — so `"matrix" oracle "rix"` is true even
+though `"rix"` is not one of its characters.
+
+One rule worth knowing: an element a list cannot compare is simply not a
+match. `["a"] oracle 1` is `false`, not an error, even though `"a" == 1`
+*is* an error. Asking whether a list contains the number 1 has a truthful
+answer — it does not, it holds a string — while asking whether a string
+equals a number does not.
+
+A second rule, for the string arm specifically: the right side must be a
+string. `"matrix" oracle 1` is an error, not `false` — a list quietly
+skips what it cannot compare, but a string does not, since "does this
+text contain the number 1?" has no substring to look for at all.
+
 ---
 
-## 9. Logical operators — `splice`, `fork`, `unplug`
+## 9. Python, translated
+
+Section 8 motivated dictionaries with a scenario, not a program: two
+parallel lists — `ids` and `grades` — quietly drifting apart, so keep
+facts together instead. That scenario is not hypothetical — it is close
+to what a beginner actually writes, in Python, already reaching for a
+dictionary. `matrixlang.pytrans.translate` takes real Python source like
+that and turns it into real MatrixLang source, for a stated subset of the
+language.
+
+```python
+from matrixlang.pytrans import translate
+
+result = translate("x = 2\nprint(x * 3 + 1)\n")
+print(result.source)
+```
+
+```
+construct x = 2
+trace x * 3 + 1
+```
+
+Run that and you get `7`, same as running the Python. In the browser
+playground, the same tool sits behind **Or paste Python** → **Translate
+it**, next to the editor — paste, translate, then run it like any other
+program.
+
+`translate` never raises. Python that does not parse, or Python that
+parses but uses something MatrixLang has no answer for, comes back as
+`Refusals` instead of an exception — a list of reasons, each with a line
+and column, and, where one exists, the MatrixLang idiom to write instead.
+A program with five problems shows you all five in one pass, not one per
+attempt.
+
+**The subset:** `+`, `-`, `*`, `/`, `%` and comparisons, `print`,
+assignment (`=` and `+=`), `if`/`elif`/`else`, `while`, `for` over a list
+or `range(...)`, `def`/`return`, lists, dictionaries, `input()`,
+f-strings, and list comprehensions with a single `for` and a plain
+variable target (`[f(x) for x in xs if c]`). **Refused, always:** `class`,
+`try`/`except`, `import`, set and dict comprehensions, generator
+expressions, a list comprehension with more than one `for` clause or a
+tuple target, `lambda`, slicing, `//`, and anything else MatrixLang
+genuinely cannot express — not a temporary gap, but the same "no sets,
+no null" boundary the rest of this guide draws around MatrixLang itself.
+
+Division is worth a sentence, because MatrixLang has `/` and Python has
+two of them. Python's `/` is true division, and so is MatrixLang's — the
+two agree everywhere, `7 / 2` is `3.5` in both — so `/` translates
+straight across:
+
+```python
+print(translate('a = 7\nb = 2\nprint(a / b)\n').source)
+```
+
+```
+construct a = 7
+construct b = 2
+trace a / b
+```
+
+`//` is the one Python operator this document's title claims and cannot
+deliver. Python's `//` floors (`-7 // 2` is `-4`); MatrixLang has no
+floor operator to translate it to, and the glyph table that would carry
+one is full — 56 slots used, 0 free (§13) — so there is no slot left to
+buy. This is not a translation gap the way truthiness (below) is; it is
+permanent, the same way `class` and `lambda` are permanent, and the
+refusal says so:
+
+```python
+result = translate('a = 7\nb = 2\nprint(a // b)\n')
+print(result.items[0].idiom)
+```
+
+```
+MatrixLang has no floor operator, and no free glyph slot is left to add one. `//` floors (`-7 // 2` is `-4` in Python) while MatrixLang's `/` is true division (`-7 / 2` here is `-3.5`); work out the floor yourself once you know the sign
+```
+
+### The governing rule: syntax, not types
+
+The translator never evaluates anything. It looks at the *shape* of a line
+— an `if`, a `+`, a call — and produces the matching MatrixLang shape,
+without ever asking what kind of value will be there when the line
+actually runs. That is the only way it can work, since it runs once,
+before the program does, and Python's own types are not visible to it.
+
+```python
+print(translate('a = 2\nb = 3\nprint(a + b)\n').source)
+print(translate('a = "wake"\nb = " up"\nprint(a + b)\n').source)
+```
+
+```
+construct a = 2
+construct b = 3
+trace a + b
+
+construct a = "wake"
+construct b = " up"
+trace a + b
+```
+
+Both become `a + b`, unchanged, whether `a` and `b` turn out to be numbers
+or strings — because MatrixLang's own `+` already does both jobs (§3), the
+translator does not need to pick one. Run the second and you get
+`wake up`. This is also why a Python program the translator refuses is a
+program it is *unwilling* to guess about, not one it read wrong: type
+inference would be a second copy of the interpreter's own rules, living in
+a tool that runs before any value exists to check them against.
+
+### Why truthiness is refused
+
+Python lets any value stand in for a condition — an empty list is
+false-ish, a non-empty one is true-ish. MatrixLang has no such rule (§4):
+`redpill` needs an actual boolean, or it is a type error. Since the
+translator does not evaluate anything (previous section), it cannot know
+at translation time whether `xs` will hold a list, a number, or something
+else — so it cannot silently decide which comparison Python meant, and
+refuses instead of guessing:
+
+```python
+result = translate("xs = [1, 2, 3]\nif xs:\n    print('has items')\n")
+print(result.items[0].reason)
+print(result.items[0].idiom)
+```
+
+```
+`xs` relies on truthiness, which MatrixLang does not have — a condition must already be a boolean
+a list or string →  len(xs) > 0
+a number        →  xs != 0
+```
+
+Apply the idiom and it translates clean:
+
+```python
+print(translate("xs = [1, 2, 3]\nif len(xs) > 0:\n    print('has items')\n").source)
+```
+
+```
+construct xs = [1, 2, 3]
+redpill length xs > 0
+  trace "has items"
+flatline
+```
+
+Run it: `has items`.
+
+### `in` becomes `oracle`, and the one case that still fails loudly
+
+The translator refuses where a difference would be silent (above). Where
+it instead translates and lets MatrixLang answer, that answer can still
+arrive as a runtime error — MatrixLang will *say* what went wrong, with a
+line and a column you can act on. One case in this subset lands on that
+side of the line. A second used to as well, and no longer does; both are
+worth knowing.
+
+**`in` always becomes `oracle`.** MatrixLang's `oracle` asks any
+container whether it holds something (§8) — which is why the translator
+can map `in` onto it without knowing which container it has:
+
+```python
+print(translate('d = {"a": 1}\nprint("a" in d)\n').source)
+```
+
+```
+construct d = {"a": 1}
+trace d oracle "a"
+```
+
+Run it: `true`. Python's `in` also works on lists and strings, and the
+translator cannot tell which you meant — `k in d` and `2 in xs` are the
+same syntax, and only the value at run time says which is which. Guessing
+would be type inference, the one thing the translator will not do (above),
+so it translates every `in` the same way and lets MatrixLang answer:
+
+```python
+print(translate("xs = [1, 2]\nprint(2 in xs)\n").source)
+```
+
+```
+construct xs = [1, 2]
+trace xs oracle 2
+```
+
+Run *that* and, today, you get `true` — the same answer Python gives.
+That was not always so: before `oracle` learned to ask a list for an
+element, this translation looked fine and died on `Run` with `'oracle'
+takes a dictionary, got list`. Nothing about the translator changed to
+fix that; `oracle` itself was widened, so every program this rule had
+already produced started working. (`not in` still has no MatrixLang
+form, so it is refused outright, and the refusal names
+`unplug (container oracle value)`.)
+
+**One case still disagrees with Python, and silently.** `True in [1]` is
+`true` in Python, because `True == 1` there. `[1] oracle true` is `false`
+here, because MatrixLang's `==` never equates a boolean with a number —
+the same rule that keeps `{true: "a", 1: "b"}` as two separate keys
+instead of collapsing into one (§8). The translator cannot catch this:
+`True in [1]` and `"a" in xs` are the same syntax, and telling them apart
+is exactly the type inference the translator refuses to do (above). This
+is deliberate, not a bug — do not "fix" it by making `oracle` treat
+`true` and `1` as the same element, since that would break dictionary
+keys the same way.
+
+**`for k in d:` walks a dictionary's keys, using `keymaker` (§8).** Rule 1
+below turns a `for` into a counter and `length`, which is exactly right
+for a list and wrong for a dictionary — the translator recognises a
+dictionary syntactically and reaches for `keymaker` instead:
+
+```python
+print(translate('d = {"a": 1, "b": 2}\nfor k in d:\n    print(k)\n').source)
+```
+
+```
+construct d = {"a": 1, "b": 2}
+construct ks = keymaker d
+construct n = 0
+dejavu n < length ks
+  trace ks[n]
+  n = n + 1
+flatline
+```
+
+Run it: `a` then `b`, same as Python — the loop walks the keys, in the
+order they were first written.
+
+This depends on the translator being able to *see* that `d` is a
+dictionary, and it only looks at the syntax that builds and assigns
+`d`, never at a value. A dictionary that arrives as a function parameter
+or as the result of a call cannot be proven that way, so a loop over one
+is still translated as if it were a list — the same shape shown above
+with `d` in place of `ks`, wrong for the same reason. Write `.keys()`
+explicitly when you mean it and the translator cannot see it:
+
+```python
+print(translate(
+    "def totals(d):\n    for k in d.keys():\n        print(k)\n"
+).source)
+```
+
+```
+agent totals(d)
+  construct ks = keymaker d
+  construct n = 0
+  dejavu n < length ks
+    trace ks[n]
+    n = n + 1
+  flatline
+flatline
+```
+
+`.keys()` is supported only as the thing a `for` walks, not as a value —
+Python prints `d.keys()` as `dict_keys(['a'])`, where a MatrixLang list
+prints `["a"]`, so returning it from `keymaker` and calling that
+"the same" would trade one silent difference for another.
+
+### The three rewrites, and the hoisted `construct`
+
+A Python `for` loop has no MatrixLang equivalent — this language only has
+`dejavu` (§5). Translating one means writing an equivalent `dejavu` by
+hand, and three rules keep it equivalent rather than merely similar:
+
+1. **The iterable is evaluated once.** If it is already a plain name, the
+   loop indexes that name directly. Anything else — a literal, a call — is
+   hoisted into a generated name *before* the loop, so the loop indexes
+   that instead of re-evaluating the expression on every pass. Substituted
+   inline, `for s in find_students(a, b):` would call `find_students`
+   again on every iteration — a different program from the one written.
+   The bound of a `range(...)` is read once the same way, because Python
+   builds the range when the loop *starts*: `for i in range(n)` with a
+   body that counts `n` down still runs the original number of times.
+2. **The loop variable is substituted, not declared.** Every use of the
+   Python loop variable becomes an index into the hoisted list — `xs[n]` —
+   rather than a `construct` inside the body. That is also why a loop
+   variable that is *already* a name in your program is refused: Python
+   leaves the variable bound after the loop, and there is no such name
+   here to leave anything in.
+3. **A name first bound inside the loop — or inside one branch of an
+   `if` — has its `construct` hoisted above it, initialised to `0`.**
+   `construct` a second time on the same name fails with `'x' is already
+   declared` (§2), and a loop body runs more than once. An `if` branch has
+   the mirror-image problem: its `construct` runs only when that branch is
+   taken, so the *other* branch's assignment — and every read after the
+   `if` — would fail with `'x' is not declared`. Both are a declaration
+   sitting somewhere that does not run exactly once, and both are fixed
+   the same way: declared once, above, and merely assigned from then on.
+
+```python
+print(translate(
+    "total = 0\n"
+    "for n in [10, 20, 30]:\n"
+    "    doubled = n * 2\n"
+    "    total = total + doubled\n"
+    "print(total)\n"
+).source)
+```
+
+```
+construct total = 0
+construct xs = [10, 20, 30]
+construct n1 = 0
+construct doubled = 0
+dejavu n1 < length xs
+  doubled = xs[n1] * 2
+  total = total + doubled
+  n1 = n1 + 1
+flatline
+trace total
+```
+
+Run it: `120`.
+
+Most of this is the shape any `for`-to-`dejavu` rewrite has: a hoisted
+`xs` for the list, a counter `n1` counting up to `length xs`, `dejavu` and
+`flatline` around the body. Once you know that shape, none of it
+surprises you. **`construct doubled = 0`** is different — it sits above
+the loop, and nothing in the Python program declared `doubled` before the
+loop started; the reader's own program creates it fresh on the first
+pass, inside the body. It is rule 3's insertion, and it is the one line
+here that no amount of familiarity with the rewrite would have told you
+to expect — the reason it exists is `construct`'s own "already declared"
+rule (§2), not anything about `for` loops.
+
+---
+
+## 10. Logical operators — `splice`, `fork`, `unplug`
 
 ```
 trace true splice false     # false
@@ -694,7 +1245,7 @@ trace 1 splice true
 ```
 
 ```
-matrixlang: [line 1, column 7] 'splice' takes booleans, got integer
+matrixlang: [line 1, column 7] 'splice' takes booleans, got number
 ```
 
 ### `unplug` binds looser than comparison
@@ -718,7 +1269,7 @@ trace (unplug n) == 1
 ```
 
 ```
-matrixlang: [line 2, column 8] 'unplug' takes a boolean, got integer
+matrixlang: [line 2, column 8] 'unplug' takes a boolean, got number
 ```
 
 ### `splice` and `fork` short-circuit
@@ -742,7 +1293,7 @@ trace true splice 1
 ```
 
 ```
-matrixlang: [line 1, column 19] 'splice' takes booleans, got integer
+matrixlang: [line 1, column 19] 'splice' takes booleans, got number
 ```
 
 Same shape, same `1` on the right — one runs, one errors, because the
@@ -751,7 +1302,12 @@ a quirk of this language: Python, Java and C all behave the same way.
 
 ### The bounded search
 
-This is the reason the operators exist. Indexing past the end of a list
+If all you need is a yes-or-no answer to "is this element in the list?",
+`oracle` (§8) already does that in one step — `crew oracle "Cypher"`. The
+loop below is for when you need more than yes-or-no: the *position* of a
+match, or a search on some condition other than equality. It is also the
+reason the short-circuit operators above exist, which is worth seeing
+even where `oracle` alone would do. Indexing past the end of a list
 is an error:
 
 ```
@@ -887,7 +1443,7 @@ trace inc             # <agent inc>
 
 ---
 
-## 11. Comments
+## 12. Comments
 
 ```
 # this is a comment
@@ -899,7 +1455,7 @@ and back and your comments are still there, in place.
 
 ---
 
-## 12. The two faces
+## 13. The two faces
 
 Every program can be written and read two ways. This:
 
@@ -936,9 +1492,11 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Twenty-five keywords, seventeen operators, parentheses, a comma, two brackets,
-a pair of braces, a colon, ten digits, and the comment marker — 55 slots
-in all.
+
+Thirty keywords, seventeen operators (`%` among them), parentheses, a
+comma, two brackets, a pair of braces, a colon, a decimal point, ten
+digits, and the comment marker — 56 slots in all. The table is full:
+0 slots free, and every one of those 56 is spoken for.
 
 | | | | | | | |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -948,8 +1506,9 @@ in all.
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
 | `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | `oracle` `ｵ` |
 | `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | | | |
-| `mask` `ﾊ` | `merge` `ﾕ` | `flip` `ﾘ` | `invert` `ﾛ` | `uplink` `ﾉ` | `downlink` `ｰ` | |
-
+| `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | `fold` `ﾊ` | `trim` `ﾘ` | `cleave` `ﾛ` |
+| `mask` `ｷｬ` | `merge` `ｷｭ` | `flip` `ｷｮ` | `invert` `ｷﾞｬ` | `uplink` `ｷﾞｭ` | `downlink` `ｷﾞｮ` | |
+| `wake` `ﾉ` | `glitch` `ﾕ` | `.` `ｰ` | `%` `ﾝ` | | | |
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
@@ -962,7 +1521,7 @@ is what makes the glyph face usable rather than decorative.
 
 ---
 
-## 13. Watching a program run
+## 14. Watching a program run
 
 ```bash
 .venv/bin/matrixlang run program.rain
@@ -987,7 +1546,7 @@ Three things worth knowing:
 
 ---
 
-## 14. When something goes wrong
+## 15. When something goes wrong
 
 Every error carries a line and a column:
 
@@ -1008,10 +1567,10 @@ The ones you will meet first:
 | --- | --- |
 | `'x' is already declared` | A second `construct` for the same name in the same scope |
 | `'x' is not declared — use 'construct' first` | Assigning or reading a name that does not exist. Often a typo |
-| `condition must be a boolean, got integer` | `redpill 1` — there is no truthiness |
-| `'splice' takes booleans, got integer` | An operand of `splice` or `fork` was not a boolean — same rule as `redpill` |
-| `cannot add string and integer` | `"n = " + 5`. There is no automatic conversion |
-| `cannot compare string with integer` | `==` across two types |
+| `condition must be a boolean, got number` | `redpill 1` — there is no truthiness |
+| `'splice' takes booleans, got number` | An operand of `splice` or `fork` was not a boolean — same rule as `redpill` |
+| `cannot add string and number` | `"n = " + 5`. There is no automatic conversion |
+| `cannot compare string with number` | `==` across two types |
 | `agent 'f' takes 2 arguments, got 1` | Wrong number of arguments |
 | `agent 'f' did not jack out a value` | Used the result of an agent that returns nothing |
 | `program exceeded the step limit — likely an infinite loop` | A loop that does not end — or a genuinely long program; see `--max-steps` |
@@ -1020,7 +1579,7 @@ The ones you will meet first:
 
 ---
 
-## 15. Seeing the shape of a program
+## 16. Seeing the shape of a program
 
 ```bash
 .venv/bin/matrixlang parse program.rain
@@ -1057,7 +1616,7 @@ the glyph face; `:ascii` turns that off.
 
 ---
 
-## 16. A whole program
+## 17. A whole program
 
 ```
 # Count down, then greet — using an agent and a closure.
@@ -1089,7 +1648,7 @@ wake up, Neo
 
 ---
 
-## 17. Having it written for you — Scribe
+## 18. Having it written for you — Scribe
 
 Everything above teaches you to write MatrixLang. **Scribe** goes the other
 way: you describe what you want in English and get MatrixLang back. It
@@ -1127,7 +1686,7 @@ Some of what it knows, and what each one produces:
 | `get element 1 of xs` | a three-element list, then `trace xs[1]` |
 | `get character 0 of name` | `construct name = "neo"`, then `trace name[0]` |
 | `define a function that doubles` | `agent double(n)` … `jackout n * 2` |
-| `define an adder factory` | the nested closure from §10 |
+| `define an adder factory` | the nested closure from §11 |
 
 `print`, `show` and `display` all mean `trace`, so "print 42" works as well
 as "trace 42".
@@ -1155,14 +1714,14 @@ cannot be a variable name — `store 5 as trace` is a miss, because
 `construct trace = 5` would not parse.
 
 Everything Scribe hands you has already been parsed and executed once, so
-it runs. What it does **not** cover yet: `splice` and `fork` (§9), writing
+it runs. What it does **not** cover yet: `splice` and `fork` (§10), writing
 to a list element (§7), calling a function you just defined, and the whole
-of input — `jackin`, `decode` and `encode` (§18). Write those by hand —
+of input — `jackin`, `decode` and `encode` (§19). Write those by hand —
 which, having read this far, you can.
 
 ---
 
-## 18. Input — `jackin`, `decode`, and `encode`
+## 19. Input — `jackin`, `decode`, and `encode`
 
 `jackin` reads one line and gives you the text of it.
 
@@ -1200,10 +1759,29 @@ echo "41" | .venv/bin/matrixlang run --no-window add.rain
 42
 ```
 
-`decode` is strict. It refuses text that is not a whole number, refuses a
-decimal point (this language has integers only), and refuses a value that is
-already a number — the same way `splice` refuses anything that is not a
-boolean rather than guessing what you meant.
+`decode` is strict, but it accepts exactly what the language's own number
+grammar accepts — which now includes a decimal point:
+
+```
+trace decode "5.5" + 1
+```
+
+```
+6.5
+```
+
+It refuses text that is not a number at all — no digits, more than one
+point, a point with nothing on one side of it — and refuses a value that
+is already a number, the same way `splice` refuses anything that is not
+a boolean rather than guessing what you meant:
+
+```
+trace decode "hi"
+```
+
+```
+matrixlang: [line 1, column 7] 'decode' needs a number, got "hi"
+```
 
 Spaces and tabs either side of the number are forgiven, and so is a leading
 `-`: `decode` reads ` -3 ` as `-3`. A leading `+` is not. The asymmetry is
@@ -1223,9 +1801,13 @@ Note that `unplug` goes the other way — `unplug n == 1` means
 the comparison; `decode` *produces* a number that arithmetic *consumes*, so
 reaching across the `+` would only ever produce an error.
 
-### `encode` reverses `decode`
+### `encode` is `decode`'s counterpart
 
-`encode` turns a number into text — the mirror of `decode`.
+`encode` is `decode`'s counterpart, not its exact mirror. `decode` is
+narrow — it turns text into a number, and refuses text that is not one,
+because there is no sensible number for `"hi"`. `encode` is not narrow the
+same way: it gives the text form of *any* value — the same text `trace`
+would print.
 
 ```
 construct id = 7
@@ -1240,17 +1822,30 @@ trace "ID: " + encode id
 ID: 7
 ```
 
-It is numbers-only and just as strict: a value that is already text is
-refused rather than passed through, the same way `decode` refuses a value
-that is already a number.
+Give it something other than a number and it still works, because it
+routes through the same display rules `trace` uses. A string prints bare
+at the top level; a string nested inside a list or dictionary prints
+quoted, the same rule `trace` follows:
 
 ```
 trace encode "5"
+trace encode true
+trace encode ["a", "b"]
 ```
 
 ```
-matrixlang: [line 1, column 7] 'encode' takes a number, got string
+5
+true
+["a", "b"]
 ```
+
+`encode` refuses two things outright, both about the value's shape
+rather than its type: a value that contains itself (a list or dictionary
+that holds itself, directly or indirectly, has no finite text form), and
+a number past the same digit ceiling described below. A value nested
+too many levels deep also comes back refused, the same host recursion
+limit `trace` runs into rather than a rule `encode` itself enforces.
+Everything else comes back as text.
 
 `encode` sits at the same precedence as `decode` — tighter than arithmetic,
 for the same reason: both produce a value that the arithmetic around them
@@ -1264,7 +1859,7 @@ trace encode n + 1
 ```
 
 ```
-matrixlang: [line 2, column 16] cannot add string and integer
+matrixlang: [line 2, column 16] cannot add string and number
 ```
 
 `decode encode n == n` holds for every number the language can write out —
@@ -1328,7 +1923,7 @@ A program that uses `jackin` prints to the terminal rather than opening the
 cascade window, even without `--no-window`. The window has no input box, so
 a windowed run would sit there waiting for a line you had no way to see it
 wanting. Only the display changes; the program itself runs the same either
-way. Every other program still gets the window described in §13.
+way. Every other program still gets the window described in §14.
 
 In the browser you can answer either way. Fill the input box beside the editor
 before you press Run and `jackin` reads it one line at a time, or leave it
@@ -1349,13 +1944,16 @@ output, every time. The playground is built on that.
 
 Being clear about this saves more time than any feature list:
 
-- no floats, sets, or null
+- no sets, or null
+- no `//` — MatrixLang's `/` is true division, and there is no floor
+  operator to spell alongside it; the glyph table is full (§13)
 - no slicing (`name[0:2]`) and no string methods — indexing one character
   at a time (§7) is as far as string access goes
 - no removing a key from a dictionary (§8) — only reading, inserting, and
   updating one
-- no `for`, `break`, `continue`, or `else if`
-- no way to *prompt* for input and wait — `jackin` (§18) reads lines that
+- no `for` or `else if` — but a `dejavu` loop can leave early with `wake`
+  and skip to its next turn with `glitch` (§5)
+- no way to *prompt* for input and wait — `jackin` (§19) reads lines that
   were already supplied, from the terminal or from the box beside the
   editor, and a program cannot stop mid-run to ask a question
 - no modules, imports, or standard library

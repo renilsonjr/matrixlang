@@ -9,6 +9,7 @@ this module only produces.
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 
 from matrixlang.nodes import (
     Assign, Binary, Declare, Expr, FunctionDef, If, Index, ListLiteral, Name,
@@ -113,8 +114,10 @@ def normalize(request: str) -> str:
 
     "print hello world" and "show hello world" both become the canonical
     phrasing the patterns look for. Number operands are digits only —
-    the patterns match `-?\\d+`, so a word operand ("add five and three")
-    is a miss rather than a program that names an undeclared variable.
+    the arithmetic patterns match `-?\\d+` (and `trace`/`store` match
+    _NUMBER, which also admits one decimal point), so a word operand
+    ("add five and three") is a miss rather than a program that names an
+    undeclared variable.
 
     **Quoted spans are never rewritten.** They are the user's literal
     output, not phrasing to canonicalize — lowercasing or substituting
@@ -223,6 +226,20 @@ _CONDITIONAL_PREFIX = re.compile(r"^if(?: not)?\b")
 # this pattern stale, the same reason operator/prompt.py reads it too.
 _NAME = rf"(?!(?:{'|'.join(sorted(KEYWORDS))})\b)[a-z_]\w*"
 
+# A number as this language spells one: optional minus, digits, and at most
+# one point with digits required on BOTH sides of it. Exactly the lexer's
+# own literal grammar, and exactly what `decode` accepts — a third rule here
+# would be a third place for the three to drift apart.
+#
+# This was `-?\d+` everywhere, written when a number was an integer. When
+# `.` entered the grammar, `_value`'s "a bare word is a string literal"
+# fallback started catching decimals, so `trace 2.5` silently produced
+# `trace "2.5"` — a STRING, no miss, no error, from a front end that is
+# served to the web UI. Only `_num_or_name` and `_value` read this; the
+# intent patterns still capture `-?\d+`, so `add 2.5 and 1` is still a clean
+# miss rather than a program built from a pattern that never expected one.
+_NUMBER = r"-?\d+(?:\.\d+)?"
+
 
 # --- Intent registry ----------------------------------------------------
 
@@ -258,10 +275,14 @@ def _num_or_name(token: str) -> Expr:
     that is logical negation over a boolean, a different operator.)
     """
     token = token.strip()
-    if re.fullmatch(r"-?\d+", token):
-        value = int(token)
-        if value < 0:
-            return Unary(op=TokenType.MINUS, operand=NumberLiteral(value=-value))
+    if re.fullmatch(_NUMBER, token):
+        negative = token.startswith("-")
+        # Decimal(token), not int(token): the language has one number type
+        # and NumberLiteral enforces it. int() would also refuse "2.5"
+        # outright now that _NUMBER admits a point.
+        value = Decimal(token.lstrip("-"))
+        if negative:
+            return Unary(op=TokenType.MINUS, operand=NumberLiteral(value=value))
         return NumberLiteral(value=value)
     return Name(ident=token)
 
@@ -316,13 +337,13 @@ _Intent(
 
 def _build_double(m):
     a = _num_or_name(m.group("a"))
-    expr = Binary(left=a, op=TokenType.STAR, right=NumberLiteral(value=2))
+    expr = Binary(left=a, op=TokenType.STAR, right=NumberLiteral(value=Decimal(2)))
     return Program(statements=[Trace(value=expr)])
 
 
 def _build_half(m):
     a = _num_or_name(m.group("a"))
-    expr = Binary(left=a, op=TokenType.SLASH, right=NumberLiteral(value=2))
+    expr = Binary(left=a, op=TokenType.SLASH, right=NumberLiteral(value=Decimal(2)))
     return Program(statements=[Trace(value=expr)])
 
 
@@ -407,11 +428,16 @@ def _value(token: str) -> Expr:
     A bare word is a string literal, not a Name — "trace hello" outputs
     the string "hello". Names are reserved for explicit "store X as Y"
     bindings and arithmetic operands (via _num_or_name).
+
+    The number test is _NUMBER, not `-?\\d+`: that fallback is what turned
+    "trace 2.5" into `trace "2.5"`, answering a request for a number with a
+    string. A token that is number-SHAPED must reach the number branch;
+    only a token that is not (`2.`, `hello`) may fall through to a string.
     """
     token = token.strip()
     if token.startswith('"') and token.endswith('"'):
         return StringLiteral(value=token[1:-1])
-    if re.fullmatch(r"-?\d+", token):
+    if re.fullmatch(_NUMBER, token):
         return _num_or_name(token)
     return StringLiteral(value=token)
 
@@ -446,7 +472,7 @@ def _counter_step(name: str, step: int) -> Assign:
         value=Binary(
             left=Name(ident=name),
             op=op,
-            right=NumberLiteral(value=abs(step)),
+            right=NumberLiteral(value=Decimal(abs(step))),
         ),
     )
 
@@ -530,7 +556,7 @@ _INDEX_MAX = len(_DEMO_LIST) - 1
 def _demo_list(name: str) -> Declare:
     return Declare(
         name=name,
-        value=ListLiteral(elements=[NumberLiteral(value=v) for v in _DEMO_LIST]),
+        value=ListLiteral(elements=[NumberLiteral(value=Decimal(v)) for v in _DEMO_LIST]),
     )
 
 
@@ -609,7 +635,7 @@ def _build_double_fn(m):
         FunctionDef(
             name="double",
             params=["n"],
-            body=[Return(value=Binary(left=Name(ident="n"), op=TokenType.STAR, right=NumberLiteral(value=2)))],
+            body=[Return(value=Binary(left=Name(ident="n"), op=TokenType.STAR, right=NumberLiteral(value=Decimal(2))))],
         ),
     ])
 

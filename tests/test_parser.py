@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -27,7 +28,7 @@ def expr(source):
 
 
 def test_number_literal():
-    assert expr("42") == NumberLiteral(42)
+    assert expr("42") == NumberLiteral(Decimal(42))
 
 
 def test_string_literal():
@@ -46,19 +47,19 @@ def test_name():
 def test_parens_group_without_a_wrapper_node():
     # No Grouping node: parens live in tree shape. The Stage 4 renderer
     # re-derives them from precedence, which is lossless at AST level.
-    assert expr("(42)") == NumberLiteral(42)
+    assert expr("(42)") == NumberLiteral(Decimal(42))
 
 
 def test_unary_minus_nests():
     assert expr("--3") == Unary(
-        TokenType.MINUS, Unary(TokenType.MINUS, NumberLiteral(3))
+        TokenType.MINUS, Unary(TokenType.MINUS, NumberLiteral(Decimal(3)))
     )
 
 
 def test_positions_are_captured_but_not_compared():
     node = expr("  42")
     assert (node.line, node.column) == (1, 3)
-    assert node == NumberLiteral(42)
+    assert node == NumberLiteral(Decimal(42))
 
 
 def test_unclosed_paren_reports_position():
@@ -81,53 +82,53 @@ def test_trailing_input_is_an_error():
 def test_trailing_comment_is_tolerated_and_discarded():
     # REPL convenience. The §4.3 round-trip criterion applies to whole
     # programs via parse(), where trivia is preserved.
-    assert expr("1  # note") == NumberLiteral(1)
+    assert expr("1  # note") == NumberLiteral(Decimal(1))
 
 
 def test_multiplication_binds_tighter_than_addition():
     # THE Stage 2 done-when from the parent spec: * sits BELOW + in the tree.
     assert expr("2 + 3 * 4") == Binary(
-        NumberLiteral(2),
+        NumberLiteral(Decimal(2)),
         TokenType.PLUS,
-        Binary(NumberLiteral(3), TokenType.STAR, NumberLiteral(4)),
+        Binary(NumberLiteral(Decimal(3)), TokenType.STAR, NumberLiteral(Decimal(4))),
     )
 
 
 def test_same_level_operators_associate_left():
     assert expr("10 - 3 - 2") == Binary(
-        Binary(NumberLiteral(10), TokenType.MINUS, NumberLiteral(3)),
+        Binary(NumberLiteral(Decimal(10)), TokenType.MINUS, NumberLiteral(Decimal(3))),
         TokenType.MINUS,
-        NumberLiteral(2),
+        NumberLiteral(Decimal(2)),
     )
 
 
 def test_parens_override_precedence():
     assert expr("(2 + 3) * 4") == Binary(
-        Binary(NumberLiteral(2), TokenType.PLUS, NumberLiteral(3)),
+        Binary(NumberLiteral(Decimal(2)), TokenType.PLUS, NumberLiteral(Decimal(3))),
         TokenType.STAR,
-        NumberLiteral(4),
+        NumberLiteral(Decimal(4)),
     )
 
 
 def test_comparison_sits_below_arithmetic():
     assert expr("1 + 2 < 4") == Binary(
-        Binary(NumberLiteral(1), TokenType.PLUS, NumberLiteral(2)),
+        Binary(NumberLiteral(Decimal(1)), TokenType.PLUS, NumberLiteral(Decimal(2))),
         TokenType.LT,
-        NumberLiteral(4),
+        NumberLiteral(Decimal(4)),
     )
 
 
 def test_equality_sits_below_comparison():
     assert expr("1 < 2 == 3 < 4") == Binary(
-        Binary(NumberLiteral(1), TokenType.LT, NumberLiteral(2)),
+        Binary(NumberLiteral(Decimal(1)), TokenType.LT, NumberLiteral(Decimal(2))),
         TokenType.EQ,
-        Binary(NumberLiteral(3), TokenType.LT, NumberLiteral(4)),
+        Binary(NumberLiteral(Decimal(3)), TokenType.LT, NumberLiteral(Decimal(4))),
     )
 
 
 def test_unary_binds_tighter_than_multiplication():
     assert expr("-2 * 3") == Binary(
-        Unary(TokenType.MINUS, NumberLiteral(2)), TokenType.STAR, NumberLiteral(3)
+        Unary(TokenType.MINUS, NumberLiteral(Decimal(2))), TokenType.STAR, NumberLiteral(Decimal(3))
     )
 
 
@@ -136,19 +137,19 @@ def program(source):
 
 
 def test_declare_statement():
-    assert program("construct x = 5\n") == Program([Declare("x", NumberLiteral(5))])
+    assert program("construct x = 5\n") == Program([Declare("x", NumberLiteral(Decimal(5)))])
 
 
 def test_assign_and_trace():
     tree = program("x = x + 1\ntrace x\n")
     assert tree.statements == [
-        Assign("x", Binary(Name("x"), TokenType.PLUS, NumberLiteral(1))),
+        Assign("x", Binary(Name("x"), TokenType.PLUS, NumberLiteral(Decimal(1)))),
         Trace(Name("x")),
     ]
 
 
 def test_blank_lines_are_skipped():
-    assert program("\n\ntrace 1\n\n") == Program([Trace(NumberLiteral(1))])
+    assert program("\n\ntrace 1\n\n") == Program([Trace(NumberLiteral(Decimal(1)))])
 
 
 def test_empty_source_is_an_empty_program():
@@ -217,7 +218,7 @@ def test_if_without_else():
     tree = program("redpill x == 1\n  trace x\nflatline\n")
     assert tree.statements == [
         If(
-            Binary(Name("x"), TokenType.EQ, NumberLiteral(1)),
+            Binary(Name("x"), TokenType.EQ, NumberLiteral(Decimal(1))),
             [Trace(Name("x"))],
             None,
         )
@@ -228,8 +229,8 @@ def test_if_with_else():
     branch = program(
         "redpill x\n  trace 1\nbluepill\n  trace 2\nflatline\n"
     ).statements[0]
-    assert branch.then_body == [Trace(NumberLiteral(1))]
-    assert branch.else_body == [Trace(NumberLiteral(2))]
+    assert branch.then_body == [Trace(NumberLiteral(Decimal(1)))]
+    assert branch.else_body == [Trace(NumberLiteral(Decimal(2)))]
 
 
 def test_nested_ifs():
@@ -237,7 +238,7 @@ def test_nested_ifs():
     outer = program(source).statements[0]
     inner = outer.then_body[0]
     assert isinstance(inner, If)
-    assert inner.then_body == [Trace(NumberLiteral(1))]
+    assert inner.then_body == [Trace(NumberLiteral(Decimal(1)))]
 
 
 def test_empty_bodies_are_legal():
@@ -275,8 +276,8 @@ def test_bluepill_outside_redpill_is_an_error():
 def test_while_loop():
     loop = program("dejavu n < 3\n  n = n + 1\nflatline\n").statements[0]
     assert loop == While(
-        Binary(Name("n"), TokenType.LT, NumberLiteral(3)),
-        [Assign("n", Binary(Name("n"), TokenType.PLUS, NumberLiteral(1)))],
+        Binary(Name("n"), TokenType.LT, NumberLiteral(Decimal(3))),
+        [Assign("n", Binary(Name("n"), TokenType.PLUS, NumberLiteral(Decimal(1))))],
     )
 
 
@@ -342,11 +343,14 @@ def test_parser_consumes_tokens_from_any_source():
     # test here that would fail if someone added a lexer import to parser.py.
     tokens = [
         Token(TokenType.TRACE, "trace", 1, 1),
-        Token(TokenType.NUMBER, "7", 1, 7, 7),
+        # Decimal(7), not 7: the parser passes a NUMBER token's value
+        # straight into NumberLiteral, which now refuses a bare int. A
+        # hand-built token has no lexer upstream to have made it one.
+        Token(TokenType.NUMBER, "7", 1, 7, Decimal(7)),
         Token(TokenType.NEWLINE, "", 1, 8),
         Token(TokenType.EOF, "", 1, 8),
     ]
-    assert parse(tokens) == Program([Trace(NumberLiteral(7))])
+    assert parse(tokens) == Program([Trace(NumberLiteral(Decimal(7)))])
 
 
 def test_parser_performs_no_semantic_checks():
@@ -366,9 +370,9 @@ def test_eof_where_an_expression_was_expected():
 
 def test_chained_comparison_associates_left():
     assert expr("1 < 2 < 3") == Binary(
-        Binary(NumberLiteral(1), TokenType.LT, NumberLiteral(2)),
+        Binary(NumberLiteral(Decimal(1)), TokenType.LT, NumberLiteral(Decimal(2))),
         TokenType.LT,
-        NumberLiteral(3),
+        NumberLiteral(Decimal(3)),
     )
 
 
@@ -452,3 +456,34 @@ def test_encode_binds_tighter_than_arithmetic():
     assert declare.value.op is TokenType.PLUS
     assert isinstance(declare.value.left, Unary)
     assert declare.value.left.op is TokenType.ENCODE
+
+
+def test_a_deeply_nested_list_literal_is_a_positioned_parse_error():
+    # A bare RecursionError out of the parser carries no line, no column and
+    # no MatrixLangError wrapping -- and site/glue.py's run() promises never
+    # to raise, a promise this project has already broken six times.
+    # Interpreter.run converts RecursionError into a positioned "expression
+    # is nested too deeply"; parse() is the same kind of boundary and needs
+    # the same shape. No interpreter is involved in reaching this.
+    depth = 3000
+    with pytest.raises(ParseError) as excinfo:
+        program("trace " + "[" * depth + "]" * depth + "\n")
+    assert "nested too deeply" in str(excinfo.value)
+    # Position is the part worth getting right: "nested too deeply" with no
+    # line number is only marginally better than a traceback, and which
+    # bracket ran away is exactly what the position tells the reader.
+    assert excinfo.value.line == 1
+    assert excinfo.value.column > 1
+
+
+def test_a_deeply_nested_expression_is_a_positioned_parse_error():
+    # parse_expression() is the REPL's entry point and the same kind of
+    # boundary as parse(). Guarding only the boundary where the failure was
+    # first noticed is the exact mistake that produced the related
+    # translate_python() break: the guard sat at the walker, and the
+    # RecursionError arrived at the render step instead.
+    depth = 3000
+    with pytest.raises(ParseError) as excinfo:
+        expr("[" * depth + "]" * depth)
+    assert "nested too deeply" in str(excinfo.value)
+    assert excinfo.value.line == 1

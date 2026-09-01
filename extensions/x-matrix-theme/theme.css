@@ -58,16 +58,23 @@ html[data-ml-face="glyph"] [data-testid="primaryColumn"] h2 {
   border-left: 3px solid var(--ml-amber) !important;
 }
 
-/* Top bar toggle — injected by content.js, styled here so CSS owns paint */
+/* Top bar toggle — injected by content.js, fixed overlay so Chrome/Opera land the same */
 #ml-face-toggle {
-  margin: 0 0 0 12px;
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  margin: 0;
   padding: 0.3rem 0.7rem;
   border: 1px solid var(--ml-dim);
   border-radius: 3px;
   font: 11px/1.2 var(--ml-mono);
   color: var(--ml-muted);
-  background: transparent;
+  background: rgba(5, 7, 10, 0.9);
+  backdrop-filter: blur(4px);
   cursor: pointer;
+  pointer-events: auto;
 }
 #ml-face-toggle:hover { color: var(--ml-head); background: #08120c; }
 #ml-face-toggle[aria-pressed="true"] { color: var(--ml-green); background: #0a1a0f; }

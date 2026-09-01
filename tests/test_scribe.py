@@ -104,7 +104,11 @@ def test_multiply():
     assert stmt.value.op is TokenType.STAR
 
 
-def test_divide_truncates_toward_zero():
+def test_divide_is_true_division():
+    # Was named test_divide_truncates_toward_zero, which stated the
+    # opposite of what `/` does now: `divide 10 by 3` is 3.333..., and
+    # `half of 9` is 4.5, not 4. The assertion never checked truncation --
+    # only that the operator is SLASH -- so the name outlived the rule.
     stmt = _binary_of("divide 10 by 3")
     from matrixlang.nodes import Binary
     assert stmt.value.op is TokenType.SLASH
@@ -791,3 +795,65 @@ def test_an_ordinary_miss_still_offers_the_closest_phrasing():
     result = scribe("make soup")
     assert isinstance(result, ScribeMiss)
     assert result.closest
+
+
+def test_a_decimal_is_a_number_not_a_string():
+    # `trace 2.5` produced `trace "2.5"` -- a StringLiteral. Every numeric
+    # gate in this module was `-?\\d+`, written before `.` was in the number
+    # grammar, so a decimal fell straight through _value's "a bare word is
+    # a string literal" fallback: no miss, no error, the wrong type,
+    # silently, from a front end the web UI is served from.
+    from decimal import Decimal
+
+    from matrixlang.nodes import NumberLiteral
+
+    result = scribe("trace 2.5")
+    assert isinstance(result, ScribeProgram)
+    stmt = result.program.statements[0]
+    assert isinstance(stmt.value, NumberLiteral)
+    assert stmt.value.value == Decimal("2.5")
+    assert result.source == "trace 2.5\n"
+
+
+def test_a_negative_decimal_is_a_unary_minus_over_a_positive_literal():
+    from decimal import Decimal
+
+    from matrixlang.nodes import NumberLiteral, Unary
+
+    result = scribe("trace -2.5")
+    assert isinstance(result, ScribeProgram)
+    stmt = result.program.statements[0]
+    assert isinstance(stmt.value, Unary)
+    assert stmt.value.op is TokenType.MINUS
+    assert isinstance(stmt.value.operand, NumberLiteral)
+    assert stmt.value.operand.value == Decimal("2.5")
+
+
+def test_store_binds_a_decimal_as_a_number():
+    from decimal import Decimal
+
+    from matrixlang.nodes import NumberLiteral
+
+    result = scribe("store 49.90 as price")
+    assert isinstance(result, ScribeProgram)
+    # Trailing zeros are significant: 49.90, not 49.9.
+    assert result.source == "construct price = 49.90\n"
+    assert result.program.statements[0].value.value == Decimal("49.90")
+
+
+def test_a_token_that_only_looks_numeric_is_still_a_string():
+    # The gate is the lexer's grammar exactly -- digits required on BOTH
+    # sides of the point -- not "anything with a dot in it". `2.` is not a
+    # number this language can write, so the string fallback is right.
+    from matrixlang.nodes import StringLiteral
+
+    result = scribe("trace 2.")
+    assert isinstance(result, ScribeProgram)
+    assert isinstance(result.program.statements[0].value, StringLiteral)
+
+
+def test_arithmetic_intents_still_miss_cleanly_on_a_decimal():
+    # The arithmetic patterns keep capturing `-?\\d+`. A miss is a correct
+    # answer -- it says "I did not understand" rather than building a
+    # program from a pattern that never expected a decimal.
+    assert isinstance(scribe("add 2.5 and 1"), ScribeMiss)

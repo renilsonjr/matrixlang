@@ -1,12 +1,17 @@
 """Runtime value rules for MatrixLang.
 
-Values are plain Python `int`, `bool` and `str` — the environment really is
-a dictionary, which is the point of Stage 3.
+Values are `decimal.Decimal`, `bool` and `str` — the environment really is
+a dictionary, which is the point of Stage 3. Numbers used to be plain
+Python `int`; they are `Decimal` now, so that `/` can be true division and
+`+ - * %` can stay exact instead of silently rounding through a float.
 
-That choice has one sharp edge, and this module exists to blunt it: in
-Python, `bool` is a subclass of `int`. `isinstance(True, int)` is True and
+That still has a sharp edge, left over from when numbers WERE `int`: in
+Python, `bool` is a subclass of `int`, `isinstance(True, int)` is True, and
 `True + 1` evaluates to 2. Spec §5 forbids coercion, so `true + 1` must be
-a runtime error — and with `isinstance` that error would never fire.
+a runtime error. Booleans no longer share a type with numbers, so
+`isinstance` would not resurrect that particular bug today — but nothing
+in this module rules out a future value type where the same shape of
+problem returns, and `type(value) is X` costs nothing to keep everywhere.
 
 Every predicate here uses `type(value) is X`. Never `isinstance`.
 
@@ -19,6 +24,7 @@ on `nodes` or the interpreter is created.
 
 import sys
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_EVEN, Context, Decimal, Overflow
 from typing import Any
 
 
@@ -132,8 +138,190 @@ class TooManyDigits(Exception):
         super().__init__(f"more than {limit} digits")
 
 
-def is_int(value: object) -> bool:
-    return type(value) is int
+class NumberOverflow(Exception):
+    """An arithmetic result too large to represent.
+
+    decimal.Context traps Overflow by default (inherited from
+    decimal.DefaultContext) and raises decimal.Overflow for it -- a bare
+    Python ArithmeticError, not a MatrixLangError. Integers never had this
+    failure: an oversized int only ever failed at *display* time, as
+    TooManyDigits above. Decimal fails earlier, inside the arithmetic
+    itself -- prec=1000 pushes EXACT's Emax to 999999, but repeated
+    squaring gets there well inside any step budget (`10`, squared 19
+    times, is already past it).
+
+    Not a MatrixLangError for the same reason as TooManyDigits and
+    CyclicValue: this module may import nothing but the standard library,
+    and has no line or column to report. The interpreter attaches the
+    position.
+    """
+
+
+def _overflow_guarded(method):
+    """Wrap a decimal.Context arithmetic method to raise NumberOverflow.
+
+    EXACT and DIVISION are exposed as plain decimal.Context objects for
+    later tasks to call directly -- `EXACT.add(...)`, `DIVISION.divide(
+    ...)` -- so the guard has to live on the objects themselves. A helper
+    function at a call site can't be trusted to be used by every call
+    site that ever gets written; the context that raises decimal.Overflow
+    in the first place is the one place a guard is certain to run.
+    """
+
+    def wrapped(self, a, b):
+        try:
+            return method(self, a, b)
+        except Overflow:
+            raise NumberOverflow() from None
+
+    return wrapped
+
+
+class _GuardedContext(Context):
+    """A decimal.Context whose arithmetic raises NumberOverflow instead of
+    letting decimal.Overflow -- a bare ArithmeticError -- escape.
+
+    Traps stay ON (the decimal.DefaultContext default): Overflow is
+    caught and converted the instant it would fire, before decimal ever
+    materializes an infinite result. That is what keeps
+    `is_whole(Decimal("Infinity"))` -- which is True, since Infinity
+    equals its own to_integral_value() -- from becoming reachable through
+    ordinary arithmetic: nothing this module's own operations can produce
+    is ever infinite. A Decimal literally spelled "Infinity" could still
+    reach here through the Decimal constructor itself (a lexer parsing a
+    number token, say) -- that is out of this module's reach and is a
+    later task's guard to add, not this one's.
+
+    Guarded: add, subtract, multiply, remainder, divide -- the five
+    assigned below. NOT guarded: power, quantize and compare -- call
+    THOSE on a context object (`EXACT.power(a, b)`, say) and the
+    precision is right but decimal.Overflow escapes bare. Whoever wires
+    one of those in next needs to decide whether it should be guarded
+    too.
+
+    minus, plus and abs are a SEPARATE hazard, not a missing guard.
+    Python's own operators and builtins on a Decimal -- `-x`, `+x`,
+    `abs(x)`, and likewise `x // y`, `x % y`, `x ** y` -- do not call
+    this context at all, guarded or not. They round through the
+    thread-local DEFAULT context (prec=28) regardless of which
+    _GuardedContext exists, so `-x` can silently return a DIFFERENT,
+    WRONG number past 28 significant digits -- no exception, no
+    scientific notation, just disagreement with `0 - x`. Reaching this
+    context's precision for a sign flip or magnitude means calling
+    `EXACT.minus(x)` / `EXACT.abs(x)` explicitly (still unguarded against
+    Overflow, per above) or using a context-free Decimal instance method
+    that cannot round at all: copy_negate(), copy_abs(), and
+    to_integral_value() (which also cannot overflow) are exact and safe
+    to call bare, with no context, guarded or not.
+    """
+
+    add = _overflow_guarded(Context.add)
+    subtract = _overflow_guarded(Context.subtract)
+    multiply = _overflow_guarded(Context.multiply)
+    remainder = _overflow_guarded(Context.remainder)
+    divide = _overflow_guarded(Context.divide)
+
+
+# Two contexts, one rule: division is the only operation that can go on
+# forever, so it is the only one that rounds.
+#
+# Decimal rounds every operation to its context precision, and the default
+# 28 is not enough -- `Decimal("9" * 40) * 2` comes back as
+# 2.000000000000000000000000000E+40, losing precision AND leaking
+# scientific notation on a value `int` handled exactly. 1000 is far above
+# anything display can emit, so `+ - * %` are exact for every number a
+# program can show a reader.
+EXACT = _GuardedContext(prec=1000, rounding=ROUND_HALF_EVEN)
+# 28 is where 0.3333333333333333333333333333 comes from.
+DIVISION = _GuardedContext(prec=28, rounding=ROUND_HALF_EVEN)
+
+
+def remainder_floor(left: Decimal, right: Decimal) -> Decimal:
+    """`left % right` under Python's rule: `left - floor(left / right) * right`.
+
+    The caller must have rejected a zero divisor already; this raises
+    NumberOverflow and nothing else.
+
+    **Never computes the quotient.** The obvious spelling --
+    `EXACT.divide(left, right).to_integral_value(ROUND_FLOOR)` and then
+    subtract -- is WRONG, and wrong silently. `EXACT.divide` rounds to
+    1000 significant digits BEFORE `to_integral_value` floors, so a
+    quotient needing more than 1000 digits rounds UP, the floor comes out
+    one too high, and the remainder comes back NEGATIVE for a positive
+    divisor: `Decimal("9" * 1025) % 2` gave -1 where Python gives 1.
+    Raising the precision only moves that boundary, so the quotient is
+    gone from this computation entirely. (Third instance on this branch of
+    "rounding before truncating can round UP" -- the first cost a
+    Critical on unary minus, the second was healed for `/`.)
+
+    `Context.remainder` is exact and quotient-free, but it raises
+    InvalidOperation (DivisionImpossible) the moment the integer quotient
+    would need more than `prec` digits -- which is exactly the case that
+    was broken. The loop below keeps every call inside that limit by
+    dividing by `right` scaled UP by a power of ten first, taking a bite
+    of at most `prec - 1` digits off the dividend at a time. Scaling by an
+    exponent is exact and context-free (rebuilding the Decimal from its
+    own `as_tuple`, like `to_integral_value`, cannot round or overflow),
+    and `EXACT.remainder(r, scaled)` always shrinks `r` to below `scaled`,
+    so `r.adjusted()` drops by at least `prec - 1` every pass and the loop
+    terminates -- at most ~2000 passes across EXACT's whole +-999999
+    exponent range, each one cheap.
+
+    Then the sign. Decimal's remainder follows the DIVIDEND's sign
+    (truncated division): `Decimal(-7).remainder(2)` is -1 where Python's
+    `-7 % 2` is 1. Python's follows the DIVISOR's, and one add converts
+    between them. The translator maps `a % b` straight through and cannot
+    see signs, so Decimal's rule would be a silent disagreement with
+    Python on every negative operand. The correction is unconditional, so
+    the result carries the divisor's sign (or is zero) for EVERY input,
+    whatever its size -- that is the rule `%` promises, and it is now a
+    property of the shape rather than something a precision has to be
+    large enough to preserve.
+
+    The exact ANSWER has a size limit the sign does not: a remainder step
+    still rounds its own result to `prec` digits, and each pass leaves a
+    value about `digits(left) - prec` long, so a dividend past 2 * prec
+    (2000) significant digits stops being exact. That is not specific to
+    `%` -- `EXACT.add` on a 2000-digit operand rounds too, and every
+    operand in circulation that long came from a literal or `decode`,
+    since no arithmetic here can manufacture more than 1000.
+    """
+    r = left
+    while True:
+        # How many digits the integer quotient would need, minus one.
+        bite = r.adjusted() - right.adjusted() - (EXACT.prec - 1)
+        if bite <= 0:
+            # <= prec digits of quotient: Context.remainder can do it in
+            # one exact step.
+            r = EXACT.remainder(r, right)
+            break
+        sign, digits, exponent = right.as_tuple()
+        r = EXACT.remainder(r, Decimal((sign, digits, exponent + bite)))
+    if r and (r < 0) != (right < 0):
+        # Truncated -> floored. |r| < |right| and the signs differ here,
+        # so |r + right| < |right|: this add can never overflow, however
+        # close to Emax the operands sit.
+        r = EXACT.add(r, right)
+    return r
+
+
+def is_number(value: object) -> bool:
+    """The language's one numeric type.
+
+    `type(value) is Decimal`, not isinstance, for the same reason every
+    other predicate here is exact: a bool is not a number, and an
+    isinstance check on a Decimal subclass would let something else in.
+    """
+    return type(value) is Decimal
+
+
+def is_whole(value: object) -> bool:
+    """A number with nothing after the point.
+
+    Indexes, `length`'s result and dictionary keys all need this. `3.0`
+    is whole; `3.5` is not.
+    """
+    return is_number(value) and value == value.to_integral_value()
 
 
 def is_bool(value: object) -> bool:
@@ -157,23 +345,27 @@ def is_dict(value: object) -> bool:
 
 
 def check_key(key: object) -> None:
-    """Refuse keys that cannot work, before one reaches a dictionary.
+    """Strings and numbers only.
 
-    Strings and integers only. Booleans are refused because CPython gives
-    True and 1 the same hash and calls them equal, so `{true: "a", 1: "b"}`
-    would collapse into one entry -- the reader writes two keys and gets
-    one, with nothing to tell them. Lists and dictionaries are refused
-    because they are mutable: a key that changes after insertion is a
-    lookup that stops working for reasons invisible where it is written.
+    Booleans are refused because CPython gives True and 1 the same hash
+    and calls them equal, so `{true: "a", 1: "b"}` would collapse into one
+    entry -- the reader writes two keys and gets one, with nothing to tell
+    them. Lists and dictionaries are refused because they are mutable: a
+    key that changes after insertion is a lookup that stops working for
+    reasons invisible where it is written.
+
+    `Decimal("1")` and `Decimal("1.0")` hash equal, so `{1: "a", 1.0: "b"}`
+    collapses to one entry too -- matching Python, where the same thing
+    happens, so it is intended rather than the bug the bool case describes.
     """
-    if is_bool(key) or not (is_str(key) or is_int(key)):
+    if is_bool(key) or not (is_str(key) or is_number(key)):
         raise BadKey(type_name(key))
 
 
 def type_name(value: object) -> str:
     """The language's own word for a value's type, for error messages."""
-    if is_int(value):
-        return "integer"
+    if is_number(value):
+        return "number"
     if is_bool(value):
         return "boolean"
     if is_str(value):
@@ -228,14 +420,49 @@ def _display(value: object, nested: bool, seen: frozenset) -> str:
             for k, v in value.items()
         )
         return "{" + inner + "}"
+    if is_number(value):
+        # format(value, "f") rather than str(value): str emits scientific
+        # notation for large and small exponents -- str(Decimal("1e3")) is
+        # "1E+3" -- and a reader must never see that. "f" is always
+        # positional, and preserves trailing zeros, which are significant
+        # here (2.50 * 2 is 5.00).
+        if value.is_zero():
+            # adjusted() on a zero reports its exponent, not its
+            # magnitude -- Decimal("0E-5000").adjusted() is -5000, well
+            # past the digit cap below, for a value that is exactly zero
+            # and renders in one character. The guard exists for numbers
+            # too big to write out; zero is never that.
+            #
+            # copy_abs() rather than a sign check: EXACT.multiply(0, -1)
+            # is Decimal("-0"), and Python's own `0 * -1` is `0`. A
+            # translated program must not print a minus sign its Python
+            # twin never would, so the sign is dropped here, once, for
+            # every zero -- not chased at every call site that might
+            # produce one.
+            value = value.copy_abs()
+        elif abs(value.adjusted()) >= sys.get_int_max_str_digits():
+            # The positional form would be enormous. Same cap and same
+            # reasoning as the old str(int) guard: report the limit the
+            # running interpreter actually enforces rather than a
+            # constant copied into this file.
+            #
+            # >=, not >: adjusted() is digit-count-minus-one for a value
+            # with no fractional part, so a 4301-digit value (one past
+            # CPython's str(int) cap of 4300) has adjusted() == 4300. `>`
+            # let that value through -- the guard would not fire until
+            # 4302 digits, one later than the cap it claims to enforce.
+            raise TooManyDigits(sys.get_int_max_str_digits())
+        return format(value, "f")
     try:
         return str(value)
     except ValueError:
-        # Integers only, and only very long ones: CPython caps str(int)
-        # at sys.get_int_max_str_digits(). Caught rather than
-        # length-checked beforehand, so the limit reported is the one the
-        # running interpreter actually enforces — it is settable at
-        # runtime — rather than a 4300 copied into this file.
+        # Not a number branch -- is_number(value) already failed above --
+        # so this is the generic fallback shared with every other type
+        # this module doesn't otherwise know how to render. The only
+        # value shaped like this that has ever hit the cap was a plain
+        # int; kept as a guard rather than deleted, because this branch
+        # has no type check of its own and must not let a bare Python
+        # exception through either.
         raise TooManyDigits(sys.get_int_max_str_digits()) from None
 
 

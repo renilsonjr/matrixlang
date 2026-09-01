@@ -67,8 +67,9 @@ Rules that differ from most languages:
   branch. There is no truthiness. `redpill` may be followed by an
   optional `bluepill` block, which runs when the condition is false —
   MatrixLang's else.
-- Types are integer, boolean, string, list and dictionary. No floats, no
-  null.
+- Types are number, boolean, string, list and dictionary. A number is
+  exact decimal, not floating point -- `2.5`, `-7`, and `0.001` are all
+  the same type, with no separate integer type. No null.
 - A list literal is `[a, b, c]`. Read an element with `xs[i]`, write one
   with `xs[i] = v`, and measure one with `length xs` (also works on a
   string, and on a dictionary, where it gives the number of entries).
@@ -76,22 +77,41 @@ Rules that differ from most languages:
 - A string can be indexed too: `s[i]` reads a one-character string. It
   cannot be written — `s[i] = v` is an error, because a string can never
   change once made. Build a different one with `+` instead.
+- Three string operations. `fold s` lower-cases, `trim s` removes
+  whitespace from both ends, and the infix `s cleave sep` splits on a
+  separator and gives a list — `"a,b" cleave ","` is `["a", "b"]`. All
+  three take strings and nothing else. There is no upper-casing
+  operator: to compare two strings ignoring case, `fold` both sides. A
+  separator with nothing in it is an error, not a character-by-character
+  split.
 - A dictionary literal is `{"a": 1}`; keys must be strings or numbers.
   Reading a key that is not there is an error, so check first with
-  `oracle`, which is infix and gives a boolean: `d oracle "a"`.
-  `keymaker` takes a dictionary and gives the list of its keys, in
-  insertion order.
-- `<`, `>`, `<=`, `>=` order two integers or two strings — never a mix,
+  `oracle`. `keymaker` takes a dictionary and gives the list of its keys,
+  in insertion order.
+- `oracle` is infix and gives a boolean: it asks whether a container holds
+  something. `d oracle "a"` asks a dictionary for a key, `xs oracle 3` asks
+  a list whether it holds that element, and `s oracle "ab"` asks a string
+  whether that text appears in it. An element a list cannot compare is
+  simply not a match, so `["a"] oracle 1` is false rather than an error —
+  but the right side of a string `oracle` must itself be a string;
+  `"matrix" oracle 1` is an error, not false.
+- `<`, `>`, `<=`, `>=` order two numbers or two strings — never a mix,
   and never any other type.
-- `+` adds integers, joins strings, or concatenates lists — never a mix
+- `+` adds numbers, joins strings, or concatenates lists — never a mix
   of different types.
-- Integer division truncates toward zero.
+- `/` is true division: `7 / 2` is `3.5`, not `3`. `%` is the remainder:
+  `7 % 2` is 1. It follows the sign of the right operand, as Python does,
+  so `-7 % 2` is 1 rather than -1. Even and odd are `n % 2 == 0` and
+  `n % 2 != 0`.
+- An index (`xs[i]`) must be a whole number — `2` and `2.0` both work,
+  `2.5` is an error — even though `/` can produce one.
 - `agent` defines; `jackout` returns. An agent that never jacks out
   produces nothing, and using that nothing as a value is an error.
 - The only way to produce output is `trace`. To read input, use `jackin`,
   which reads a line of text, and `decode`, which converts that text to a
-  number (or fails). The inverse, `encode`, converts a number to text,
-  and takes only a number — text is already text and is refused.
+  number (or fails). `encode` is `decode`'s counterpart, not its exact
+  mirror: it gives the text form of any value — the same text `trace`
+  would print — not just a number.
 - `splice` is and, `fork` is or, `unplug` is not. Operands must be
   boolean — `1 splice true` is an error, the same rule that makes
   `redpill 1` an error. `splice` and `fork` short-circuit: the right
@@ -103,6 +123,10 @@ Rules that differ from most languages:
   - Bitwise operators work on integers only: `mask` is &, `merge` is |,
     `flip` is ^, and `invert` is ~. `uplink` and `downlink` shift left
     and right; their shift count must not be negative."""
+- `wake` leaves the innermost `dejavu` immediately; `glitch` skips to that
+  loop's next iteration. Both are bare keywords on their own line, like a
+  bare `jackout`, and both are an error outside a loop. A `jackout` inside
+  a loop still returns from the agent — it is not stopped by the loop."""
 
 
 def _keywords() -> str:

@@ -253,3 +253,30 @@ def test_an_agent_in_a_type_error_reads_as_agent():
     error = fails("agent f()\n  jackout 1\nflatline\ntrace f + 1\n")
     assert "agent" in str(error)
     assert "Function" not in str(error)
+
+
+def test_a_nested_jackout_outside_an_agent_reports_the_keywords_position():
+    # Catches run()'s `except _Jackout` reporting statement.line/column --
+    # the outer, top-level `redpill` on line 2 -- instead of the `jackout`
+    # the reader typed on line 4. A bare top-level `jackout` cannot tell the
+    # two apart, because its own position and the enclosing statement's
+    # coincide; this nests it two `redpill`s deep so they don't.
+    #
+    # `wake` in this identical shape already reports line 4, because
+    # _LoopSignal carries its own position and _Jackout does not. Two
+    # control-flow signals in one interpreter, one reporting the keyword and
+    # one reporting its enclosing block, reads as an accident rather than a
+    # decision. See test_loops_run.py::
+    # test_the_position_is_the_keywords_not_an_enclosing_statements.
+    source = (
+        "trace 0\n"
+        "redpill true\n"
+        "  redpill true\n"
+        "    jackout 1\n"
+        "  flatline\n"
+        "flatline\n"
+    )
+    error = fails(source)
+    assert error.message == "'jackout' outside an agent"
+    assert error.line == 4
+    assert error.column == 5

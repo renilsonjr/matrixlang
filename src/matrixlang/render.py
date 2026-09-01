@@ -1,7 +1,7 @@
 """Canonical source rendering: syntax tree in, source text out.
 
 One emitter serves both faces (design S4-5). The walk is identical; a
-face table maps the 49 glyph slots at emission time, so identifiers,
+face table maps the 56 glyph slots at emission time, so identifiers,
 string contents, and comment text bypass the table BY CONSTRUCTION —
 the reason this is not textual substitution, which would corrupt the
 digit in `x2` and the keyword inside "trace".
@@ -15,17 +15,21 @@ per block depth, one statement per line, single spaces around binary
 operators, no blank lines, trailing comments after two spaces.
 """
 
+from decimal import Decimal
+
 from matrixlang.glyphs import GLYPHS
 from matrixlang.nodes import (
     Call,
     DictLiteral,
     ExprStmt,
     FunctionDef,
+    Glitch,
     Index,
     IndexAssign,
     JackIn,
     ListLiteral,
     Return,
+    Wake,
     Assign,
     Binary,
     BoolLiteral,
@@ -53,6 +57,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
     TokenType.SLASH: "/",
+    TokenType.PERCENT: "%",
     TokenType.EQ: "==",
     TokenType.NEQ: "!=",
     TokenType.LT: "<",
@@ -73,6 +78,9 @@ _OPS: dict[TokenType, str] = {
     TokenType.INVERT: "invert",
     TokenType.UPLINK: "uplink",
     TokenType.DOWNLINK: "downlink",
+    TokenType.FOLD: "fold",
+    TokenType.TRIM: "trim",
+    TokenType.CLEAVE: "cleave",
 }
 
 # Precedence levels, loosest to tightest (language spec §4). Parens are
@@ -111,6 +119,25 @@ _LEVEL: dict[TokenType, int] = {
 _NOT_LEVEL = 6
 _UNARY_LEVEL = 12
 _ATOM_LEVEL = 13
+    TokenType.ORACLE: 5,
+    # `cleave` has a rung of its own (parser._CLEAVE_OPS) between
+    # comparison and term. It is why every level below this line moved up
+    # by one when string methods landed.
+    TokenType.CLEAVE: 6,
+    TokenType.PLUS: 7,
+    TokenType.MINUS: 7,
+    TokenType.STAR: 8,
+    TokenType.SLASH: 8,
+    # Same rung as `*` and `/` -- parser._FACTOR_OPS puts all three
+    # together, as Python does.
+    TokenType.PERCENT: 8,
+}
+# `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
+# unlike `-` and `length` it binds LOOSER than every binary operator
+# except fork and splice.
+_NOT_LEVEL = 3
+_UNARY_LEVEL = 9
+_ATOM_LEVEL = 10
 # A call is postfix and binds tighter than every operator, including unary
 # minus: -f(1) is -(f(1)), never (-f)(1). That makes it an atom for
 # parenthesisation purposes, and saying so is better than the two constants
@@ -225,6 +252,10 @@ def _statement(stmt: Stmt, depth: int, face: Face, lines: list[str]) -> None:
         lines.append(pad + head + _trail(stmt, face))
     elif isinstance(stmt, ExprStmt):
         lines.append(pad + _expression(stmt.value, 0, face) + _trail(stmt, face))
+    elif isinstance(stmt, Wake):
+        lines.append(pad + _map(face, "wake") + _trail(stmt, face))
+    elif isinstance(stmt, Glitch):
+        lines.append(pad + _map(face, "glitch") + _trail(stmt, face))
     else:
         raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
@@ -275,12 +306,14 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             TokenType.ENCODE,
             TokenType.KEYMAKER,
             TokenType.INVERT,
+            TokenType.FOLD,
+            TokenType.TRIM,
         ):
             # A word operator needs a separator or `length xs` renders as
             # `lengthxs` and re-lexes as one identifier — a silent change
             # of meaning, which is exactly what §4.3 exists to catch.
-            # `decode`, `encode`, and `keymaker` are the same shape and
-            # share the rule.
+            # `decode`, `encode`, `keymaker`, `fold` and `trim` are the
+            # same shape and share the rule.
             return _map(face, _OPS[expr.op]) + " " + operand, _UNARY_LEVEL
         return _map(face, "-") + operand, _UNARY_LEVEL
     if isinstance(expr, Call):
@@ -339,10 +372,17 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
     raise AssertionError(f"unhandled expression node: {type(expr).__name__}")
 
 
-def _number(value: int, face: Face) -> str:
-    # §6.2: digits map per-digit, positionally. NumberLiteral values are
-    # non-negative — a minus sign is a Unary node, never part of a number.
-    return "".join(_map(face, digit) for digit in str(value))
+def _number(value: Decimal, face: Face) -> str:
+    # §6.2: digits map per-digit, positionally, and the point is one more
+    # slot in the same table. format(value, "f") rather than str(): str
+    # emits scientific notation past certain exponents, which would not
+    # re-lex. NumberLiteral values are non-negative — a minus sign is a
+    # Unary node, never part of a number.
+    #
+    # The text is what matters, not the value: Decimal("2.50") equals
+    # Decimal("2.5"), so dropping a trailing zero here would still satisfy
+    # the round-trip property while changing what the program means.
+    return "".join(_map(face, ch) for ch in format(value, "f"))
 
 
 def _string(value: str) -> str:

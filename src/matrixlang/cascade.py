@@ -250,7 +250,7 @@ def _header(stmt: Stmt, glyph_source: bool = True) -> str:
     the ASCII source, is deliberate. The alternative spells `construct` out
     as nine glyphs: it decodes perfectly but doubles every line, and since a
     line falls vertically, height is length — a 30-row field stops fitting
-    whole statements. It also erases the 49-slot table from the screen, which
+    whole statements. It also erases the 56-slot table from the screen, which
     is the notation that makes this MatrixLang rather than generic rain.
 
     The cost, stated because it is real: a naive decode of a source line

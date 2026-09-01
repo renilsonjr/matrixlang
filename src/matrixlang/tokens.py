@@ -40,12 +40,18 @@ class TokenType(Enum):
     INVERT = auto()
     UPLINK = auto()
     DOWNLINK = auto()
+    FOLD = auto()
+    TRIM = auto()
+    CLEAVE = auto()
+    WAKE = auto()
+    GLITCH = auto()
 
     # Operators
     PLUS = auto()
     MINUS = auto()
     STAR = auto()
     SLASH = auto()
+    PERCENT = auto()
     ASSIGN = auto()
     EQ = auto()
     NEQ = auto()
@@ -96,6 +102,11 @@ KEYWORDS: dict[str, TokenType] = {
     "invert": TokenType.INVERT,
     "uplink": TokenType.UPLINK,
     "downlink": TokenType.DOWNLINK,
+    "fold": TokenType.FOLD,
+    "trim": TokenType.TRIM,
+    "cleave": TokenType.CLEAVE,
+    "wake": TokenType.WAKE,
+    "glitch": TokenType.GLITCH,
 }
 
 

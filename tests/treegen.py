@@ -25,12 +25,41 @@ binary expression still exercises precedence), `keymaker` alongside the
 other unary operators, and `oracle` alongside the other binary
 operators: a node type added to the language but not here would sit
 outside this property exactly as `decode`/`encode` once did, silently.
+And, for string methods (#132) — `fold` and `trim` alongside the other
+unary operators, and `cleave` alongside the other binary operators.
+`cleave` sits on a precedence rung of its own between comparison and
+term (parser._CLEAVE_OPS), which renumbered render._LEVEL end to end;
+`(a cleave b) == c` and `a + b cleave c` are exactly the shapes that
+would go silently wrong if that rung's level were off by one.
 test_roundtrip has a test asserting this coverage actually occurs — a
 generator that stops producing the hard shapes would quietly gut the
 property.
+
+And, for loop control — `wake` and `glitch` (STMT-2), the two node
+types with no operand at all: the whole statement is the keyword. Both
+sit in `gen_statement`'s BASE kind list (alongside
+`declare`/`assign`/... , not gated on `depth > 0`), which is what gets
+them generated as children of `While`/`If`/agent bodies rather than
+only at a program's top level — a `wake` at the top level round-trips
+trivially, and a nested one proves the node SURVIVES being a child
+rather than a top-level statement (parses back to the same tree either
+way). It proves nothing about indentation: `lexer.py` has no INDENT
+concept, so render's leading whitespace is cosmetic and
+`parse(render(t)) == t` holds whether or not a nested `wake`/`glitch`
+is indented at all — deleting `pad +` from both of render.py's
+branches for these two node types leaves every seed in this file
+passing. Indentation for these two is guarded only by
+`tests/test_loops_render.py`'s `test_they_render_inside_a_loop_body`
+and `test_they_render_indented_inside_a_loop_in_the_glyph_face`;
+deleting either as "redundant with the property" would remove the only
+coverage of it. A node type outside this file is invisible to
+parse(render(t)) == t exactly as `decode`/`encode` once were, silently
+— that is what makes this file the third one (after render.py and
+treeview.py) a new statement kind must touch.
 """
 
 import random
+from decimal import Decimal
 
 from matrixlang.nodes import (
     Assign,
@@ -39,6 +68,7 @@ from matrixlang.nodes import (
     Declare,
     DictLiteral,
     Expr,
+    Glitch,
     If,
     Index,
     IndexAssign,
@@ -54,6 +84,7 @@ from matrixlang.nodes import (
     Return,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import TokenType
@@ -70,14 +101,22 @@ _STRING_CHARS = [
     "a", "b", "z", " ", "_", '"', "\\", "\n", "0", "7", "#", "ｱ", "flatline",
 ]
 _COMMENT_CHARS = ["a", "b", " ", "9", "+", "#", "ｱ", '"', "flatline"]
-_NUMBERS = [0, 1, 7, 10, 42, 305]
+# Decimals as well as whole numbers, and a trailing zero among them --
+# `2.50` renders differently from `2.5` while comparing equal, so the
+# corpus has to contain one for the render to be exercised at all.
+_NUMBERS = [
+    Decimal(0), Decimal(1), Decimal(7), Decimal(10), Decimal(42), Decimal(305),
+    Decimal("0.5"), Decimal("2.50"), Decimal("1.25"), Decimal("0.001"),
+]
 _BINARY_OPS = [
     TokenType.EQ, TokenType.NEQ,
     TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE,
     TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH,
+    TokenType.PERCENT,
     TokenType.ORACLE,
     TokenType.MASK, TokenType.MERGE, TokenType.FLIP,
     TokenType.UPLINK, TokenType.DOWNLINK,
+    TokenType.CLEAVE,
 ]
 
 
@@ -97,12 +136,29 @@ def gen_comments(rng: random.Random) -> list[str]:
 
 
 def gen_statement(rng: random.Random, depth: int) -> Stmt:
-    kinds = ["declare", "assign", "trace", "return", "exprstmt", "indexassign"]
+    kinds = [
+        "declare", "assign", "trace", "return", "exprstmt", "indexassign",
+        # Loop control. In the BASE list, not gated on depth: these are
+        # leaves, and putting them here is what gets them nested inside
+        # While, If and agent bodies -- which proves the node SURVIVES
+        # being a child rather than a top-level statement. It does NOT
+        # exercise the render's indentation: lexer.py has no INDENT
+        # concept, so parse(render(t)) == t holds whether or not a
+        # nested wake/glitch is indented -- deleting `pad +` from both
+        # render.py branches for these two leaves this property green.
+        # Indentation is guarded only by tests/test_loops_render.py's
+        # two hand-written nested-render tests.
+        "wake", "glitch",
+    ]
     if depth > 0:
         kinds += ["if", "while", "agent"]
     kind = rng.choice(kinds)
     stmt: Stmt
-    if kind == "indexassign":
+    if kind == "wake":
+        stmt = Wake()
+    elif kind == "glitch":
+        stmt = Glitch()
+    elif kind == "indexassign":
         stmt = IndexAssign(
             gen_assignable_chain(rng) if rng.random() < 0.3 else Name(rng.choice(_IDENTS)),
             gen_expression(rng, 2),
@@ -180,7 +236,7 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
             gen_expression(rng, depth - 1),
         )
     if roll < 0.50:
-        # Every unary operator — all six. Keeping this list complete is
+        # Every unary operator — all eight. Keeping this list complete is
         # what puts each keyword through the mixed-face round trip, which
         # nothing else covers: the hand-written render tests read one face
         # at a time. unplug over a binary is the shape that would render
@@ -198,6 +254,8 @@ def gen_expression(rng: random.Random, depth: int) -> Expr:
                     TokenType.ENCODE,
                     TokenType.KEYMAKER,
                     TokenType.INVERT,
+                    TokenType.FOLD,
+                    TokenType.TRIM,
                 ]
             ),
             gen_expression(rng, depth - 1),

@@ -14,7 +14,16 @@ import pytest
 
 from matrixlang.glyphs import GLYPHS
 from matrixlang.lexer import lex
-from matrixlang.nodes import Binary, Call, DictLiteral, If, Index, ListLiteral, Unary
+from matrixlang.nodes import (
+    Binary,
+    Call,
+    DictLiteral,
+    If,
+    Index,
+    ListLiteral,
+    Unary,
+    While,
+)
 from matrixlang.parser import parse
 from matrixlang.render import _LEVEL, render, render_ascii, render_glyph
 from treegen import gen_program
@@ -330,30 +339,115 @@ def test_the_generator_produces_the_stage_9_shapes_too():
         for child in getattr(stmt, "else_body", None) or []:
             walk_stmt(child)
 
-    # 1000, not the usual 300: `unplug (a splice b)` was already down to a
-    # single hit in 300 seeds before Task 6, and adding `keymaker` beside
-    # `unplug` in treegen's unary choice list (5 options -> 6) dilutes
-    # every existing operator's share and reshuffles which seeds land
-    # where in the RNG stream. That pushed this compound's first
-    # occurrence in this run past seed 300 (to 549) with no change to the
-    # shape's real generation probability -- widening the seed pool here
-    # restores the check rather than papering over it. The primary
-    # round-trip property (test_round_trip) and Step 5's corpus counts
-    # stay pinned at the canonical 300 seeds; this is a coverage meta-test
-    # sampling the same generator, not that property.
-    for seed in range(1000):
+    # 1000, not 600: adding `fold`/`trim` beside `unplug` in treegen's
+    # unary choice list (6 options -> 8) genuinely made `unplug` rarer,
+    # not just reshuffled -- its share of the unary draw fell from 1/6 to
+    # 1/8, and the measured per-1000-seed hit counts fell with it:
+    #   unplug                 155 -> 124
+    #   unplug over a binary     33 ->  22
+    #   (unplug a) == b          10 ->   5, first occurrence seed 84 -> 694
+    # (`unplug_over_splice` was unaffected in the other direction -- it
+    # stayed comfortably above zero). That pushed `(unplug a) == b`'s
+    # first occurrence past the old 600-seed range; widening the seed
+    # pool here restores the check rather than papering over a shape that
+    # is legitimately less common now. The primary round-trip property
+    # (test_round_trip) and Step 5's corpus counts stay pinned at the
+    # canonical 300 seeds; this is a coverage meta-test sampling the same
+    # generator, not that property.
+    #
+    # Updated again when `wake`/`glitch` joined treegen's STATEMENT base
+    # kinds list (6 options -> 8): that reshuffles the RNG draw sequence
+    # for every statement generated after the first one in a tree, which
+    # hits `(unplug a) == b` far harder than the unary-list change above
+    # did -- it fell from 5 hits in 1000 seeds to 1, and its first
+    # occurrence MOVED EARLIER, seed 694 -> seed 145. That second number
+    # is the one that matters here: the assertion is no longer surviving
+    # because the range is wide enough to reach a late occurrence: on
+    # this measurement, its only occurrence in 1000 seeds is an early
+    # one, and there is no second hit anywhere in the rest of the range.
+    # Widening the seed pool further would not have bought the earlier
+    # fix and is not expected to buy anything now -- a generator change
+    # that shifts the RNG stream can just as easily move the sole hit
+    # past whatever range is chosen, or erase it, and range alone cannot
+    # tell the two apart. If this assertion goes red, look at what
+    # changed in treegen's RNG draw sequence before reaching for a wider
+    # range.
+    #
+    # This is honestly a fall in real generation probability, not a
+    # reshuffling artifact that washes out over more seeds: `unplug` and
+    # `unplug_under_eq` both draw from spaces that the two new STATEMENT
+    # kinds do not touch directly, but every RNG call downstream of the
+    # first added kind shifts, which is why this shape in particular
+    # nearly disappeared while, e.g., `unplug_over_binary` (22 -> 24)
+    # did not fall at all -- the exact same reshuffle helps some shapes
+    # and hurts others, and there is no way to predict which from the
+    # kind list alone.
+    #
+    # Updated a third time (Task 6, decimal literals): `_NUMBERS` grew
+    # from 6 entries to 10 (whole numbers plus four Decimal literals,
+    # one of them a trailing-zero shape needed elsewhere). NumberLiteral
+    # sits behind an atom draw that every expression bottoms out at, so
+    # widening that one list reshuffles the RNG stream for every tree,
+    # same mechanism as the two changes above. Measured at 1000 seeds,
+    # before -> after this change:
+    #   splice                    492 -> 507
+    #   fork                      535 -> 515
+    #   unplug                     99 -> 107
+    #   unplug_over_binary         24 ->  29
+    #   fork_over_splice           16 ->  19
+    #   logical_over_comparison   140 -> 145
+    #   splice_over_fork           15 ->  11
+    #   unplug_under_eq             1 ->   0   <- went to zero, the rest stayed positive
+    #   unplug_over_splice          2 ->   3
+    # Only `unplug_under_eq` crossed to zero; every other shape in this
+    # test stayed comfortably above it, positive in both directions same
+    # as the unary-list change. This is an honest fall in the shape's
+    # real generation probability, not a reshuffling artifact that
+    # would wash out at a slightly wider range: at 1000 seeds its lone
+    # hit is simply gone, not merely moved late. Scanning further out,
+    # its first occurrence in the new stream is seed 1075 (6 hits by
+    # seed 2000, versus the single hit at seed 145 in the pre-Task-6
+    # stream) -- so the range widens to 2000, comfortably past that
+    # first occurrence, rather than to some value that barely clears it.
+    #
+    # Updated a fourth time (Task 7, `%`): `_BINARY_OPS` grew from 10
+    # entries to 11, reshuffling the RNG stream for every Binary draw --
+    # the same mechanism as every widening above, this time from the
+    # operator list itself rather than an atom pool. Measured at 2000
+    # seeds, before -> after this change:
+    #   splice                   1039 -> 1042
+    #   fork                     1065 -> 1062
+    #   unplug                    215 ->  223
+    #   unplug_over_binary         42 ->   45
+    #   fork_over_splice           41 ->   41
+    #   logical_over_comparison   308 ->  278
+    #   splice_over_fork           22 ->   26
+    #   unplug_under_eq              6 ->    5   <- the thin one, fell again
+    #   unplug_over_splice           5 ->    5
+    # Every shape but `unplug_under_eq` stayed comfortably positive --
+    # `logical_over_comparison` moved the most in absolute terms (308 ->
+    # 278) but from a count nowhere near zero, so it needs no widening.
+    # `unplug_under_eq` is the one this file has already had to rescue
+    # twice; at 2000 seeds it now sits at seeds [1075, 1200, 1348, 1729,
+    # 1861], 5 hits, the last only 139 shy of the cap -- fragile in the
+    # same way earlier revisions of this comment describe. Measured
+    # further out: 7 hits by seed 3000, 12 hits by seed 4000, last hit
+    # at seed 3666 -- comfortably inside 4000, not merely clearing it.
+    # Widening to 4000 buys real headroom rather than a value that
+    # barely survives the next reshuffle.
+    for seed in range(4000):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert splice, "no splice in 1000 seeds"
-    assert fork, "no fork in 1000 seeds"
-    assert unplug, "no unplug in 1000 seeds"
-    assert unplug_over_binary, "no `unplug (a == b)` shape in 1000 seeds"
-    assert fork_over_splice, "no `a fork (b splice c)` shape in 1000 seeds"
-    assert logical_over_comparison, "no logical-over-comparison shape in 1000 seeds"
-    assert splice_over_fork, "no `a splice (b fork c)` shape in 1000 seeds"
-    assert unplug_under_eq, "no `(unplug a) == b` shape in 1000 seeds"
-    assert unplug_over_splice, "no `unplug (a splice b)` shape in 1000 seeds"
+    assert splice, "no splice in 4000 seeds"
+    assert fork, "no fork in 4000 seeds"
+    assert unplug, "no unplug in 4000 seeds"
+    assert unplug_over_binary, "no `unplug (a == b)` shape in 4000 seeds"
+    assert fork_over_splice, "no `a fork (b splice c)` shape in 4000 seeds"
+    assert logical_over_comparison, "no logical-over-comparison shape in 4000 seeds"
+    assert splice_over_fork, "no `a splice (b fork c)` shape in 4000 seeds"
+    assert unplug_under_eq, "no `(unplug a) == b` shape in 4000 seeds"
+    assert unplug_over_splice, "no `unplug (a splice b)` shape in 4000 seeds"
 
 
 def test_the_generator_produces_every_unary_operator():
@@ -374,6 +468,8 @@ def test_the_generator_produces_every_unary_operator():
         TokenType.ENCODE,
         TokenType.KEYMAKER,
         TokenType.INVERT,
+        TokenType.FOLD,
+        TokenType.TRIM,
     }
     found = set()
 
@@ -475,11 +571,245 @@ def test_the_generator_produces_the_dictionary_shapes_too():
             for child in getattr(stmt, name, None) or []:
                 walk_stmt(child)
 
+    # 600, not 300 (Task 6, decimal literals): `_NUMBERS` growing from 6
+    # entries to 10 reshuffled the RNG stream for every generated tree,
+    # same mechanism as the stage-9 widenings above. `dict_in_dict` was
+    # already the thinnest surviving shape here before that change --
+    # measured before -> after at 300 seeds: 7 -> 4 hits, the largest
+    # proportional fall of any shape in this file that stayed positive.
+    # Its hit seeds at 300 are [159, 252, 279, 299] -- the last hit lands
+    # on the FINAL seed in the range, which is fragile in a way a bare
+    # nonzero count does not show: any later reshuffle just as plausibly
+    # pushes that seed past 300 as it does any other, and Tasks 7-9 all
+    # still touch treegen. Widening to 600 buys real headroom rather than
+    # a value that barely clears zero: measured at 600 seeds, hit seeds
+    # are [159, 252, 279, 299, 348, 374, 469, 533, 583] -- 9 hits, spread
+    # across the range rather than clustered at the boundary, with the
+    # last one 17 seeds shy of the new cap rather than sitting on it.
+    # This is an honest read of where the shape's hits currently fall,
+    # not a claim that its real generation probability is unchanged --
+    # doubling the range roughly doubles the hit count for a shape whose
+    # rate did not change, which is consistent with what was measured
+    # here, but the point of recording seeds rather than just counts is
+    # that the NEXT reshuffle could move them again in either direction.
+    #
+    # Widened again (Task 7, `%`): `_BINARY_OPS` grew from 10 entries to
+    # 11, reshuffling the RNG stream for every Binary draw, the same
+    # mechanism as the decimal-literals change above. `dict_in_dict` was
+    # already the thinnest shape tracked in this file -- measured before
+    # -> after at 600 seeds: 9 -> 8 hits (counting `event` occurrences,
+    # where one seed can contribute two: 10 -> 9 with seed 583's double
+    # hit counted twice). Its hit seeds at 600 stay [159, 252, 279, 299,
+    # 348, 469, 533, 583, 583] with seed 374's hit gone -- an honest fall
+    # in the shape's real generation probability, not a reshuffling
+    # artifact, the same conclusion the earlier widening in this comment
+    # reached. Doubling to 1200 restores headroom: measured at 1200
+    # seeds, 21 hits (seeds spread out to 1180), 20 shy of the new cap
+    # rather than the 17-seed margin the previous widening bought at 600.
+    for seed in range(1200):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    assert empty_dict, "no {} in 1200 seeds"
+    assert populated_dict, "no populated dictionary in 1200 seeds"
+    assert dict_in_dict, "no dictionary inside a dictionary in 1200 seeds"
+    assert oracle, "no `oracle` binary in 1200 seeds"
+
+
+def test_the_generator_produces_the_string_method_shapes_too():
+    # The trap, stated in the string-methods spec: the 300-seed property
+    # only covers shapes treegen produces, and this has silently failed
+    # twice -- `decode` and `encode` sat outside the property for their
+    # entire existence while it stayed green, and the same hole reopened
+    # one level down when dictionaries landed. So the corpus is COUNTED.
+    # A zero here means test_round_trip is green while proving nothing
+    # about these three operators.
+    #
+    # `cleave` matters most: it has a precedence rung of its own, which
+    # renumbered render._LEVEL end to end. A wrong level there changes
+    # what a program means and fails loudly nowhere else.
+    from matrixlang.nodes import IndexAssign
+    from matrixlang.tokens import TokenType
+
+    counts = {"cleave": 0, "fold": 0, "trim": 0, "over_term": 0, "under_cmp": 0}
+
+    def walk_expr(expr):
+        if isinstance(expr, Unary):
+            if expr.op is TokenType.FOLD:
+                counts["fold"] += 1
+            if expr.op is TokenType.TRIM:
+                counts["trim"] += 1
+            walk_expr(expr.operand)
+        elif isinstance(expr, Binary):
+            level = _LEVEL.get(expr.op)
+            cleave_level = _LEVEL[TokenType.CLEAVE]
+            if expr.op is TokenType.CLEAVE:
+                counts["cleave"] += 1
+                for side in (expr.left, expr.right):
+                    if (
+                        isinstance(side, Binary)
+                        and _LEVEL.get(side.op, 0) > cleave_level
+                    ):
+                        counts["over_term"] += 1
+            elif level is not None and 4 <= level < cleave_level:
+                # Only equality and comparison (_LEVEL 4 and 5) count here.
+                # `fork`/`splice` sit below cleave too (_LEVEL 1 and 2),
+                # but a `(a cleave b) fork c` shape only proves
+                # `CLEAVE > FORK`, not the delicate boundary this rung
+                # exists for -- the assertion below is worded for
+                # comparison, so the count must be too.
+                for side in (expr.left, expr.right):
+                    if isinstance(side, Binary) and side.op is TokenType.CLEAVE:
+                        counts["under_cmp"] += 1
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
+
+    def walk_stmt(stmt):
+        if isinstance(stmt, IndexAssign):
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
     for seed in range(300):
         for statement in gen_program(random.Random(seed)).statements:
             walk_stmt(statement)
 
-    assert empty_dict, "no {} in 300 seeds"
-    assert populated_dict, "no populated dictionary in 300 seeds"
-    assert dict_in_dict, "no dictionary inside a dictionary in 300 seeds"
-    assert oracle, "no `oracle` binary in 300 seeds"
+    assert counts["cleave"], "no `cleave` in 300 seeds — the property proves nothing about it"
+    assert counts["fold"], "no `fold` in 300 seeds"
+    assert counts["trim"], "no `trim` in 300 seeds"
+    assert counts["over_term"], "no `(a + b) cleave c` shape in 300 seeds"
+    assert counts["under_cmp"], "no `(a cleave b) == c` shape in 300 seeds"
+
+
+def test_the_generator_produces_the_loop_control_shapes_too():
+    # Two new STATEMENT node types, and the property only covers shapes
+    # treegen produces. A `wake` at a program's top level would round
+    # trip trivially; a nested one proves the node SURVIVES being a
+    # child of a While body rather than only a top-level statement --
+    # that it round-trips there too, not just in isolation. So both are
+    # counted, and counted separately for the nested case.
+    #
+    # This does NOT exercise the render's indentation. lexer.py has no
+    # INDENT concept, so parse(render(t)) == t holds whether or not a
+    # nested wake/glitch is rendered with its leading pad at all --
+    # deleting `pad +` from both of render.py's branches for these two
+    # node types leaves this whole file, including this test, green.
+    # Indentation is guarded only by tests/test_loops_render.py's
+    # test_they_render_inside_a_loop_body and
+    # test_they_render_indented_inside_a_loop_in_the_glyph_face; deleting
+    # either as "redundant with the property" would remove the only
+    # coverage of it.
+    from matrixlang.nodes import Glitch, IndexAssign, Wake
+
+    counts = {"wake": 0, "glitch": 0, "in_loop": 0}
+
+    def walk_stmt(stmt, in_loop):
+        if isinstance(stmt, Wake):
+            counts["wake"] += 1
+            if in_loop:
+                counts["in_loop"] += 1
+            return
+        if isinstance(stmt, Glitch):
+            counts["glitch"] += 1
+            if in_loop:
+                counts["in_loop"] += 1
+            return
+        if isinstance(stmt, IndexAssign):
+            return
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child, in_loop or isinstance(stmt, While))
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement, False)
+
+    assert counts["wake"], "no `wake` in 300 seeds — the property proves nothing about it"
+    assert counts["glitch"], "no `glitch` in 300 seeds"
+    assert counts["in_loop"], "no loop-control statement INSIDE a loop body in 300 seeds"
+
+
+def test_the_generator_produces_decimal_literals_too():
+    # A NumberLiteral holding a whole number round-trips through a code
+    # path that never touches the point, so a corpus of whole numbers
+    # would leave the decimal render completely untested while the
+    # property stayed green.
+    from decimal import Decimal
+
+    from matrixlang.nodes import IndexAssign, NumberLiteral
+
+    counts = {"whole": 0, "fractional": 0, "trailing_zero": 0}
+
+    def walk_expr(expr):
+        if isinstance(expr, NumberLiteral):
+            if expr.value == expr.value.to_integral_value():
+                counts["whole"] += 1
+            else:
+                counts["fractional"] += 1
+            if str(expr.value).endswith("0") and "." in str(expr.value):
+                counts["trailing_zero"] += 1
+        elif isinstance(expr, Unary):
+            walk_expr(expr.operand)
+        elif isinstance(expr, Binary):
+            walk_expr(expr.left)
+            walk_expr(expr.right)
+        elif isinstance(expr, ListLiteral):
+            for element in expr.elements:
+                walk_expr(element)
+        elif isinstance(expr, Index):
+            walk_expr(expr.target)
+            walk_expr(expr.index)
+        elif isinstance(expr, Call):
+            walk_expr(expr.callee)
+            for arg in expr.args:
+                walk_expr(arg)
+        elif isinstance(expr, DictLiteral):
+            for key, value in expr.entries:
+                walk_expr(key)
+                walk_expr(value)
+
+    def walk_stmt(stmt):
+        if isinstance(stmt, IndexAssign):
+            walk_expr(stmt.target)
+            walk_expr(stmt.index)
+            walk_expr(stmt.value)
+            return
+        for field in ("value", "condition"):
+            if getattr(stmt, field, None) is not None:
+                walk_expr(getattr(stmt, field))
+        for name in ("body", "then_body", "else_body"):
+            for child in getattr(stmt, name, None) or []:
+                walk_stmt(child)
+
+    for seed in range(300):
+        for statement in gen_program(random.Random(seed)).statements:
+            walk_stmt(statement)
+
+    print("decimal corpus:", counts)
+    assert counts["whole"], "no whole-number literal in 300 seeds"
+    assert counts["fractional"], "no decimal literal in 300 seeds"
+    assert counts["trailing_zero"], (
+        "no trailing-zero literal in 300 seeds — the one shape the "
+        "round-trip property cannot police, since 2.50 == 2.5"
+    )

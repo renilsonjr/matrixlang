@@ -66,7 +66,7 @@ logical operators — <code>splice</code> (and), <code>fork</code> (or),
 has no equivalent concept for logical conjunction; this is stated directly in
 the language's own design records rather than left for a reader to notice.
 
-The language has five types (integer, boolean, string, list, dictionary),
+The language has five types (number, boolean, string, list, dictionary),
 agents (functions) with closures, and no null — a value either exists or
 the name does not. There is no <code>eval</code>, no file or network access, and no
 route from a program into the host language; a <code>.rain</code> file cannot
@@ -75,7 +75,7 @@ do anything beyond compute and print.
 ==Computational class==
 
 MatrixLang is [[Turing complete]]: it has named mutable variables, arbitrary
-integer arithmetic, conditionals, unbounded loops (<code>dejavu</code>), and
+exact-decimal arithmetic, conditionals, unbounded loops (<code>dejavu</code>), and
 recursive agents with closures. A step counter stops a runaway loop after
 200,000 statements by default; this is a configurable safety limit for the
 reference implementation, not a restriction on what the language can express

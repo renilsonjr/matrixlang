@@ -132,15 +132,18 @@ def test_run_without_input_reports_the_shortfall_rather_than_raising():
     assert "no input left to read" in events[-1]["message"]
 
 
-def test_run_reports_an_over_long_decode_rather_than_raising():
-    # `run` promises never to raise and the JS caller has no error path,
-    # so a raw ValueError out of int() breaks the playground rather than
-    # showing a diagnostic. Reachable with no input at all, straight from
-    # the editor -- CPython refuses int(str) past 4300 digits.
+def test_run_reports_an_over_long_decode_display_rather_than_raising():
+    # `run` promises never to raise and the JS caller has no error path.
+    # Was a raw ValueError out of int() -- now Decimal(stripped) never
+    # raises for a long digit string, so `decode` itself succeeds; it is
+    # `trace` trying to SHOW the huge result that reaches values.py's
+    # digit cap. Still reachable with no input at all, straight from the
+    # editor, and still an error event rather than a raised exception --
+    # just from displaying, not decoding.
     too_long = "9" * (sys.int_info.default_max_str_digits + 1)
     events = glue.run(f'trace decode "{too_long}"\n')
     assert events[-1]["kind"] == "error"
-    assert "decode" in events[-1]["message"]
+    assert "cannot display a number longer than" in events[-1]["message"]
 
 
 def test_run_reports_an_over_long_number_rather_than_raising():
@@ -164,13 +167,89 @@ def test_run_reports_an_over_long_number_rather_than_raising():
 def test_run_reports_an_over_long_number_literal_rather_than_raising():
     # The third door to the same CPython ceiling, and the one that needs
     # no arithmetic at all: a long enough run of digits typed -- or
-    # pasted -- straight into the editor. `run` catches MatrixLangError
-    # and nothing else, so the bare ValueError out of the lexer's int()
-    # left the playground with an unhandled exception rather than an
-    # error event, exactly as the two above did.
+    # pasted -- straight into the editor. The digit cap moved out of the
+    # lexer (#135): lexing and parsing a literal this long now succeed,
+    # and it is `trace` trying to display the result that reaches
+    # values.py's cap -- see
+    # tests/test_numbers_lex.py::test_an_oversized_literal_fails_at_trace_not_at_lex_or_parse
+    # for the same chain pinned closer to the source. `run` catches
+    # MatrixLangError and nothing else, so a bare exception anywhere in
+    # that chain would leave the playground with an unhandled exception
+    # rather than an error event.
     events = glue.run("trace " + "1" * (sys.int_info.default_max_str_digits + 1) + "\n")
     assert events[-1]["kind"] == "error"
-    assert "number too long to read" in events[-1]["message"]
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+# --- Fix-review regression: an over-long INDEX, not just an over-long
+# number, escaping run() as a bare Python exception. -------------------
+#
+# Review on this task's first pass found two Criticals sitting in the
+# same eight lines of interpreter.py's _check_index: `position` -- a
+# full-size Python int by the time the "past the end" message was built
+# -- was interpolated straight into an f-string, and the "not is_whole"
+# branch's own to_display(index) call was unguarded, unlike every other
+# to_display call site in that file. Both are the same class of bug as
+# test_run_reports_an_over_long_number_literal_rather_than_raising
+# above, and the same class Task 2's
+# test_an_oversized_literal_fails_at_trace_not_at_lex_or_parse exists to
+# catch for `trace` -- proven here for indexing instead, end to end
+# through glue.run() exactly as that promise requires, and through both
+# routes that can hand `_check_index` an oversized value: a literal
+# typed straight into the editor, and `decode` reading external input
+# (this task removed decode's own digit cap, so nothing upstream stops
+# either route from reaching the index check with a huge value).
+
+
+def test_run_reports_an_over_long_literal_index_rather_than_raising():
+    # Critical 1, the literal route. No input needed -- reachable by
+    # pasting straight into the editor.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct xs = ["a", "b"]\ntrace xs[{too_long}]\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_decoded_index_rather_than_raising():
+    # Critical 1, the decode route -- reached differently from the
+    # literal case above: through external input rather than the lexer,
+    # with nothing but `_check_index` itself standing between a caller
+    # and a bare Python exception now that decode's own cap is gone.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(
+        f'construct xs = ["a", "b"]\ntrace xs[decode "{too_long}"]\n'
+    )
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_non_whole_index_rather_than_raising():
+    # Critical 2: the "not is_whole" branch's to_display(index) call,
+    # reached before position even exists -- a long, fractional index
+    # never gets as far as the "past the end" message Critical 1 covers.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct xs = ["a"]\ntrace xs[{too_long}.5]\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_index_on_assignment_rather_than_raising():
+    # _check_index is shared between the Index-read branch of _evaluate
+    # and the IndexAssign branch of _execute -- a fix in one and not the
+    # other would leave this route still raising bare.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct xs = ["a", "b"]\nxs[{too_long}] = "z"\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
+
+
+def test_run_reports_an_over_long_string_index_rather_than_raising():
+    # _element serves strings and lists through the same _check_index,
+    # so the guard must hold for a string target too, not just a list.
+    too_long = "9" * (sys.int_info.default_max_str_digits + 1)
+    events = glue.run(f'construct s = "ab"\ntrace s[{too_long}]\n')
+    assert events[-1]["kind"] == "error"
+    assert "cannot display a number longer than" in events[-1]["message"]
 
 
 def test_an_empty_input_box_is_named_when_a_program_runs_out_of_input():
@@ -358,3 +437,81 @@ def test_interactive_source_splits_lines_exactly_like_non_interactive():
             break
 
     assert interactive_lines == buffer_lines == ["a\x0bb", "c"]
+
+
+def test_translate_python_returns_a_program():
+    result = glue.translate_python("print(1)\n")
+    assert result == {"ok": True, "source": "trace 1\n"}
+
+
+def test_translate_python_returns_refusals_with_positions():
+    result = glue.translate_python("import os\n")
+    assert result["ok"] is False
+    assert result["refusals"][0]["line"] == 1
+
+
+def test_translate_python_never_raises_on_invalid_python():
+    result = glue.translate_python("def (:\n")
+    assert result["ok"] is False
+
+
+def test_translate_python_never_raises_on_a_lone_surrogate():
+    # A JS string with an unpaired surrogate crosses into Python under
+    # Pyodide as exactly this -- a plain browser <textarea> can hold one,
+    # and ast.parse() used to fail encoding it with an uncaught
+    # UnicodeEncodeError rather than a refusal.
+    result = glue.translate_python("print('\udcff')")
+    assert result["ok"] is False
+
+
+def test_translate_python_never_raises_on_deep_nesting():
+    # 500 levels of `1 + 1 + ...` is well within what a reader could paste,
+    # and used to blow the walker's recursive descent with an uncaught
+    # RecursionError rather than a refusal.
+    result = glue.translate_python("x = " + "1 + " * 500 + "1\n")
+    assert result["ok"] is False
+
+
+def test_encoding_a_cyclic_value_returns_an_error_event_rather_than_raising():
+    # `encode` accepts any value now, which makes a self-containing one
+    # reachable inside it for the first time. run() promises never to
+    # raise; that promise has been broken five times here, so a new
+    # reachable exception type gets its own guard at this layer too.
+    events = glue.run('construct xs = [1]\nxs[0] = xs\ntrace encode xs\n')
+    assert events[-1]["kind"] == "error"
+    assert "contains a cycle" in events[-1]["message"]
+
+
+def test_wake_and_glitch_run_without_raising():
+    # run() promises never to raise; that promise has been broken five
+    # times before. `interpreter.py._execute` emits a `Statement` event
+    # for EVERY statement before its isinstance dispatch, and that event
+    # is rendered by `server.sse.payload` -> `render_glyph` before this
+    # program's own control flow even matters. Until render.py grew
+    # branches for Wake and Glitch, a program containing either raised a
+    # bare AssertionError ("unhandled statement node: Wake") straight
+    # out of run() -- not caught, not turned into an {"kind": "error"}
+    # event, an uncaught crash of the whole call.
+    #
+    # `glitch` skips the `trace i` below on i == 2; `wake` breaks the
+    # loop on i == 4 before its `trace i` runs. So the loop's own output
+    # is "1" and "3" only, followed by "done" once the loop exits.
+    source = (
+        "construct i = 0\n"
+        "dejavu true\n"
+        "  i = i + 1\n"
+        "  redpill i == 2\n"
+        "    glitch\n"
+        "  flatline\n"
+        "  redpill i == 4\n"
+        "    wake\n"
+        "  flatline\n"
+        "  trace i\n"
+        "flatline\n"
+        "trace \"done\"\n"
+    )
+
+    events = glue.run(source)
+
+    assert [e["kind"] for e in events].count("error") == 0
+    assert [e["text"] for e in events if e["kind"] == "output"] == ["1", "3", "done"]

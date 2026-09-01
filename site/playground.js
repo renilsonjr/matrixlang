@@ -25,6 +25,7 @@ const BOOT_BUTTON_IDS = ["boot", "translit-boot"];
 const GATED_CONTROL_IDS = [
   "write", "run", "ask-operator", "editor-face", "cascade-face",
   "translit-latin", "translit-glyphs", "program-input", "answer", "answer-send",
+  "python-source", "translate",
 ];
 
 // A program can read input inside a loop that never ends. Each answer costs
@@ -142,6 +143,25 @@ function writeProgram() {
     miss.textContent = text;
     miss.hidden = false;
   }
+}
+
+function translatePython() {
+  const result = glue
+    .translate_python(el("python-source").value)
+    .toJs({ dict_converter: Object.fromEntries });
+  const miss = el("miss");
+  if (result.ok) {
+    el("editor").value = result.source;
+    withdrawEditorFace();
+    miss.hidden = true;
+    return;
+  }
+  // Every refusal at once. A reader fixing a long program should not have
+  // to discover its problems one press at a time.
+  miss.textContent = result.refusals
+    .map((r) => `line ${r.line}: ${r.reason}${r.idiom ? ` — ${r.idiom}` : ""}`)
+    .join("\n");
+  miss.hidden = false;
 }
 
 function runProgram() {
@@ -298,6 +318,7 @@ async function askOperator() {
 
 el("boot").addEventListener("click", boot);
 el("write").addEventListener("click", writeProgram);
+el("translate").addEventListener("click", translatePython);
 el("run").addEventListener("click", runProgram);
 el("request").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); writeProgram(); }
@@ -395,4 +416,85 @@ el("translit-boot").addEventListener("click", boot);
 el("translit-latin").addEventListener("input", transliterateLatin);
 el("translit-glyphs").addEventListener("input", untransliterateGlyphs);
 
-window.__playground = { boot, write: writeProgram, run: runProgram, finishBoot };
+// ---------------------------------------------------------------------------
+// The Examples panel.
+//
+// Filled from examples.json, which site/generate_examples.py produced by
+// running Scribe and then the real interpreter over each request. Nothing
+// here is typed by hand and nothing here is language logic: the source, the
+// glyph face and the output are all read out of that file exactly as the
+// build wrote them.
+//
+// It does not wait for Pyodide. The examples are a document — a reader who
+// never presses "Load the interpreter" should still be able to read what
+// the language looks like, and a boot that fails should not take them with
+// it.
+function exampleCard(request, example) {
+  const card = document.createElement("div");
+  card.className = "ex";
+
+  const title = document.createElement("h3");
+  title.textContent = request;
+  card.append(title);
+
+  const source = document.createElement("pre");
+  source.className = "source";
+  source.textContent = example.source.replace(/\n$/, "");
+  card.append(source);
+
+  // Some examples correctly print nothing — `make a list of 1 2 3` is a
+  // declaration. Showing an empty "prints" line would read as a bug.
+  if (example.output && example.output.length) {
+    const printed = document.createElement("pre");
+    printed.className = "output";
+    printed.textContent = example.output.join("\n");
+    card.append(printed);
+  }
+
+  const load = document.createElement("button");
+  load.type = "button";
+  load.className = "ex-load";
+  load.textContent = "Load it into the playground";
+  load.addEventListener("click", () => {
+    el("editor").value = example.source;
+    // Assigning .value fires no input event, so the glyph face has to be
+    // withdrawn by hand — the same reason Scribe and Operator do it.
+    withdrawEditorFace();
+    el("tab-construct-btn").click();
+    el("editor").focus();
+  });
+  card.append(load);
+  return card;
+}
+
+function showExamples(examples) {
+  const list = el("example-list");
+  if (!list) return;
+  list.textContent = "";
+  Object.keys(examples).forEach((request) => {
+    list.append(exampleCard(request, examples[request]));
+  });
+}
+
+function loadExamples() {
+  const list = el("example-list");
+  if (!list) return;
+  fetch("examples.json")
+    .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+    .then(showExamples)
+    .catch(() => {
+      // The panel is the only thing that fails. Said plainly rather than
+      // left as a spinner that never resolves.
+      list.textContent = "The examples could not be loaded. The repository has them all.";
+    });
+}
+
+loadExamples();
+
+// GATED_CONTROL_IDS is exposed here too, not just used internally, so the
+// boot tests in site/tests/playground.test.mjs can assert against the real
+// list instead of a copy that silently stops matching it the next time an
+// id is added.
+window.__playground = {
+  boot, write: writeProgram, run: runProgram, finishBoot, GATED_CONTROL_IDS,
+};

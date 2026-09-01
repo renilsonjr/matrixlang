@@ -1,4 +1,4 @@
-"""The 49-slot glyph table — D-03's fixed bijective mapping.
+"""The 56-slot glyph table — D-03's fixed bijective mapping.
 
 Pure data; imports nothing. Keys are the ASCII slot spellings from the
 language spec §3.1; values are single half-width katakana (U+FF66–FF9D),
@@ -51,17 +51,44 @@ GLYPHS: dict[str, str] = {
     # the Keymaker's own sounds were long gone by this point in the table.
     "keymaker": "ﾔ",
     "oracle": "ｵ",
-    "mask": "ﾊ",
-    "merge": "ﾕ",
-    "flip": "ﾘ",
-    "invert": "ﾛ",
-    "uplink": "ﾉ",
-    "downlink": "ｰ",
+    "mask": "ｷｬ",
+    "merge": "ｷｭ",
+    "flip": "ｷｮ",
+    "invert": "ｷﾞｬ",
+    "uplink": "ｷﾞｭ",
+    "downlink": "ｷﾞｮ",
+    # String methods. `trim` takes ﾘ, the "ri" of its own katakana
+    # spelling ﾄﾘﾑ -- ﾄ and ﾑ were long gone, so the middle sound is what
+    # was left. `fold` and `cleave` take ﾊ and ﾛ arbitrarily: almost every
+    # sound in ﾌｫｰﾙﾄﾞ and ｸﾘｰﾌﾞ was already spent by this point in the
+    # table. The one that wasn't -- ｰ, the prolonged-sound mark shared by
+    # both spellings -- was passed over on purpose: it reads as
+    # punctuation stretching the syllable before it, not as a word of its
+    # own, which is what every other mnemonic assignment here rests on.
+    "fold": "ﾊ",
+    "trim": "ﾘ",
+    "cleave": "ﾛ",
+    # Loop control. Both arbitrary -- ｳｪｲｸ and ｸﾞﾘｯﾁ have no sound left
+    # unspent. The two slots deliberately NOT taken are ｰ (U+FF70) and
+    # ﾝ (U+FF9D): neither is a syllable, both read as punctuation, and
+    # the next item in the register needs exactly two punctuation slots.
+    "wake": "ﾉ",
+    "glitch": "ﾕ",
+    # Numbers. The point takes ｰ, the prolonged-sound mark. The
+    # string-methods branch passed this slot over precisely because it
+    # "reads as punctuation rather than a word" -- which is what a decimal
+    # point is.
+    ".": "ｰ",
     # operators
     "+": "ﾀ",
     "-": "ﾋ",
     "*": "ｶ",
     "/": "ﾜ",
+    # The last slot. ﾝ was held back from loop control precisely because
+    # it "reads as punctuation rather than a word" -- which is what a
+    # remainder operator borrowed from arithmetic notation is. 56 used,
+    # 0 free: the table is closed.
+    "%": "ﾝ",
     "=": "ﾅ",
     "==": "ﾆ",
     "!=": "ﾇ",

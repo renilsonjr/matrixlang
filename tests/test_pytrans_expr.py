@@ -1,0 +1,310 @@
+"""Expression translation, and `print` as the smallest statement that can
+hold one end to end."""
+
+from matrixlang.pytrans import translate, Translated, Refusals
+
+
+def ml(python_source):
+    """The MatrixLang a Python snippet translates to. Fails loudly on refusal."""
+    result = translate(python_source)
+    assert isinstance(result, Translated), getattr(result, "items", result)
+    return result.source
+
+
+def refused(python_source):
+    """The refusals a Python snippet produces. Fails loudly if it translated."""
+    result = translate(python_source)
+    assert isinstance(result, Refusals), result
+    return result.items
+
+
+def test_numbers_strings_and_booleans():
+    assert ml("print(1)\n") == "trace 1\n"
+    assert ml('print("hi")\n') == 'trace "hi"\n'
+    assert ml("print(True)\nprint(False)\n") == "trace true\ntrace false\n"
+
+
+def test_names():
+    assert ml("print(x)\n") == "trace x\n"
+
+
+def test_arithmetic_and_comparison():
+    assert ml("print(1 + 2 * 3)\n") == "trace 1 + 2 * 3\n"
+    assert ml("print((1 + 2) * 3)\n") == "trace (1 + 2) * 3\n"
+    assert ml("print(a <= b)\n") == "trace a <= b\n"
+
+
+def test_boolean_operators():
+    assert ml("print(a and b)\n") == "trace a splice b\n"
+    assert ml("print(a or b)\n") == "trace a fork b\n"
+    assert ml("print(not a)\n") == "trace unplug a\n"
+
+
+def test_unary_minus():
+    assert ml("print(-x)\n") == "trace -x\n"
+
+
+def test_list_and_dict_literals():
+    assert ml("print([1, 2])\n") == "trace [1, 2]\n"
+    assert ml('print({"a": 1})\n') == 'trace {"a": 1}\n'
+
+
+def test_indexing():
+    assert ml('print(xs[0])\n') == "trace xs[0]\n"
+    assert ml('print(d["a"])\n') == 'trace d["a"]\n'
+
+
+def test_len_str_and_int():
+    assert ml("print(len(xs))\n") == "trace length xs\n"
+    assert ml("print(str(n))\n") == "trace encode n\n"
+    assert ml("print(int(s))\n") == "trace decode s\n"
+
+
+def test_a_call_to_a_reader_defined_function():
+    assert ml("print(f(1, 2))\n") == "trace f(1, 2)\n"
+
+
+def test_in_over_a_dictionary_is_oracle():
+    assert ml('print("a" in d)\n') == 'trace d oracle "a"\n'
+
+
+def test_precedence_is_rebuilt_not_copied():
+    # The renderer decides parentheses, so a tree that needs them gets them
+    # and one that does not is left clean. This is the whole reason the
+    # translator builds nodes instead of emitting text.
+    assert ml("print(a * (b + c))\n") == "trace a * (b + c)\n"
+    assert ml("print(a * b + c)\n") == "trace a * b + c\n"
+
+
+def test_none_is_refused():
+    assert "None" in refused("print(None)\n")[0].reason
+
+
+def test_a_tuple_is_refused():
+    assert refused("print((1, 2))\n")[0].idiom is not None
+
+
+def test_a_chained_comparison_is_refused():
+    assert "chain" in refused("print(a < b < c)\n")[0].reason
+
+
+def test_slicing_is_refused():
+    assert refused("print(xs[1:3])\n")[0].idiom is not None
+
+
+def test_is_is_refused():
+    assert "is" in refused("print(a is b)\n")[0].reason
+
+
+def test_print_with_several_arguments_is_refused():
+    refusal = refused('print("a", "b")\n')[0]
+    assert refusal.idiom is not None
+
+
+def test_a_bare_expression_statement_is_refused():
+    # MatrixLang's grammar accepts an expression statement only when it is a
+    # call: `1 + 1` alone computes and discards, which the parser treats as a
+    # mistake. Python allows it, so it is refused here.
+    assert refused("1 + 1\n")[0].idiom is not None
+
+
+def test_floor_division_is_refused():
+    # `/` is true division now, so this is not the sign-dependent guess it
+    # used to be: MatrixLang simply has no floor operator, and the glyph
+    # table that would carry one is full (56 used, 0 free).
+    refusal = refused("print(a // b)\n")[0]
+    assert "`//`" in refusal.reason
+    assert "floor operator" in refusal.idiom
+
+
+def test_dividing_in_place_by_floor_is_refused_naming_the_operator():
+    refusal = refused("x = 8\nx //= 2\n")[0]
+    assert "`//`" in refusal.reason
+    assert refusal.line == 2
+
+
+def test_an_operator_refusal_carries_the_expression_s_position():
+    # Python's operator nodes hold no position of their own, so without
+    # borrowing one from the expression around them every `**` in a file
+    # reported at line 1, column 0.
+    refusal = refused("x = 1\ny = 2\nprint(x ** y)\n")[0]
+    assert refusal.line == 3
+    assert refusal.column == 6
+
+
+def test_in_translates_unconditionally_over_every_container():
+    # `k in d`, `2 in xs` and `"a" in s` are the same syntax, and only the
+    # runtime value says which is which -- deciding would be the type
+    # inference the governing rule forbids. So `in` always becomes
+    # `oracle`, unconditionally.
+    #
+    # This test used to end by asserting that the list form then FAILED at
+    # runtime, with "takes a dictionary". That was honest about a real
+    # gap: the translation looked fine and died on Run, naming an operator
+    # the reader never typed. Issue #134 closed it by widening `oracle`
+    # rather than by teaching the translator to guess, so the second half
+    # now asserts the program runs and prints the right answer.
+    import io
+
+    from matrixlang.interpreter import Interpreter
+    from matrixlang.lexer import lex
+    from matrixlang.parser import parse
+
+    assert ml("xs = [1, 2]\nprint(2 in xs)\n") == (
+        "construct xs = [1, 2]\ntrace xs oracle 2\n"
+    )
+    assert ml('print("a" in d)\n') == 'trace d oracle "a"\n'
+    assert ml('s = "abc"\nprint("b" in s)\n') == (
+        'construct s = "abc"\ntrace s oracle "b"\n'
+    )
+
+    out = io.StringIO()
+    Interpreter(out=out).run(
+        parse(lex("construct xs = [1, 2]\ntrace xs oracle 2\n"))
+    )
+    assert out.getvalue() == "true\n"
+
+
+def test_not_in_is_still_refused():
+    # Unlike `in`, this one genuinely has no MatrixLang form.
+    refusal = refused("print(a not in b)\n")[0]
+    assert "`not in`" in refusal.reason
+    assert "unplug" in refusal.idiom
+
+
+def test_lower_becomes_fold():
+    assert "fold s" in ml("s = 'A'\nprint(s.lower())\n")
+
+
+def test_strip_becomes_trim():
+    assert "trim s" in ml("s = ' a '\nprint(s.strip())\n")
+
+
+def test_split_becomes_cleave():
+    assert 's cleave ","' in ml("s = 'a,b'\nprint(s.split(','))\n")
+
+
+def test_a_string_method_on_an_expression_translates():
+    # The receiver is an arbitrary expression, not only a name.
+    assert "fold xs[0]" in ml("xs = ['A']\nprint(xs[0].lower())\n")
+
+
+def test_a_case_insensitive_comparison_translates_whole():
+    source = "a = 'A'\nb = 'a'\nprint(a.lower() == b.lower())\n"
+    assert "fold a == fold b" in ml(source)
+
+
+def test_a_chained_strip_and_split_translates():
+    assert 'trim s cleave ","' in ml("s = ' a,b '\nprint(s.strip().split(','))\n")
+
+
+def test_a_float_translates_now():
+    assert ml("print(0.5)\n") == "trace 0.5\n"
+
+
+def test_a_float_keeps_its_exact_text():
+    # Decimal(str(value)), never Decimal(value): Decimal(0.1) is the full
+    # binary expansion, 0.1000000000000000055511151231257827.
+    assert ml("print(0.1)\n") == "trace 0.1\n"
+
+
+def test_division_translates_now():
+    assert ml("print(7 / 2)\n") == "trace 7 / 2\n"
+
+
+def test_remainder_translates_now():
+    assert ml("print(7 % 2)\n") == "trace 7 % 2\n"
+
+
+def test_a_list_comprehension_translates():
+    assert ml("print([x * 2 for x in xs])\n") == (
+        "construct out = []\n"
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  out = out + [xs[n] * 2]\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace out\n"
+    )
+
+
+def test_a_filtered_list_comprehension_translates():
+    assert ml("print([x for x in xs if x > 2])\n") == (
+        "construct out = []\n"
+        "construct n = 0\n"
+        "dejavu n < length xs\n"
+        "  redpill xs[n] > 2\n"
+        "    out = out + [xs[n]]\n"
+        "  flatline\n"
+        "  n = n + 1\n"
+        "flatline\n"
+        "trace out\n"
+    )
+
+
+def test_the_translators_own_counter_avoids_the_invented_names():
+    # `out` and `item` go into the same `taken` set the counter draws
+    # from, so nothing here can collide.
+    source = ml("out = 1\nprint([x for x in xs])\n")
+    assert "construct out1 = []" in source
+    assert "construct out = 1" in source
+
+
+def test_a_comprehension_in_a_boolean_operand_is_hoisted():
+    # The one accepted silent difference: Python skips the comprehension
+    # when `c` is false, the translation runs it either way. Pinned so it
+    # stays a known quantity rather than being "fixed" into an
+    # inconsistency later. An `and` operand is the only position with no
+    # statement boundary to emit at.
+    source = ml("print(c and [x for x in xs])\n")
+    assert source.startswith("construct out = []\n")
+    assert source.endswith("trace c splice out\n")
+
+
+def test_a_comprehension_reorders_side_effects_in_the_same_statement():
+    # A second accepted silent difference, alongside the and/or one above:
+    # hoisting emits the comprehension's loop before the statement that
+    # contains it, so anything evaluated earlier in that same statement
+    # now runs after the comprehension instead of before it. Python
+    # evaluates left to right -- `g(0)` before the comprehension calls
+    # `f` -- but the translation's loop is emitted first, so `f` is
+    # called before `g`. Pinned here as a known quantity, not a claim
+    # that the order is correct.
+    source = ml("xs = [1]\nprint(g(0) + len([f(x) for x in xs]))\n")
+    assert source.index("f(xs[n])") < source.index("g(0)")
+
+
+def test_a_refusal_inside_a_comprehension_keeps_the_readers_position():
+    # The spec requires generated nodes carry positions, so a refusal
+    # raised inside a comprehension points at the reader's line rather
+    # than at invented code. `//` is refused permanently, which makes it
+    # a stable thing to aim at.
+    refusal = refused("a = 1\nb = 2\nprint([x // 2 for x in xs])\n")[0]
+    assert (refusal.line, refusal.column) == (3, 7)
+
+
+def test_the_unsupported_comprehensions_still_refuse():
+    assert "a set comprehension" in refused("print({x for x in xs})\n")[0].reason
+    assert "a dict comprehension" in refused("print({k: 1 for k in xs})\n")[0].reason
+    assert "a generator expression" in refused("print(sum(x for x in xs))\n")[0].reason
+    assert "a list comprehension" in refused(
+        "print([f(x, y) for x in xs for y in ys])\n"
+    )[0].reason
+    # Not "a list comprehension": left in place, the comprehension reaches
+    # the condition check first, and MatrixLang has no truthiness. The
+    # reader gets the better of the two messages.
+    assert "truthiness" in refused("while [x for x in xs]:\n    print(1)\n")[0].reason
+
+
+def test_a_refusal_inside_a_loop_else_keeps_the_readers_position():
+    # `//` is refused permanently, which makes it a stable thing to aim
+    # at. It sits on line 5 of the reader's source; if the rewrite lost
+    # positions this would report line 1.
+    refusal = refused(
+        "xs = [1]\n"
+        "for x in xs:\n"
+        "    break\n"
+        "else:\n"
+        "    print(7 // 2)\n"
+    )[0]
+    assert (refusal.line, refusal.column) == (5, 10)

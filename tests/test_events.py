@@ -47,7 +47,7 @@ def test_a_trace_emits_an_output_event_carrying_the_displayed_text():
     assert [e.text for e in outputs('trace "wake up, Neo"\n')] == ["wake up, Neo"]
 
 
-def test_an_integer_is_carried_already_displayed_not_as_an_int():
+def test_a_number_is_carried_already_displayed_not_as_a_decimal():
     # The sink must not need values.to_display; the event is display-ready.
     (event,) = outputs("trace 7\n")
     assert event.text == "7"

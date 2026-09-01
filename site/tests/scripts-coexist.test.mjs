@@ -23,7 +23,7 @@ const SITE = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 // The order index.html loads them: the two head scripts, then the deferred
 // playground at the end of body.
-const ORDER = ["layout.js", "intro.js", "tabs.js", "playground.js"];
+const ORDER = ["layout.js", "intro.js", "tabs.js", "rain.js", "playground.js"];
 
 /** Enough of a browser for three scripts to reach the end of themselves. */
 function browser() {

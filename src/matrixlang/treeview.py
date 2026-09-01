@@ -15,6 +15,7 @@ from matrixlang.nodes import (
     Call,
     ExprStmt,
     FunctionDef,
+    Glitch,
     If,
     Index,
     IndexAssign,
@@ -28,6 +29,7 @@ from matrixlang.nodes import (
     StringLiteral,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import TokenType
@@ -37,6 +39,7 @@ _OPS: dict[TokenType, str] = {
     TokenType.MINUS: "-",
     TokenType.STAR: "*",
     TokenType.SLASH: "/",
+    TokenType.PERCENT: "%",
     TokenType.EQ: "==",
     TokenType.NEQ: "!=",
     TokenType.LT: "<",
@@ -57,6 +60,9 @@ _OPS: dict[TokenType, str] = {
     TokenType.INVERT: "invert",
     TokenType.UPLINK: "uplink",
     TokenType.DOWNLINK: "downlink",
+    TokenType.FOLD: "fold",
+    TokenType.TRIM: "trim",
+    TokenType.CLEAVE: "cleave",
 }
 
 
@@ -127,6 +133,10 @@ def _statement(stmt: Stmt, depth: int, lines: list[str]) -> None:
     elif isinstance(stmt, ExprStmt):
         lines.append(f"{pad}ExprStmt{tail}")
         _expression(stmt.value, depth + 1, lines)
+    elif isinstance(stmt, Wake):
+        lines.append(f"{pad}Wake{tail}")
+    elif isinstance(stmt, Glitch):
+        lines.append(f"{pad}Glitch{tail}")
     else:
         raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 

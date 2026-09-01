@@ -4,6 +4,8 @@ Pure. No network, no SDK, no key. The whole point of separating this from
 `client.py` is that what the model is told can be tested.
 """
 
+from decimal import Decimal
+
 from matrixlang.operator.prompt import _EXAMPLE, _RULES, build
 from matrixlang.operator.validate import Invalid, Stage, check
 from matrixlang.tokens import KEYWORDS
@@ -35,9 +37,9 @@ def test_every_type_name_is_mentioned():
     # representative value per type — rather than retyping the list, for
     # the same reason the keyword line above is derived and not retyped:
     # a hardcoded copy can drift from the thing it is supposed to track.
-    sample_values = [1, True, "x", [], Function("f", [], [], None)]
+    sample_values = [Decimal(1), True, "x", [], Function("f", [], [], None)]
     type_names = {type_name(value) for value in sample_values}
-    assert type_names == {"integer", "boolean", "string", "list", "agent"}
+    assert type_names == {"number", "boolean", "string", "list", "agent"}
 
     prompt = build("anything").lower()
     missing = sorted(name for name in type_names if name not in prompt)

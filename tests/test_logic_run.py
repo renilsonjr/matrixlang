@@ -45,7 +45,7 @@ def test_unplug_in_a_condition():
 
 
 def test_unplug_requires_a_boolean():
-    assert fails("trace unplug 1\n").message == "'unplug' takes a boolean, got integer"
+    assert fails("trace unplug 1\n").message == "'unplug' takes a boolean, got number"
     assert (
         fails('trace unplug "a"\n').message == "'unplug' takes a boolean, got string"
     )
@@ -187,14 +187,14 @@ def test_an_unevaluated_operand_is_never_type_checked():
     # it is the price of the guard idiom above. Both directions are
     # pinned so neither can drift.
     assert run("trace false splice 1\n") == "false\n"
-    assert fails("trace true splice 1\n").message == "'splice' takes booleans, got integer"
+    assert fails("trace true splice 1\n").message == "'splice' takes booleans, got number"
 
     assert run("trace true fork 1\n") == "true\n"
-    assert fails("trace false fork 1\n").message == "'fork' takes booleans, got integer"
+    assert fails("trace false fork 1\n").message == "'fork' takes booleans, got number"
 
 
 def test_a_non_boolean_left_operand_is_always_an_error():
-    assert fails("trace 1 splice true\n").message == "'splice' takes booleans, got integer"
+    assert fails("trace 1 splice true\n").message == "'splice' takes booleans, got number"
     assert fails('trace "a" fork true\n').message == "'fork' takes booleans, got string"
 
 

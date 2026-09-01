@@ -64,6 +64,8 @@ export const INITIAL = {
   "miss": { hidden: true },
   "request": {},
   "write": { text: "Write it" },
+  "python-source": {},
+  "translate": { text: "Translate it" },
   "editor": {},
   "editor-face": { text: "Show glyphs" },
   "editor-glyph": { hidden: true },

@@ -14,6 +14,7 @@ from matrixlang.nodes import (
     DictLiteral,
     ExprStmt,
     FunctionDef,
+    Glitch,
     Index,
     IndexAssign,
     JackIn,
@@ -32,14 +33,37 @@ from matrixlang.nodes import (
     Stmt,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import Token, TokenType
 
 
+def _nested_too_deeply(parser: "_Parser") -> ParseError:
+    """The error a blown Python stack becomes, positioned where it gave up.
+
+    The descent is recursive, so a deep enough literal exhausts the stack
+    before any syntax is wrong. Interpreter.run converts RecursionError the
+    same way; every parser entry point is the same kind of boundary, and
+    site/glue.py's run() promises never to raise -- a promise this project
+    has broken six times, twice because a guard sat at one boundary and the
+    failure arrived at another.
+
+    peek() is safe: the stack has fully unwound by the time this runs, and
+    the parser's position is still where it stopped, which is the bracket
+    the reader is looking for.
+    """
+    token = parser.peek()
+    return ParseError("expression is nested too deeply", token.line, token.column)
+
+
 def parse(tokens: list[Token]) -> Program:
-    """Parse a complete program."""
-    return _Parser(tokens).parse_program()
+    """Parse a complete program. Raises ParseError, never RecursionError."""
+    parser = _Parser(tokens)
+    try:
+        return parser.parse_program()
+    except RecursionError:
+        raise _nested_too_deeply(parser) from None
 
 
 def parse_expression(tokens: list[Token]) -> Expr:
@@ -50,7 +74,10 @@ def parse_expression(tokens: list[Token]) -> Expr:
     via parse(), where trivia is preserved.
     """
     parser = _Parser(tokens)
-    expr = parser.expression()
+    try:
+        expr = parser.expression()
+    except RecursionError:
+        raise _nested_too_deeply(parser) from None
     if parser.check(TokenType.COMMENT):
         parser.advance()
     if parser.check(TokenType.NEWLINE):
@@ -103,8 +130,14 @@ _COMPARISON_OPS = (
     TokenType.GTE,
     TokenType.ORACLE,
 )
+# `cleave` gets a rung of its own between comparison and term. Above
+# comparison so `s cleave "," == xs` compares the LIST, and below term so
+# `a + b cleave ","` concatenates before it splits. Both are the natural
+# reading, and this is the only placement that gives both without
+# parentheses.
+_CLEAVE_OPS = (TokenType.CLEAVE,)
 _TERM_OPS = (TokenType.PLUS, TokenType.MINUS)
-_FACTOR_OPS = (TokenType.STAR, TokenType.SLASH)
+_FACTOR_OPS = (TokenType.STAR, TokenType.SLASH, TokenType.PERCENT)
 
 
 class _Parser:
@@ -172,6 +205,10 @@ class _Parser:
             return self._agent()
         if token.type is TokenType.JACKOUT:
             return self._return()
+        if token.type is TokenType.WAKE:
+            return self._bare(Wake)
+        if token.type is TokenType.GLITCH:
+            return self._bare(Glitch)
         if token.type is TokenType.IDENT:
             # One token of lookahead decides, and it is the suffix rather
             # than the '='. Dispatching on the paren means `x + 1` still
@@ -335,6 +372,18 @@ class _Parser:
         self._end_statement(node)
         return node
 
+    def _bare(self, kind: type[Stmt]) -> Stmt:
+        """A statement that is nothing but its keyword.
+
+        `wake` and `glitch` take no operand -- unlike `jackout`, which
+        may carry a value -- so anything after the keyword on the line is
+        an error rather than an expression to attach.
+        """
+        keyword = self.advance()
+        node = kind(line=keyword.line, column=keyword.column)
+        self._end_statement(node)
+        return node
+
     def _expression_statement(self) -> ExprStmt:
         """A call, evaluated for its effect.
 
@@ -440,6 +489,10 @@ class _Parser:
 
     def _shift(self) -> Expr:
         return self._binary_level(_SHIFT_OPS, self._term)
+        return self._binary_level(_COMPARISON_OPS, self._cleave)
+
+    def _cleave(self) -> Expr:
+        return self._binary_level(_CLEAVE_OPS, self._term)
 
     def _term(self) -> Expr:
         return self._binary_level(_TERM_OPS, self._factor)
@@ -467,6 +520,10 @@ class _Parser:
         # `keymaker` joins them for the same reason: it PRODUCES a list of
         # keys that later operations consume, so `length keymaker d` and
         # `keymaker alunos[0]` both group tightly.
+        # `fold` and `trim` join on the same argument: each produces a
+        # string, so `fold a + b` is `(fold a) + b` and `trim a == b` is
+        # `(trim a) == b`. The loose reading of either would hand the
+        # operator a value it cannot take, for every possible operand.
         if (
             self.check(TokenType.MINUS)
             or self.check(TokenType.LENGTH)
@@ -474,6 +531,8 @@ class _Parser:
             or self.check(TokenType.ENCODE)
             or self.check(TokenType.KEYMAKER)
             or self.check(TokenType.INVERT)
+            or self.check(TokenType.FOLD)
+            or self.check(TokenType.TRIM)
         ):
             op = self.advance()
             operand = self._unary()

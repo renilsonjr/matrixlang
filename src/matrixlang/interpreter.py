@@ -12,6 +12,7 @@ either source face.
 import dataclasses
 import string
 import sys
+from decimal import Decimal
 from typing import TextIO
 
 from matrixlang.errors import RuntimeErrorML
@@ -27,6 +28,7 @@ from matrixlang.nodes import (
     Expr,
     ExprStmt,
     FunctionDef,
+    Glitch,
     If,
     Index,
     IndexAssign,
@@ -40,24 +42,30 @@ from matrixlang.nodes import (
     StringLiteral,
     Trace,
     Unary,
+    Wake,
     While,
 )
 from matrixlang.tokens import TokenType
 from matrixlang.values import (
+    DIVISION,
+    EXACT,
     NOTHING,
     BadKey,
     CyclicValue,
     Function,
     Incomparable,
+    NumberOverflow,
     TooManyDigits,
     check_key,
     equal,
     is_bool,
     is_dict,
     is_function,
-    is_int,
     is_list,
+    is_number,
     is_str,
+    is_whole,
+    remainder_floor,
     to_display,
     type_name,
 )
@@ -169,13 +177,49 @@ class _Jackout(Exception):
 
     Deliberately not a MatrixLangError. A jackout is not a diagnostic, and
     a stray `except MatrixLangError` must never swallow a return.
+
+    Carries the position for the same reason _LoopSignal does: the
+    "outside an agent" error is raised where the signal escapes rather
+    than where it was written, so without this it reports the enclosing
+    top-level statement instead of the keyword the reader typed.
     """
 
-    __slots__ = ("value",)
+    __slots__ = ("value", "line", "column")
 
-    def __init__(self, value: object) -> None:
+    def __init__(self, value: object, line: int, column: int) -> None:
         super().__init__()
         self.value = value
+        self.line = line
+        self.column = column
+
+
+class _LoopSignal(Exception):
+    """A `wake` or a `glitch`, unwinding to the innermost loop.
+
+    Deliberately not a MatrixLangError, for the same reason _Jackout is
+    not: these are control flow, not diagnostics, and a stray
+    `except MatrixLangError` must never swallow one.
+
+    Carries the position so the "outside a loop" error -- raised where
+    the signal escapes rather than where it was written -- can still
+    point at the keyword the reader typed.
+    """
+
+    __slots__ = ("word", "line", "column")
+
+    def __init__(self, word: str, line: int, column: int) -> None:
+        super().__init__()
+        self.word = word
+        self.line = line
+        self.column = column
+
+
+class _Wake(_LoopSignal):
+    pass
+
+
+class _Glitch(_LoopSignal):
+    pass
 
 
 class Interpreter:
@@ -222,11 +266,17 @@ class Interpreter:
         for statement in program.statements:
             try:
                 self._execute(statement)
-            except _Jackout:
+            except _Jackout as jackout:
                 raise RuntimeErrorML(
                     "'jackout' outside an agent",
-                    statement.line,
-                    statement.column,
+                    jackout.line,
+                    jackout.column,
+                ) from None
+            except _LoopSignal as signal:
+                raise RuntimeErrorML(
+                    f"'{signal.word}' outside a loop",
+                    signal.line,
+                    signal.column,
                 ) from None
             except RecursionError:
                 raise RuntimeErrorML(
@@ -339,8 +389,8 @@ class Interpreter:
                     stmt.index.line,
                     stmt.index.column,
                 )
-            self._check_index(target, index, stmt.index)
-            target[index] = value
+            position = self._check_index(target, index, stmt.index)
+            target[position] = value
         elif isinstance(stmt, FunctionDef):
             agent = Function(stmt.name, stmt.params, stmt.body, self._env)
             if not self._env.declare(stmt.name, agent):
@@ -349,7 +399,7 @@ class Interpreter:
                 )
         elif isinstance(stmt, Return):
             value = NOTHING if stmt.value is None else self._evaluate(stmt.value)
-            raise _Jackout(value)
+            raise _Jackout(value, stmt.line, stmt.column)
         elif isinstance(stmt, ExprStmt):
             # NOTHING is legal here and nowhere else: this is the position
             # that makes a procedure a legal thing to write.
@@ -369,8 +419,17 @@ class Interpreter:
                     self._execute(child)
         elif isinstance(stmt, While):
             while self._condition(stmt.condition):
-                for child in stmt.body:
-                    self._execute(child)
+                try:
+                    for child in stmt.body:
+                        self._execute(child)
+                except _Glitch:
+                    continue
+                except _Wake:
+                    break
+        elif isinstance(stmt, Wake):
+            raise _Wake("wake", stmt.line, stmt.column)
+        elif isinstance(stmt, Glitch):
+            raise _Glitch("glitch", stmt.line, stmt.column)
         else:
             raise AssertionError(f"unhandled statement node: {type(stmt).__name__}")
 
@@ -445,7 +504,11 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     )
-                return len(operand)
+                # A number, not a plain int: everything in the language is
+                # one type now, and `length xs + 1` must add like any other
+                # number rather than colliding with `cannot order number
+                # with int`.
+                return Decimal(len(operand))
             if expr.op is TokenType.KEYMAKER:
                 if not is_dict(operand):
                     raise RuntimeErrorML(
@@ -462,58 +525,97 @@ class Interpreter:
                 self._require_int(operand, expr.operand, "operand of 'invert'")
                 return ~operand
             if expr.op is TokenType.DECODE:
+            if expr.op is TokenType.FOLD:
+                if not is_str(operand):
+                    raise RuntimeErrorML(
+                        f"'fold' takes a string, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # str.lower(), NOT str.casefold(), despite the name.
+                # "STRAßE".lower() is "straße"; .casefold() is "strasse".
+                # The Python translator maps `.lower()` onto this
+                # operator, so switching to casefold would make a
+                # translated program and its original disagree on that
+                # input, silently -- which is the one thing the
+                # translator's governing rule exists to prevent.
+                return operand.lower()
+            if expr.op is TokenType.TRIM:
+                if not is_str(operand):
+                    raise RuntimeErrorML(
+                        f"'trim' takes a string, got {type_name(operand)}",
+                        expr.line,
+                        expr.column,
+                    )
+                # Bare str.strip() -- all Unicode whitespace.
+                # Deliberately NOT _DECODE_SPACE, which is ASCII-only
+                # because `decode` is validating a number grammar against
+                # text that came from outside. `trim` is trimming text for
+                # a reader, and the translator maps Python's `.strip()`
+                # onto it, so it has to agree with `.strip()` on U+00A0.
+                return operand.strip()
+            if expr.op is TokenType.DECODE:
                 if not is_str(operand):
                     raise RuntimeErrorML(
                         f"'decode' takes text, got {type_name(operand)}",
                         expr.line,
                         expr.column,
                     )
-                # Explicit check, not bare int(): int() accepts far more
-                # than the lexer's own number grammar ever produces --
-                # "1_000", Arabic-Indic digits, other Unicode decimal
-                # digits -- because decode reads external input that
-                # nothing upstream has filtered. See _DECODE_DIGITS.
+                # Explicit check, not bare int()/Decimal(): both accept far
+                # more than the lexer's own number grammar ever produces --
+                # "1_000", Arabic-Indic digits, "1E+3", other Unicode
+                # decimal digits or exponent forms -- because decode reads
+                # external input that nothing upstream has filtered. See
+                # _DECODE_DIGITS. Widened to allow at most one point, so
+                # `decode` accepts exactly what the lexer's own literal
+                # grammar accepts -- one point, digits required on both
+                # sides of it -- rather than inventing a second rule.
                 stripped = operand.strip(_DECODE_SPACE)
                 digits = stripped[1:] if stripped.startswith("-") else stripped
-                if not digits or not all(c in _DECODE_DIGITS for c in digits):
+                if digits.count(".") > 1:
+                    ok = False
+                elif "." in digits:
+                    whole, _, fraction = digits.partition(".")
+                    ok = bool(whole) and bool(fraction) and all(
+                        c in _DECODE_DIGITS for c in whole + fraction
+                    )
+                else:
+                    ok = bool(digits) and all(c in _DECODE_DIGITS for c in digits)
+                if not ok:
                     raise RuntimeErrorML(
-                        f"'decode' needs a whole number, got \"{operand}\"",
+                        f"'decode' needs a number, got \"{operand}\"",
                         expr.line,
                         expr.column,
                     )
-                try:
-                    return int(stripped)
-                except ValueError as error:
-                    # All digits and still refused: CPython caps
-                    # int(str) at sys.int_info.default_max_str_digits
-                    # (4300), so a long enough run of digits passes the
-                    # check above and then raises. `decode` reads
-                    # external input, so a caller can hand us one --
-                    # and everything downstream (site/glue.py's run(),
-                    # which promises never to raise; the operator's dry
-                    # run; the CLI's diagnostic) expects nothing but
-                    # MatrixLangError out of here.
-                    raise RuntimeErrorML(
-                        f"'decode' got a number too long to read — "
-                        f"{len(digits)} digits",
-                        expr.line,
-                        expr.column,
-                    ) from error
+                # Decimal does not raise for long inputs the way int() did
+                # -- the old try/except ValueError around int(stripped) is
+                # gone. The digit cap now lives in display (values.py's
+                # TooManyDigits), reached through `trace`/`encode` rather
+                # than here.
+                return Decimal(stripped)
             if expr.op is TokenType.ENCODE:
-                # Numbers only, and is_int is deliberately narrow: in Python
-                # a bool IS an int, so `is_int` (which checks type exactly)
-                # is what keeps `encode true` an error rather than "1".
-                if not is_int(operand):
-                    raise RuntimeErrorML(
-                        f"'encode' takes a number, got {type_name(operand)}",
-                        expr.line,
-                        expr.column,
-                    )
-                # to_display, not str(): `trace` renders numbers through it
-                # already, and two renderings of one integer would be two
-                # answers to the same question. They would drift.
+                # Any value, deliberately. This was numbers-only, guarded by
+                # is_int, until a reader's f-string interpolating a string
+                # translated cleanly and died on Run naming an operator they
+                # never typed. `trace` prints every type through to_display;
+                # there was no reason `encode` could not hand back the same
+                # text. The old guard's own comment feared `encode true`
+                # giving "1" -- to_display gives "true", because _display
+                # checks is_bool first, so it was guarding against something
+                # values.py already prevented.
                 try:
                     return to_display(operand)
+                except CyclicValue:
+                    # Newly reachable: the type guard above used to make a
+                    # self-containing value impossible here. Same wording as
+                    # `trace`'s -- "a value", not "a list", because a
+                    # dictionary can hold itself too and the message reaches
+                    # the browser verbatim in the SSE error payload.
+                    raise RuntimeErrorML(
+                        "cannot display a value that contains a cycle",
+                        expr.line,
+                        expr.column,
+                    ) from None
                 except TooManyDigits as size:
                     # The mirror of decode's ValueError guard above, and
                     # for the same CPython cap -- but the guard itself
@@ -526,8 +628,15 @@ class Interpreter:
                         expr.line,
                         expr.column,
                     ) from None
-            self._require_int(operand, expr.operand, "operand of unary '-'")
-            return -operand
+            self._require_number(operand, expr.operand, "operand of unary '-'")
+            # copy_negate(), NOT Python's `-operand`: Decimal's own
+            # __neg__ rounds through the thread-local DEFAULT context
+            # (prec=28), not EXACT -- so `-x` and `0 - x` could silently
+            # disagree past 28 significant digits, with no error and no
+            # scientific notation, just a wrong number. copy_negate is a
+            # context-free, exact sign flip; it cannot round and cannot
+            # raise.
+            return operand.copy_negate()
         if isinstance(expr, Binary) and expr.op in _LOGICAL_OPS:
             # Intercepted HERE, not in _binary, and that is the whole
             # point: the Binary branch below evaluates both operands
@@ -627,17 +736,50 @@ class Interpreter:
             raise RuntimeErrorML(
                 f"cannot index {type_name(target)}", node.line, node.column
             )
-        self._check_index(target, index, node)
-        return target[index]
+        position = self._check_index(target, index, node)
+        return target[position]
 
-    def _check_index(self, target: list | str, index: object, node) -> None:
-        if not is_int(index):
+    def _check_index(self, target: list | str, index: object, node) -> int:
+        """Validate `index` and return it as a Python `int` subscript.
+
+        Two branches, not one: a non-number and a fractional number are
+        different mistakes and deserve different messages. `int(index)`
+        for the final conversion is safe — it does not round, it
+        truncates a value already checked whole by `is_whole` above.
+
+        Neither diagnostic below interpolates `index` or `position`
+        directly. `decode` no longer caps digit count (Task 5 removed its
+        `try/except ValueError` around `int()`, since `Decimal` does not
+        raise for a long digit string), so an index reaching this method
+        can carry thousands of digits with nothing upstream to have
+        stopped it — from a literal (the lexer's own cap moved to display,
+        #135) or from `xs[decode "<huge digit string>"]` alike. `str(a
+        4301-digit Python int)` raises a bare ValueError under CPython's
+        own conversion cap, same as `str()` on the equivalent `Decimal`
+        does — so both branches route the value through `_display_index`,
+        which is the one place that cap is caught and turned into a
+        RuntimeErrorML, instead of ever formatting `position` or `index`
+        straight into an f-string.
+        """
+        if not is_number(index):
             raise RuntimeErrorML(
-                f"an index must be an integer, got {type_name(index)}",
+                f"an index must be a whole number, got {type_name(index)}",
                 node.line,
                 node.column,
             )
-        if index < 0:
+        if not is_whole(index):
+            # Reachable now that `/` is true division: `xs[length xs / 2]`
+            # lands here rather than silently truncating. Showing the
+            # value, not the type, because the type is right and the
+            # value is not.
+            raise RuntimeErrorML(
+                f"an index must be a whole number, got "
+                f"{self._display_index(index, node)}",
+                node.line,
+                node.column,
+            )
+        position = int(index)
+        if position < 0:
             # The placeholder name mirrors the bounds message's noun below:
             # a list example says `xs`, a string example says `s`, so
             # neither reader is told to fix a string with list vocabulary.
@@ -647,16 +789,41 @@ class Interpreter:
                 node.line,
                 node.column,
             )
-        if index >= len(target):
+        if position >= len(target):
             # type_name rather than a hardcoded "list": one message serves
             # both, so the two can never drift into disagreeing about the
-            # same rule.
+            # same rule. `_display_index`, not bare `position`: see this
+            # method's docstring -- `position` can be a Python int with
+            # thousands of digits, and formatting one of those directly
+            # into an f-string raises a bare ValueError.
             raise RuntimeErrorML(
-                f"index {index} is past the end of a {type_name(target)} "
-                f"of length {len(target)}",
+                f"index {self._display_index(index, node)} is past the end "
+                f"of a {type_name(target)} of length {len(target)}",
                 node.line,
                 node.column,
             )
+        return position
+
+    def _display_index(self, index: object, node) -> str:
+        """`to_display(index)` for an index diagnostic, guarded the same
+        way `trace` guards it at the top of `_execute` (and `encode`
+        guards it in `_evaluate`): `TooManyDigits` is not a
+        MatrixLangError on purpose (see its docstring in values.py) so
+        that every caller is forced to convert it, and this is the one
+        call site `_check_index` has for it. Without this, a whole
+        number past the digit cap -- reachable from a literal or from
+        `decode`, since neither caps digit count anymore -- would raise
+        a bare TooManyDigits (not even a Python built-in) straight out
+        of the interpreter.
+        """
+        try:
+            return to_display(index)
+        except TooManyDigits as size:
+            raise RuntimeErrorML(
+                f"cannot display a number longer than {size.limit} digits",
+                node.line,
+                node.column,
+            ) from None
 
     def _call(self, expr: Call) -> object:
         callee = self._value_of(expr.callee, expr)
@@ -687,6 +854,18 @@ class Interpreter:
                 self._execute(statement)
         except _Jackout as jackout:
             return jackout.value
+        except _LoopSignal as signal:
+            # THE agent boundary. Without this, `wake` inside an agent
+            # called from inside a loop escapes the call and breaks the
+            # CALLER's loop -- a program that runs and quietly does
+            # something the reader never wrote. The agent's own body is
+            # not inside a loop, so this is an error, exactly as Python's
+            # `break` in a function body is a SyntaxError.
+            raise RuntimeErrorML(
+                f"'{signal.word}' outside a loop",
+                signal.line,
+                signal.column,
+            ) from None
         finally:
             self._env = previous
         # Fell off the end without jacking out.
@@ -745,24 +924,95 @@ class Interpreter:
         if node.op in _EQUALITY_OPS or node.op in _ORDERING_OPS:
             return self._comparison(node, left, right)
         if node.op is TokenType.ORACLE:
-            if not is_dict(left):
+            # One question -- does this hold that? -- asked of the three
+            # things that can hold anything. The dictionary arm is
+            # unchanged; the other two are what issue #134 added.
+            if is_dict(left):
+                try:
+                    check_key(right)
+                except BadKey as bad:
+                    raise RuntimeErrorML(
+                        f"a dictionary key must be a string or a number, "
+                        f"got {bad.name}",
+                        node.line,
+                        node.column,
+                    ) from None
+                return right in left
+            if is_list(left):
+                for element in left:
+                    try:
+                        if equal(element, right):
+                            return True
+                    except Incomparable:
+                        # Skipped, not raised, and this is THE decision of
+                        # the design. `["a"] oracle 1` asks whether the
+                        # list contains the integer 1 -- which has a
+                        # truthful answer, no -- while `1 == "a"` asks
+                        # something with no answer at all, and rightly
+                        # raises. Membership is not equality.
+                        #
+                        # This is the one place in the language where a
+                        # type mismatch declines to raise where `==`
+                        # would. The alternative, raising on the first
+                        # incomparable element, would make the answer
+                        # depend on element ORDER: `["a", 1] oracle 1`
+                        # would error while `[1, "a"] oracle 1` would be
+                        # true. Same list, reordered, deciding whether
+                        # the program runs.
+                        continue
+                return False
+            if is_str(left):
+                if not is_str(right):
+                    raise RuntimeErrorML(
+                        f"'oracle' on a string looks for a string, got "
+                        f"{type_name(right)}",
+                        node.line,
+                        node.column,
+                    )
+                # A SUBSTRING test, matching Python -- so
+                # `"matrix" oracle "rix"` is true even though "rix" is not
+                # one of its characters. Everywhere else in the language a
+                # string is a sequence of characters (`length` counts
+                # them, `[i]` reads one), and this operator is the
+                # exception. It is bought deliberately: substring is what
+                # `if "@" in email:` means, and the translator cannot tell
+                # a string from a list to warn anyone if the two differed.
+                return right in left
+            raise RuntimeErrorML(
+                f"'oracle' takes a list, a string or a dictionary, got "
+                f"{type_name(left)}",
+                node.line,
+                node.column,
+            )
+        if node.op is TokenType.CLEAVE:
+            if not is_str(left):
                 raise RuntimeErrorML(
-                    f"'oracle' takes a dictionary, got {type_name(left)}",
+                    f"'cleave' takes a string, got {type_name(left)}",
                     node.line,
                     node.column,
                 )
-            try:
-                check_key(right)
-            except BadKey as bad:
+            if not is_str(right):
                 raise RuntimeErrorML(
-                    f"a dictionary key must be a string or a number, "
-                    f"got {bad.name}",
+                    f"'cleave' needs a string separator, got "
+                    f"{type_name(right)}",
                     node.line,
                     node.column,
                 ) from None
             return right in left
         if node.op in _BITWISE_OPS:
             return self._bitwise(node, left, right)
+                )
+            if not right:
+                # CPython raises ValueError("empty separator") here.
+                # Nothing may escape this interpreter but MatrixLangError
+                # -- site/glue.py's run() promises never to raise, and
+                # that promise has been broken five times already.
+                raise RuntimeErrorML(
+                    "'cleave' needs a separator with something in it",
+                    node.line,
+                    node.column,
+                )
+            return left.split(right)
         if node.op is TokenType.PLUS and is_str(left) and is_str(right):
             return left + right
         if node.op is TokenType.PLUS and is_str(left) != is_str(right):
@@ -785,12 +1035,12 @@ class Interpreter:
 
     def _comparison(self, node: Binary, left: object, right: object) -> object:
         if node.op in _ORDERING_OPS:
-            # Not _require_int: that helper also serves unary minus and
-            # arithmetic, which still require integers. Ordering is now a
-            # rule about the PAIR — both integers or both strings — so it
+            # Not _require_number: that helper also serves unary minus and
+            # arithmetic, which still require numbers. Ordering is now a
+            # rule about the PAIR — both numbers or both strings — so it
             # gets its own check and reports the operator's position, the
             # way `cannot compare` and `cannot add` already do.
-            orderable = (is_int(left) and is_int(right)) or (
+            orderable = (is_number(left) and is_number(right)) or (
                 is_str(left) and is_str(right)
             )
             if not orderable:
@@ -828,21 +1078,99 @@ class Interpreter:
         raise AssertionError(f"unhandled equality operator: {node.op.name}")
 
     def _arithmetic(self, node: Binary, left: object, right: object) -> object:
-        self._require_int(left, node.left, "left operand")
-        self._require_int(right, node.right, "right operand")
-        if node.op is TokenType.PLUS:
-            return left + right
-        if node.op is TokenType.MINUS:
-            return left - right
-        if node.op is TokenType.STAR:
-            return left * right
+        self._require_number(left, node.left, "left operand")
+        self._require_number(right, node.right, "right operand")
+        try:
+            if node.op is TokenType.PLUS:
+                return EXACT.add(left, right)
+            if node.op is TokenType.MINUS:
+                return EXACT.subtract(left, right)
+            if node.op is TokenType.STAR:
+                return EXACT.multiply(left, right)
+        except NumberOverflow:
+            # Same shape as the TooManyDigits conversions above: values.py
+            # knows the result cannot be represented, this module knows
+            # where it was written. Newly reachable now that `+ - *` run
+            # through EXACT instead of Python's arbitrary-precision int --
+            # squaring a value about twenty times gets here well inside
+            # the step limit, and nothing but MatrixLangError may escape
+            # this interpreter (site/glue.py's run() promises that, and
+            # the promise has been broken six times already).
+            raise RuntimeErrorML(
+                "arithmetic result is too large to represent",
+                node.line,
+                node.column,
+            ) from None
         if node.op is TokenType.SLASH:
             if right == 0:
                 raise RuntimeErrorML("cannot divide by zero", node.line, node.column)
-            # Truncate toward zero. Python's // floors, which differs for
-            # negatives: -7 // 2 is -4, but the spec requires -3.
-            quotient = abs(left) // abs(right)
-            return -quotient if (left < 0) != (right < 0) else quotient
+            # True division, in the one context that rounds. Division is
+            # the only operation that can go on forever -- 1 / 3 has no
+            # finite decimal form -- so it is the only one that needs a
+            # precision, and DIVISION's 28 is where
+            # 0.3333333333333333333333333333 comes from.
+            #
+            # This replaced truncation, which matched neither of Python's
+            # two divisions: `/` is true division and `//` floors, while
+            # this truncated toward zero. That mismatch is why the
+            # translator refused BOTH for the language's whole history.
+            #
+            # DIVISION is a _GuardedContext, so an overflowing quotient
+            # raises NumberOverflow rather than a bare decimal.Overflow
+            # -- but NumberOverflow is not itself a MatrixLangError, so
+            # it still needs converting here, the same as + - * above.
+            # Reachable: DIVISION.divide(Decimal("1E+999990"),
+            # Decimal("1E-999990")) overflows even though neither
+            # operand does, because the quotient's exponent is
+            # (roughly) the sum of the two.
+            try:
+                return DIVISION.divide(left, right)
+            except NumberOverflow:
+                raise RuntimeErrorML(
+                    "arithmetic result is too large to represent",
+                    node.line,
+                    node.column,
+                ) from None
+        if node.op is TokenType.PERCENT:
+            if right == 0:
+                raise RuntimeErrorML(
+                    "cannot take the remainder by zero", node.line, node.column
+                )
+            # Python's rule, not Decimal's -- `left - floor(left / right)
+            # * right`. values.remainder_floor owns the whole of it,
+            # including why it must not compute the quotient: rounding
+            # `left / right` to EXACT's 1000 digits before flooring it
+            # rounds UP past 1000 digits, which returned a NEGATIVE
+            # remainder for a positive divisor. Read its docstring before
+            # touching this.
+            #
+            # Every step of it goes through EXACT explicitly, never
+            # through a bare Python operator (`//`, `%`, unary `-`) on a
+            # Decimal -- those round through the thread-local default
+            # context at precision 28, not through this language's own
+            # contexts. That exact mistake has cost this branch a
+            # Critical already (unary minus) and an escaping
+            # decimal.InvalidOperation since.
+            #
+            # remainder_floor calls _GuardedContext methods, so it can
+            # raise NumberOverflow rather than a bare decimal.Overflow --
+            # and NumberOverflow is not itself a MatrixLangError, so it
+            # still needs converting here, the same as + - * and / above.
+            # No input is currently known to reach it: dropping the
+            # quotient dropped the one shape that did (a huge dividend
+            # over a tiny divisor overflowed EXACT.divide before the
+            # subtract). The guard stays anyway -- it costs nothing, it
+            # is the same guard the other three operators carry, and
+            # "nothing but MatrixLangError may escape" is not a promise
+            # to re-derive every time remainder_floor changes.
+            try:
+                return remainder_floor(left, right)
+            except NumberOverflow:
+                raise RuntimeErrorML(
+                    "arithmetic result is too large to represent",
+                    node.line,
+                    node.column,
+                ) from None
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
     def _bitwise(self, node: Binary, left: object, right: object) -> int:
@@ -868,8 +1196,10 @@ class Interpreter:
 
     def _require_int(self, value: object, node: Expr, role: str) -> None:
         if not is_int(value):
+    def _require_number(self, value: object, node: Expr, role: str) -> None:
+        if not is_number(value):
             raise RuntimeErrorML(
-                f"{role} must be an integer, got {type_name(value)}",
+                f"{role} must be a number, got {type_name(value)}",
                 node.line,
                 node.column,
             )
