@@ -467,6 +467,7 @@ def test_the_generator_produces_every_unary_operator():
         TokenType.DECODE,
         TokenType.ENCODE,
         TokenType.KEYMAKER,
+        TokenType.INVERT,
         TokenType.FOLD,
         TokenType.TRIM,
     }

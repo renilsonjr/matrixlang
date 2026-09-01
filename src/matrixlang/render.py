@@ -72,6 +72,12 @@ _OPS: dict[TokenType, str] = {
     TokenType.FORK: "fork",
     TokenType.KEYMAKER: "keymaker",
     TokenType.ORACLE: "oracle",
+    TokenType.MASK: "mask",
+    TokenType.MERGE: "merge",
+    TokenType.FLIP: "flip",
+    TokenType.INVERT: "invert",
+    TokenType.UPLINK: "uplink",
+    TokenType.DOWNLINK: "downlink",
     TokenType.FOLD: "fold",
     TokenType.TRIM: "trim",
     TokenType.CLEAVE: "cleave",
@@ -85,17 +91,34 @@ _LEVEL: dict[TokenType, int] = {
     # twice: this structure is what decides where parentheses go, and an
     # off-by-one here changes what a program means without failing
     # loudly anywhere else.
-    TokenType.FORK: 1,
-    TokenType.SPLICE: 2,
-    TokenType.EQ: 4,
-    TokenType.NEQ: 4,
-    TokenType.LT: 5,
-    TokenType.GT: 5,
-    TokenType.LTE: 5,
-    TokenType.GTE: 5,
+    TokenType.MERGE: 1,
+    TokenType.FLIP: 2,
+    TokenType.FORK: 3,
+    TokenType.SPLICE: 4,
+    TokenType.MASK: 5,
+    TokenType.EQ: 7,
+    TokenType.NEQ: 7,
+    TokenType.LT: 8,
+    TokenType.GT: 8,
+    TokenType.LTE: 8,
+    TokenType.GTE: 8,
     # `oracle` parses at the comparison level (parser._COMPARISON_OPS), so
     # it shares that level here -- a different number would parenthesise
     # `d oracle "a" == true` differently than the parser groups it.
+    TokenType.ORACLE: 8,
+    TokenType.UPLINK: 9,
+    TokenType.DOWNLINK: 9,
+    TokenType.PLUS: 10,
+    TokenType.MINUS: 10,
+    TokenType.STAR: 11,
+    TokenType.SLASH: 11,
+}
+# `unplug` is unary, so it is a constant rather than a _LEVEL entry — but
+# unlike `-` and `length` it binds LOOSER than every binary operator
+# in the logical/bitwise prefix, but tighter than equality.
+_NOT_LEVEL = 6
+_UNARY_LEVEL = 12
+_ATOM_LEVEL = 13
     TokenType.ORACLE: 5,
     # `cleave` has a rung of its own (parser._CLEAVE_OPS) between
     # comparison and term. It is why every level below this line moved up
@@ -282,6 +305,7 @@ def _emit(expr: Expr, face: Face) -> tuple[str, int]:
             TokenType.DECODE,
             TokenType.ENCODE,
             TokenType.KEYMAKER,
+            TokenType.INVERT,
             TokenType.FOLD,
             TokenType.TRIM,
         ):

@@ -51,6 +51,12 @@ GLYPHS: dict[str, str] = {
     # the Keymaker's own sounds were long gone by this point in the table.
     "keymaker": "ﾔ",
     "oracle": "ｵ",
+    "mask": "ｷｬ",
+    "merge": "ｷｭ",
+    "flip": "ｷｮ",
+    "invert": "ｷﾞｬ",
+    "uplink": "ｷﾞｭ",
+    "downlink": "ｷﾞｮ",
     # String methods. `trim` takes ﾘ, the "ri" of its own katakana
     # spelling ﾄﾘﾑ -- ﾄ and ﾑ were long gone, so the middle sound is what
     # was left. `fold` and `cleave` take ﾊ and ﾛ arbitrarily: almost every

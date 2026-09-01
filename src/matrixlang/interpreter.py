@@ -79,11 +79,26 @@ DEFAULT_MAX_STEPS = 200_000
 _EQUALITY_OPS = (TokenType.EQ, TokenType.NEQ)
 _ORDERING_OPS = (TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
 _LOGICAL_OPS = (TokenType.SPLICE, TokenType.FORK)
+_BITWISE_OPS = (
+    TokenType.MASK,
+    TokenType.MERGE,
+    TokenType.FLIP,
+    TokenType.UPLINK,
+    TokenType.DOWNLINK,
+)
 
 # The operator's own word, for its diagnostic. Not render._OPS: importing
 # render into the interpreter would put a presentation module underneath
 # execution, which tests/test_architecture.py forbids.
-_OP_WORDS = {TokenType.SPLICE: "splice", TokenType.FORK: "fork"}
+_OP_WORDS = {
+    TokenType.SPLICE: "splice",
+    TokenType.FORK: "fork",
+    TokenType.MASK: "mask",
+    TokenType.MERGE: "merge",
+    TokenType.FLIP: "flip",
+    TokenType.UPLINK: "uplink",
+    TokenType.DOWNLINK: "downlink",
+}
 
 
 def _display_key(key: object) -> str:
@@ -506,6 +521,10 @@ class Interpreter:
                 # caller does with the returned list must never reach
                 # back into the dictionary.
                 return list(operand.keys())
+            if expr.op is TokenType.INVERT:
+                self._require_int(operand, expr.operand, "operand of 'invert'")
+                return ~operand
+            if expr.op is TokenType.DECODE:
             if expr.op is TokenType.FOLD:
                 if not is_str(operand):
                     raise RuntimeErrorML(
@@ -978,6 +997,10 @@ class Interpreter:
                     f"{type_name(right)}",
                     node.line,
                     node.column,
+                ) from None
+            return right in left
+        if node.op in _BITWISE_OPS:
+            return self._bitwise(node, left, right)
                 )
             if not right:
                 # CPython raises ValueError("empty separator") here.
@@ -1150,6 +1173,29 @@ class Interpreter:
                 ) from None
         raise AssertionError(f"unhandled binary operator: {node.op.name}")
 
+    def _bitwise(self, node: Binary, left: object, right: object) -> int:
+        self._require_int(left, node.left, "left operand")
+        self._require_int(right, node.right, "right operand")
+        if node.op is TokenType.MASK:
+            return left & right
+        if node.op is TokenType.MERGE:
+            return left | right
+        if node.op is TokenType.FLIP:
+            return left ^ right
+        if right < 0:
+            raise RuntimeErrorML(
+                f"'{_OP_WORDS[node.op]}' cannot use a negative shift count",
+                node.right.line,
+                node.right.column,
+            )
+        if node.op is TokenType.UPLINK:
+            return left << right
+        if node.op is TokenType.DOWNLINK:
+            return left >> right
+        raise AssertionError(f"unhandled bitwise operator: {node.op.name}")
+
+    def _require_int(self, value: object, node: Expr, role: str) -> None:
+        if not is_int(value):
     def _require_number(self, value: object, node: Expr, role: str) -> None:
         if not is_number(value):
             raise RuntimeErrorML(

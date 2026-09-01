@@ -53,6 +53,7 @@ lists, cannot be written to — **logical operators** — `splice` (and),
 xs[n] != target` never reads past the end of `xs` — **dictionaries** —
 `{"a": 1}` literals keyed by strings or numbers, `d["a"]` to read and
 `d["a"] = v` to write or insert, `length` for the entry count, `keymaker`
+
 for the keys in insertion order, and the infix `oracle` to ask any
 container whether it holds something — a dictionary for a key, a list for
 an element, a string for text inside it
@@ -67,6 +68,8 @@ almost-`0.3`, and `2.50 * 2` is `5.00` because trailing zeros are
 significant, while whole numbers still print as `3`; `/` is true
 division, so `7 / 2` is `3.5`; and `%` is the remainder, following
 Python's rule rather than Decimal's, so `-7 % 2` is `1` —
+**bitwise operators** — `mask`, `merge`, `flip`, `invert`, `uplink` and
+`downlink` operate on integers, with non-negative shift counts
 and **Operator**, an assistive companion that writes MatrixLang from
 plain language, in the terminal or in a browser, and **Scribe**, a
 keyless, deterministic companion that does the same without a key, an
@@ -141,7 +144,8 @@ To skip the `.venv/bin/` prefix, activate the environment first
 (`source .venv/bin/activate`), after which plain `matrixlang` works.
 
 Now go write something: **[docs/LEARNING-MATRIXLANG.md](docs/LEARNING-MATRIXLANG.md)**
-teaches the whole language — twenty-four keywords, five types, and both faces —
+teaches the whole language — tirty keywords, five types, and both faces —
+
 and every example in it was executed before it shipped.
 
 ### Seeing the cascade

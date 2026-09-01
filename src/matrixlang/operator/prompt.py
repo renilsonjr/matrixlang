@@ -120,6 +120,9 @@ Rules that differ from most languages:
   evaluated is never type-checked (`false splice 1` is `false`, but
   `true splice 1` is an error). `unplug` binds looser than comparison,
   so `unplug n == 1` means `unplug (n == 1)`, not `(unplug n) == 1`.
+  - Bitwise operators work on integers only: `mask` is &, `merge` is |,
+    `flip` is ^, and `invert` is ~. `uplink` and `downlink` shift left
+    and right; their shift count must not be negative."""
 - `wake` leaves the innermost `dejavu` immediately; `glitch` skips to that
   loop's next iteration. Both are bare keywords on their own line, like a
   bare `jackout`, and both are an error outside a loop. A `jackout` inside

@@ -3,7 +3,7 @@
 Everything the language can do, in the order that makes it easiest to pick
 up. You do not need to have read anything else in this repository.
 
-MatrixLang has twenty-four keywords, five types, and two ways of writing
+MatrixLang has thirty keywords, five types, and two ways of writing
 every program: **ASCII**, which you type, and **glyphs**, which you
 read. They are the same program — the toolchain converts between them
 without loss.
@@ -1354,6 +1354,25 @@ missing, which is exactly what happened here.
 
 ---
 
+## 10. Bitwise operators — `mask`, `merge`, `flip`, `invert`, `uplink`, `downlink`
+
+Bitwise operators work on integers and manipulate their individual bits:
+
+```
+trace 6 mask 3       # 2   (&)
+trace 6 merge 3      # 7   (|)
+trace 6 flip 3       # 5   (^)
+trace invert 5       # -6  (~)
+trace 3 uplink 2     # 12  (<<)
+trace 13 downlink 2  # 3   (>>)
+```
+
+`uplink` shifts left and `downlink` shifts right. A shift count cannot be
+negative. These operators have the conventional precedence order: merge,
+flip, mask, shifts, arithmetic; `invert` is a unary operator.
+
+---
+
 ## 11. Scope, and agents that remember
 
 A name declared inside an agent is local to it:
@@ -1473,7 +1492,8 @@ different alphabets, so nothing is ambiguous.
 
 ### The table
 
-Twenty-four keywords, twelve operators (`%` among them), parentheses, a
+
+Thirty keywords, seventeen operators (`%` among them), parentheses, a
 comma, two brackets, a pair of braces, a colon, a decimal point, ten
 digits, and the comment marker — 56 slots in all. The table is full:
 0 slots free, and every one of those 56 is spoken for.
@@ -1485,9 +1505,10 @@ digits, and the comment marker — 56 slots in all. The table is full:
 | `,` `ﾈ` | `[` `ﾍ` | `]` `ﾎ` | `+` `ﾀ` | `-` `ﾋ` | `*` `ｶ` | `/` `ﾜ` |
 | `=` `ﾅ` | `==` `ﾆ` | `!=` `ﾇ` | `<` `ｻ` | `>` `ｿ` | `<=` `ｾ` | `>=` `ｽ` |
 | `splice` `ﾁ` | `fork` `ﾂ` | `unplug` `ｳ` | `jackin` `ｲ` | `decode` `ｺ` | `encode` `ﾏ` | `oracle` `ｵ` |
+| `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | | | |
 | `keymaker` `ﾔ` | `{` `ﾐ` | `}` `ﾑ` | `:` `ﾓ` | `fold` `ﾊ` | `trim` `ﾘ` | `cleave` `ﾛ` |
+| `mask` `ｷｬ` | `merge` `ｷｭ` | `flip` `ｷｮ` | `invert` `ｷﾞｬ` | `uplink` `ｷﾞｭ` | `downlink` `ｷﾞｮ` | |
 | `wake` `ﾉ` | `glitch` `ﾕ` | `.` `ｰ` | `%` `ﾝ` | | | |
-
 | `0` `ｦ` | `1` `ｧ` | `2` `ｨ` | `3` `ｩ` | `4` `ｪ` | `5` `ｫ` | `6` `ｬ` | `7` `ｭ` | `8` `ｮ` | `9` `ｯ` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 

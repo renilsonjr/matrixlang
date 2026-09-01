@@ -1,0 +1,10 @@
+construct a = 12
+construct b = 10
+
+trace a mask b
+trace a merge b
+trace a flip b
+trace a uplink 2
+trace a downlink 1
+trace invert a
+
