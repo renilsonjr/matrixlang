@@ -24,7 +24,7 @@ jobs:
           zip -r ../x-matrix-theme.zip x-matrix-theme -x "*/.DS_Store" "*/__pycache__/*"
           unzip -l ../x-matrix-theme.zip | head -20
           ls -lh ../x-matrix-theme.zip
-      - uses: actions/upload-artifact@v4 # v4.6.2 — pinned via tag for now (SHA 65c4c4a... fails to resolve in this env, will re-pin to SHA after verify)
+      - uses: actions/upload-artifact@v7 # v4.6.2 — pinned via tag for now (SHA 65c4c4a... fails to resolve in this env, will re-pin to SHA after verify)
         with:
           name: x-matrix-theme
           path: x-matrix-theme.zip
